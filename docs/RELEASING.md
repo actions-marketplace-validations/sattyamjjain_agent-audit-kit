@@ -32,11 +32,18 @@ hook). Most surfaces are anchor-pinned. **One surface is not** — see §3.
 > one-time-set field unless we re-set it on every release.
 
 After every tag push, re-PATCH the description so it matches the live
-RULE_COUNT and framework count:
+RULE_COUNT and the README framework-count claim:
 
 ```bash
 RULES=$(python3 -c "from agent_audit_kit import RULE_COUNT; print(RULE_COUNT)")
-FRAMEWORKS=$(python3 -c "from agent_audit_kit.output.compliance import FRAMEWORKS; print(len(FRAMEWORKS))")
+# README "12 frameworks" claim is broader than `len(FRAMEWORKS)` —
+# FRAMEWORKS dict only includes frameworks with full control mappings
+# (currently 6: eu-ai-act, soc2, iso27001, hipaa, nist-ai-rmf,
+# mcp-2026-roadmap). The README claim adds 6 more reference-only
+# frameworks (Singapore Agentic AI, India DPDP, Alabama HB 351,
+# Tennessee SB 1580, ISO/IEC 42001, EU AI Act Art. 55). Use the
+# README claim, not `len(FRAMEWORKS)`, for the description string.
+FRAMEWORKS=$(grep -oE 'Compliance mapping\*\* \([0-9]+ frameworks' README.md | grep -oE '[0-9]+')
 gh repo edit sattyamjjain/agent-audit-kit \
   --description "Static scanner for MCP-connected AI agent pipelines — ${RULES} rules across 11 categories, ${FRAMEWORKS} compliance frameworks, OWASP Agentic 10/10 + MCP 10/10, GitHub Action, SARIF, 48h CVE-to-rule SLA."
 ```
@@ -46,6 +53,11 @@ read "77 rules, 13 scanners" when the live RULE_COUNT was 193. Closing
 it requires either this manual step on every release or wiring it
 into `release.yml` as a post-publish job. Manual is acceptable until
 v0.4.0; wire it then.
+
+**v0.3.16 self-bug:** the original `len(FRAMEWORKS)` form shipped here
+on 2026-05-09 returned 6 (dict size), not 12 (README claim). Fixed
+inline above; `gh repo edit` re-PATCH was redone post-tag with the
+correct number. Future releases use the README-grep form.
 
 ## 4. Verify
 
