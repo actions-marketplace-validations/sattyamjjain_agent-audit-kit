@@ -3583,7 +3583,7 @@
       "cve_references": [
         "CVE-2026-26030"
       ],
-      "description": "Microsoft Semantic Kernel Python SDK <1.39.4 has a remote code execution vulnerability in the `InMemoryVectorStore` filter functionality \u2014 CVE-2026-26030 (CVSS 9.9 CRITICAL). Patched in `python-1.39.4`. This pin-only rule fires on the PyPI package `semantic-kernel` < 1.39.4 in any Python manifest (`requirements*.txt` / `pyproject.toml` / `Pipfile*` / `poetry.lock` / `uv.lock`). The companion .NET CVE (CVE-2026-25592, Arbitrary File Write in SessionsPythonPlugin, patched in .NET 1.71.0) is **out of scope** \u2014 AAK does not currently scan NuGet manifests; only the Python pin shape is actionable. Disclosed by MSRC on 2026-05-07.",
+      "description": "Microsoft Semantic Kernel Python SDK <1.39.4 has a remote code execution vulnerability in the `InMemoryVectorStore` filter functionality \u2014 CVE-2026-26030 (CVSS 9.9 CRITICAL). Patched in `python-1.39.4`. This pin-only rule fires on the PyPI package `semantic-kernel` < 1.39.4 in any Python manifest (`requirements*.txt` / `pyproject.toml` / `Pipfile*` / `poetry.lock` / `uv.lock`). A companion .NET-side disclosure (file-write in SessionsPythonPlugin, patched in the .NET 1.71.0 release) is intentionally **out of scope** \u2014 AAK does not currently scan NuGet manifests; only the Python pin shape is actionable here. Disclosed by MSRC on 2026-05-07.",
       "incident_references": [
         "MSRC-2026-05-07"
       ],
