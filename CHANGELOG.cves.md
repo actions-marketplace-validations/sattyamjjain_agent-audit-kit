@@ -16,6 +16,19 @@ open.
 > issue. The per-CVE latency figures in the tables are **measurements recorded at
 > the time**, kept as dated facts, not a standing promise.
 
+## 2026-07-21 (v0.3.56)
+
+Five `cve-response` issues triaged for the v0.3.56 cut — two pinned, three
+dispositioned with rationale.
+
+| CVE | Reference | AAK rule / disposition | Triaged |
+|---|---|---|---|
+| CVE-2026-46555 (whatsapp-mcp < 0.2.1 — `whatsapp-bridge` unauthenticated loopback HTTP API + no Host validation + absolute `media_path` → arbitrary file exfil as WhatsApp attachments, DNS-rebinding; CVSS 7.7) | [NVD](https://nvd.nist.gov/vuln/detail/CVE-2026-46555) | **Pinned** `AAK-MCP-WHATSAPP-CVE-2026-46555-001` (fix floor 0.2.1; fires on manifest/lockfile references below 0.2.1) | 2026-07-21 |
+| CVE-2026-57495 (AgenticMail bridge-wake indirect prompt injection — external mail resumes the operator's Claude Code session with `permissionMode: bypassPermissions`, embedding attacker-controlled `from`/`subject`/`preview` into a fully-privileged agent) | [NVD](https://nvd.nist.gov/vuln/detail/CVE-2026-57495) | **Pinned** `AAK-MCP-AGENTICMAIL-CVE-2026-57495-001` — one rule, per-package fix floors: `@agenticmail/claudecode` ≥ 0.2.39, `@agenticmail/codex` ≥ 0.1.33, `@agenticmail/core` ≥ 0.9.43, `@agenticmail/openclaw` ≥ 0.5.71 | 2026-07-21 |
+| CVE-2026-53378 (Linux kernel `drm/colorop` blob-property reference leak) | [NVD](https://nvd.nist.gov/vuln/detail/CVE-2026-53378) | **Out of scope** — a Linux-kernel DRM reference-counting memory leak, not an MCP/agent artifact. Surfaced only because the NVD keyword feed matched; there is no AAK config/dependency surface. No rule. | 2026-07-21 |
+| CVE-2026-55544 (NextCRM 0.12.1 — MCP campaign tools ignore the authenticated user ID → BOLA/IDOR across campaigns; fixed 0.12.2; CVSS 7.6) | [NVD](https://nvd.nist.gov/vuln/detail/CVE-2026-55544) | **Not pinnable** — server-side broken-object-level-authorization in a self-hosted Next.js app (`nextcrm-app`), which is not an npm/PyPI dependency a scanned project pins, and the flaw has no client `.mcp.json` or dependency-manifest signal. Outside AAK's detection surface; no rule. | 2026-07-21 |
+| CVE-2026-55550 (NextCRM 0.12.1 — MCP product tools skip role checks → any low-priv user mutates the shared catalog; fixed 0.12.3; CVSS 7.1) | [NVD](https://nvd.nist.gov/vuln/detail/CVE-2026-55550) | **Not pinnable** — same class and app as CVE-2026-55544 (self-hosted server-side authorization logic). Outside AAK's detection surface; no rule. | 2026-07-21 |
+
 ## Dispositioned 2026-07-19 (v0.3.52)
 
 | Incident / Anchor | Reference | AAK rule(s) / disposition | Dispositioned |

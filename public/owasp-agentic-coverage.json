@@ -1,8 +1,8 @@
 {
   "schema_version": "1",
-  "last_updated": "2026-07-18T06:59:13Z",
-  "aak_version": "0.3.51",
-  "rule_count": 262,
+  "last_updated": "2026-07-21T17:07:15Z",
+  "aak_version": "0.3.56",
+  "rule_count": 264,
   "coverage": [
     {
       "asi_id": "ASI01",
@@ -561,7 +561,7 @@
     {
       "asi_id": "ASI03",
       "title": "Memory Poisoning",
-      "rule_density": 62,
+      "rule_density": 63,
       "rules": [
         {
           "id": "AAK-A2A-005",
@@ -713,6 +713,18 @@
             "CVE-2026-33032"
           ],
           "aicm_references": []
+        },
+        {
+          "id": "AAK-MCP-AGENTICMAIL-CVE-2026-57495-001",
+          "severity": "high",
+          "cve_references": [
+            "CVE-2026-57495"
+          ],
+          "aicm_references": [
+            "AIS-07",
+            "AIS-12",
+            "STA-08"
+          ]
         },
         {
           "id": "AAK-MCP-ATTEST-001",
@@ -1063,7 +1075,7 @@
     {
       "asi_id": "ASI04",
       "title": "Identity & Privilege Abuse",
-      "rule_density": 50,
+      "rule_density": 51,
       "rules": [
         {
           "id": "AAK-AGENT-HARNESS-SHARED-STATE-001",
@@ -1407,6 +1419,18 @@
             "CVE-2026-46519"
           ],
           "aicm_references": []
+        },
+        {
+          "id": "AAK-MCP-WHATSAPP-CVE-2026-46555-001",
+          "severity": "high",
+          "cve_references": [
+            "CVE-2026-46555"
+          ],
+          "aicm_references": [
+            "IAM-01",
+            "IVS-04",
+            "STA-08"
+          ]
         },
         {
           "id": "AAK-NEO4J-001",

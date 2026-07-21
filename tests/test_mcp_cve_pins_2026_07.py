@@ -37,6 +37,9 @@ PINS = {
     "AAK-MCP-APIFY-CVE-2026-46341-001": "medium",
     "AAK-MCP-AGENTICFLOW-CVE-2026-58195-001": "high",
     "AAK-MCP-HEALTHOMICS-CVE-2026-15415-001": "medium",
+    # 2026-07-19..20 wave
+    "AAK-MCP-WHATSAPP-CVE-2026-46555-001": "high",
+    "AAK-MCP-AGENTICMAIL-CVE-2026-57495-001": "high",
 }
 
 
@@ -313,3 +316,56 @@ def test_lockfile_absent_package_does_not_fire(tmp_path: Path) -> None:
         '[[package]]\nname = "requests"\nversion = "2.31.0"\n', encoding="utf-8"
     )
     assert not {f.rule_id for f in scan(tmp_path)[0]}
+
+
+# ---------------------------------------------------------------------------
+# 2026-07-19..20 wave
+# ---------------------------------------------------------------------------
+
+
+def test_whatsapp_below_floor_fires(tmp_path: Path) -> None:
+    content = '{"dependencies": {"whatsapp-mcp": "0.1.0"}}'
+    assert "AAK-MCP-WHATSAPP-CVE-2026-46555-001" in _ids(tmp_path, "package.json", content)
+
+
+def test_whatsapp_patched_passes(tmp_path: Path) -> None:
+    content = '{"dependencies": {"whatsapp-mcp": "0.2.1"}}'
+    assert "AAK-MCP-WHATSAPP-CVE-2026-46555-001" not in _ids(tmp_path, "package.json", content)
+
+
+def test_whatsapp_uv_lock_resolved_below_floor_fires(tmp_path: Path) -> None:
+    lock = '[[package]]\nname = "whatsapp-mcp"\nversion = "0.1.5"\n'
+    assert "AAK-MCP-WHATSAPP-CVE-2026-46555-001" in _ids(tmp_path, "uv.lock", lock)
+
+
+def test_whatsapp_uv_lock_patched_clears(tmp_path: Path) -> None:
+    lock = '[[package]]\nname = "whatsapp-mcp"\nversion = "0.2.1"\n'
+    assert "AAK-MCP-WHATSAPP-CVE-2026-46555-001" not in _ids(tmp_path, "uv.lock", lock)
+
+
+def test_agenticmail_core_below_floor_fires(tmp_path: Path) -> None:
+    content = '{"dependencies": {"@agenticmail/core": "0.9.0"}}'
+    assert "AAK-MCP-AGENTICMAIL-CVE-2026-57495-001" in _ids(tmp_path, "package.json", content)
+
+
+def test_agenticmail_claudecode_below_floor_fires(tmp_path: Path) -> None:
+    content = '{"dependencies": {"@agenticmail/claudecode": "0.2.38"}}'
+    assert "AAK-MCP-AGENTICMAIL-CVE-2026-57495-001" in _ids(tmp_path, "package.json", content)
+
+
+def test_agenticmail_each_package_patched_passes(tmp_path: Path) -> None:
+    content = (
+        '{"dependencies": {'
+        '"@agenticmail/claudecode": "0.2.39",'
+        '"@agenticmail/codex": "0.1.33",'
+        '"@agenticmail/core": "0.9.43",'
+        '"@agenticmail/openclaw": "0.5.71"}}'
+    )
+    assert "AAK-MCP-AGENTICMAIL-CVE-2026-57495-001" not in _ids(tmp_path, "package.json", content)
+
+
+def test_agenticmail_pin_does_not_match_bare_openclaw(tmp_path: Path) -> None:
+    # The bare `openclaw` package has its own pin; the AgenticMail pin must not
+    # fire on it (distinct scoped @agenticmail/openclaw only).
+    content = '{"dependencies": {"openclaw": "0.5.0"}}'
+    assert "AAK-MCP-AGENTICMAIL-CVE-2026-57495-001" not in _ids(tmp_path, "package.json", content)

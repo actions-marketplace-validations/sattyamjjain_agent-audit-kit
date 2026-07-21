@@ -7,6 +7,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added — 2026-07-19..20 CVE-response pins (262 → 264 rules)
+
+- `AAK-MCP-WHATSAPP-CVE-2026-46555-001` — whatsapp-mcp < 0.2.1 (unauthenticated
+  loopback `whatsapp-bridge` + `media_path` traversal → arbitrary file exfil /
+  DNS-rebinding; CVSS 7.7). Fix floor 0.2.1.
+- `AAK-MCP-AGENTICMAIL-CVE-2026-57495-001` — AgenticMail bridge-wake indirect
+  prompt injection into a `bypassPermissions` agent; one rule, per-package fix
+  floors (`@agenticmail/claudecode` ≥ 0.2.39, `/codex` ≥ 0.1.33, `/core` ≥
+  0.9.43, `/openclaw` ≥ 0.5.71).
+- Triaged three more `cve-response` issues without a new rule (dispositioned in
+  `CHANGELOG.cves.md`): CVE-2026-53378 (Linux-kernel DRM leak — out of scope) and
+  CVE-2026-55544 / CVE-2026-55550 (NextCRM server-side MCP-tool authorization in a
+  self-hosted app — no pinnable dependency or client-config surface). Clearing the
+  `cve-response` backlog unblocks the release gate for the v0.3.56 tag.
+
 ### Added — frozen, citable MCP security baseline v1.0 (`research/state-of-mcp-2026/baseline.py`)
 
 - A `baseline` command that emits an **immutable, byte-deterministic** research

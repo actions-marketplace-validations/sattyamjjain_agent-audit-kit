@@ -156,6 +156,8 @@ _AICM_TAGS: dict[str, list[str]] = {
     "AAK-MCP-APIFY-CVE-2026-46341-001": ["IVS-04", "STA-08"],
     "AAK-MCP-AGENTICFLOW-CVE-2026-58195-001": ["AIS-07", "STA-08"],
     "AAK-MCP-HEALTHOMICS-CVE-2026-15415-001": ["IVS-04", "STA-08"],
+    "AAK-MCP-WHATSAPP-CVE-2026-46555-001": ["IAM-01", "IVS-04", "STA-08"],
+    "AAK-MCP-AGENTICMAIL-CVE-2026-57495-001": ["AIS-07", "AIS-12", "STA-08"],
     "AAK-LMDEPLOY-VL-SSRF-001": ["IVS-04", "AIS-08"],
     "AAK-SPLUNK-MCP-TOKEN-LEAK-001": ["DSP-17", "LOG-06"],
     "AAK-MARKETPLACE-001": ["STA-10"],
@@ -6022,6 +6024,73 @@ _r(
     owasp_mcp_references=["MCP04:2025"],
     owasp_agentic_references=["ASI09"],
     adversa_references=["ADV-PATH-01"],
+)
+
+# ---------------------------------------------------------------------------
+# 2026-07-19..20 MCP CVE-response wave (pinnable artifacts). Detector:
+# `mcp_cve_pins_2026_07`. Package names + fix floors are the NVD-published
+# values. (Two sibling CVEs from the same batch are NOT pins — CVE-2026-53378
+# is a Linux-kernel drm/colorop leak, out of AAK's MCP scope; CVE-2026-55544 /
+# CVE-2026-55550 are server-side NextCRM MCP-tool authorization bugs in a
+# self-hosted app with no pinnable dependency or client-config surface. Both are
+# dispositioned in CHANGELOG.cves.md rather than as rules.)
+# ---------------------------------------------------------------------------
+
+_r(
+    "AAK-MCP-WHATSAPP-CVE-2026-46555-001",
+    "whatsapp-mcp < 0.2.1 (unauthenticated loopback bridge + media_path traversal → file exfil)",
+    "The WhatsApp MCP Server's `whatsapp-bridge` HTTP API before 0.2.1 listens on "
+    "127.0.0.1:8080 with no authentication and no Host-header validation, and its "
+    "`/api/send` endpoint accepts an absolute `media_path` with no directory "
+    "confinement. Any local process running as the same user — which in an MCP "
+    "session includes sibling MCP servers, IDE extensions, and tool-triggered "
+    "flows — can send WhatsApp messages from the paired account and read then "
+    "exfiltrate arbitrary user-readable files (SSH keys, browser session data, "
+    "dotfiles) as document attachments; the missing Host validation also enables "
+    "DNS-rebinding from a visited webpage (CVE-2026-46555, CVSS 7.7). Fixed in "
+    "0.2.1, which adds required bearer-token auth, a Host allow-list, and "
+    "media_path confinement. Treat < 0.2.1 (or unpinned) as exposed.",
+    Severity.HIGH,
+    Category.SUPPLY_CHAIN,
+    "Upgrade whatsapp-mcp to >= 0.2.1 and pin it. Require the bridge bearer token on "
+    "all requests, enable Host-header allow-listing, and confine `media_path` to a "
+    "configured root (reject absolute paths and `..`). Do not run the bridge next to "
+    "untrusted local MCP servers, browser extensions, or other untrusted processes.",
+    sarif_name="WhatsAppMcpUnauthBridgeTraversal",
+    cve_references=["CVE-2026-46555"],
+    owasp_mcp_references=["MCP01:2025"],
+    owasp_agentic_references=["ASI04"],
+    adversa_references=["ADV-AUTH-01"],
+)
+
+_r(
+    "AAK-MCP-AGENTICMAIL-CVE-2026-57495-001",
+    "AgenticMail bridge-wake indirect prompt injection (unpinned @agenticmail/* below fix)",
+    "AgenticMail gives AI agents real email addresses. In @agenticmail/claudecode "
+    "< 0.2.39, @agenticmail/codex < 0.1.33, @agenticmail/core < 0.9.43, and "
+    "@agenticmail/openclaw < 0.5.71, two inbound-mail handlers act on a privileged "
+    "effect without verifying the sender is the operator (a sibling handler gates "
+    "the same untrusted `From` provenance fail-closed with "
+    "`isOperatorReplySender`). The high-impact path: any external email routed to "
+    "the bridge inbox resumes the operator's Claude Code session with "
+    "`permissionMode: 'bypassPermissions'`, embedding the attacker-controlled "
+    "`from`/`subject`/`preview` verbatim into the prompt — an indirect prompt "
+    "injection into a fully-privileged agent (Bash/Write/Edit/WebFetch + the "
+    "agenticmail MCP toolbelt) running as the operator's OAuth identity "
+    "(CVE-2026-57495). Fixed in @agenticmail/claudecode 0.2.39, @agenticmail/codex "
+    "0.1.33, @agenticmail/core 0.9.43, and @agenticmail/openclaw 0.5.71.",
+    Severity.HIGH,
+    Category.SUPPLY_CHAIN,
+    "Upgrade every @agenticmail/* package to the fixed release and pin it "
+    "(@agenticmail/claudecode >= 0.2.39, @agenticmail/codex >= 0.1.33, "
+    "@agenticmail/core >= 0.9.43, @agenticmail/openclaw >= 0.5.71). Gate every "
+    "privileged inbound-mail effect on operator-sender provenance (fail closed), "
+    "and never resume a `bypassPermissions` agent from untrusted `From` mail.",
+    sarif_name="AgenticMailBridgeWakeInjection",
+    cve_references=["CVE-2026-57495"],
+    owasp_mcp_references=["MCP01:2025"],
+    owasp_agentic_references=["ASI03"],
+    adversa_references=["ADV-AUTH-01"],
 )
 
 

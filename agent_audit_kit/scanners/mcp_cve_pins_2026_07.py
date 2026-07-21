@@ -1,6 +1,6 @@
 """MCP/agent CVE version-pins — 2026-07 disclosure wave (table-driven).
 
-Twenty-two dependency version-pin rules for MCP/agent CVEs disclosed 2026-07-08..17
+Twenty-four dependency version-pin rules for MCP/agent CVEs disclosed 2026-07-08..20
 that have both a vendor-fixed version and a pinnable PyPI / npm artifact. Each
 pin fires when a project references the affected package below its fix floor (or
 unpinned) across dependency manifests, lockfiles, and MCP config files — the same
@@ -31,6 +31,9 @@ available) before shipping:
   - @apify/actors-mcp-server       >= 0.9.21  (CVE-2026-46341)
   - agentic-flow                   >= 2.0.14  (CVE-2026-58195)
   - awslabs.aws-healthomics-mcp-server >= 0.0.36 (CVE-2026-15415)
+  - whatsapp-mcp                   >= 0.2.1   (CVE-2026-46555)
+  - @agenticmail/{claudecode,codex,core,openclaw} (CVE-2026-57495; fix floors
+    0.2.39 / 0.1.33 / 0.9.43 / 0.5.71 respectively — one rule, four pins)
 
 CVEs without a pinnable PyPI/npm artifact (aerostack-mcp SSRF, MaxKB stdio
 command-injection, mastergo-magic-mcp path-traversal/SSRF with no vendor fix,
@@ -149,6 +152,21 @@ _PINS: tuple[_Pin, ...] = (
          (2, 0, 14), fix_label="2.0.14"),
     _Pin("AAK-MCP-HEALTHOMICS-CVE-2026-15415-001", "awslabs.aws-healthomics-mcp-server",
          ("awslabs.aws-healthomics-mcp-server",), (0, 0, 36), fix_label="0.0.36"),
+    # --- 2026-07-19..20 wave ---
+    _Pin("AAK-MCP-WHATSAPP-CVE-2026-46555-001", "whatsapp-mcp", ("whatsapp-mcp",),
+         (0, 2, 1), fix_label="0.2.1"),
+    # AgenticMail ships four npm packages, each with its own fix floor for the same
+    # CVE — one rule_id, four pins (whichever @agenticmail/* the project depends on
+    # fires below its own floor). `@agenticmail/openclaw` is distinct from the bare
+    # `openclaw` pin above.
+    _Pin("AAK-MCP-AGENTICMAIL-CVE-2026-57495-001", "@agenticmail/claudecode",
+         ("@agenticmail/claudecode",), (0, 2, 39), fix_label="0.2.39"),
+    _Pin("AAK-MCP-AGENTICMAIL-CVE-2026-57495-001", "@agenticmail/codex",
+         ("@agenticmail/codex",), (0, 1, 33), fix_label="0.1.33"),
+    _Pin("AAK-MCP-AGENTICMAIL-CVE-2026-57495-001", "@agenticmail/core",
+         ("@agenticmail/core",), (0, 9, 43), fix_label="0.9.43"),
+    _Pin("AAK-MCP-AGENTICMAIL-CVE-2026-57495-001", "@agenticmail/openclaw",
+         ("@agenticmail/openclaw",), (0, 5, 71), fix_label="0.5.71"),
 )
 
 _CANDIDATE_NAMES = (
