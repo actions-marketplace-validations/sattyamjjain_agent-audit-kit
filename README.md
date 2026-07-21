@@ -67,7 +67,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - uses: sattyamjjain/agent-audit-kit@v0.3.55
+      - uses: sattyamjjain/agent-audit-kit@v0.3.56
         id: scan
         with:
           fail-on: high
@@ -94,7 +94,7 @@ agent-audit-kit scan .
 # .pre-commit-config.yaml
 repos:
   - repo: https://github.com/sattyamjjain/agent-audit-kit
-    rev: v0.3.55
+    rev: v0.3.56
     hooks:
       - id: agent-audit-kit
 ```
@@ -279,7 +279,7 @@ permissions:
 
 steps:
   - uses: actions/checkout@v4
-  - uses: sattyamjjain/agent-audit-kit@v0.3.55
+  - uses: sattyamjjain/agent-audit-kit@v0.3.56
     id: scan
     with:
       fail-on: high
@@ -465,6 +465,25 @@ manifest; the corpus refresh is the one network step, `fetch_registry.py`):
 
 ```bash
 make report   # regenerate the report numbers, offline + deterministic
+```
+
+### Frozen baseline (pre-2026-07-28-spec)
+
+The same measurement, **frozen and citable** as
+**[`docs/research/mcp-security-baseline-v1.0.md`](docs/research/mcp-security-baseline-v1.0.md)**:
+an immutable, byte-deterministic snapshot
+([`mcp-security-baseline-v1.0-2026-07-27.json`](research/state-of-mcp-2026/baseline/mcp-security-baseline-v1.0-2026-07-27.json))
+recording, per config and in aggregate, the corpus size + collection window, the
+auth-posture distribution (no-auth / bearer / OAuth 2.1 / unknown), the transport
+distribution, the per-rule HIGH/CRITICAL hit counts, and the benign-slice
+false-positive rate with its denominator — tamper-evident under
+**SHA-256 `320b43072d930edbc18f050795939dbee3831e4da2f88b3483ea12ec7bb6551f`**. It
+is the **pre-2026-07-28-spec** reference; the re-measure is scheduled for
+**2026-08-11** and is one command:
+
+```bash
+python research/state-of-mcp-2026/baseline.py \
+    --compare research/state-of-mcp-2026/baseline/mcp-security-baseline-v1.0-2026-07-27.json
 ```
 
 Scan your own in 30s, fully offline: `pip install agent-audit-kit && agent-audit-kit scan .`

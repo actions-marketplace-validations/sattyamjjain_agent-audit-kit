@@ -7,6 +7,33 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added — frozen, citable MCP security baseline v1.0 (`research/state-of-mcp-2026/baseline.py`)
+
+- A `baseline` command that emits an **immutable, byte-deterministic** research
+  snapshot, `mcp-security-baseline-v1.0-2026-07-27`, recording — per config and in
+  aggregate — corpus size + collection window, the auth-posture distribution
+  (no-auth / bearer / OAuth 2.1 / unknown), transport distribution (stdio / SSE /
+  streamable-HTTP), per-rule HIGH/CRITICAL hit counts, and the benign-slice
+  HIGH/CRITICAL false-positive rate with its denominator (4/368; 2/4 adjudicated).
+  Adds **no** detection rules — reuses `engine.run_scan`, `scoring.compute_score`,
+  and the `oauth_misconfig` signals. Offline, no network, no account.
+- **Determinism + tamper-evidence:** sorted keys, stable float rounding, and no
+  wall-clock in the payload (the collection window is data from the corpus
+  manifest). Two runs over the same corpus produce identical bytes; the snapshot
+  is fixed under **SHA-256
+  `320b43072d930edbc18f050795939dbee3831e4da2f88b3483ea12ec7bb6551f`**, cited in
+  the report doc and guarded by `tests/test_mcp_security_baseline.py`.
+- **`--compare BASELINE_FILE`** re-scans the corpus and prints a per-dimension
+  delta table (absolute + percentage-point) against v1.0, so the post-2026-07-28
+  re-measure (scheduled **2026-08-11**) is one command.
+- Docs: `docs/research/mcp-security-baseline-v1.0.md` (what was measured, the exact
+  collection window, methodology, the FP-rate caveat, the reproducibility caveat,
+  and the explicit pre-spec statement), linked from the README research section.
+  This is the **pre-2026-07-28-spec** baseline; **no** post-spec comparison is
+  claimed until the spec ships.
+
+Version 0.3.55 → 0.3.56.
+
 ### Fixed — P0/P1 integration bugs (SARIF upload, lockfile-aware pins)
 
 - **P0 — invalid SARIF `fixes[]` broke `codeql-action/upload-sarif`.** Every
