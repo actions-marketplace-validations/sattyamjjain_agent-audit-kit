@@ -1,23 +1,37 @@
 # Benign-slice HIGH/CRITICAL false-positive rate — AgentAuditKit
 
 > Generated from `benchmarks/false_positive/run.py` over a benign slice derived
-> by `corpus.py`. Run date **2026-07-20**. Offline, deterministic, no LLM.
+> by `corpus.py`. Run date **2026-07-22** (post-#475). Offline, deterministic, no LLM.
 > Reproduce: `python benchmarks/false_positive/run.py`.
 
 ## Headline
 
-On a **368-config benign slice** of public MCP servers, AgentAuditKit produced
-**4 HIGH/CRITICAL findings** (1.1% of the slice, Wilson 95% CI [0.4%, 2.8%]).
-Hand-adjudicated: **2 false positives, 1 true positive, 1 ambiguous**.
+On a **368-config benign slice** of public MCP servers, AgentAuditKit produces
+**1 HIGH/CRITICAL finding** (0.27% of the slice, Wilson 95% CI [0.0%, 1.5%]).
+Hand-adjudicated: **0 false positives, 1 true positive**.
 
-**Benign-slice HIGH/CRITICAL false-positive rate = 2 / 4 = 50.0%** (Wilson 95%
-CI **[15.0%, 85.0%]**).
+**Benign-slice HIGH/CRITICAL false-positive rate = 0 / 1 = 0.0%** (Wilson 95%
+CI **[0.0%, 79.3%]**; n = 1, so the interval is very wide — stated plainly).
+
+### What changed (2026-07-20 → 2026-07-22)
+
+The 2026-07-20 run produced **4 HIGH/CRITICAL findings** (1.1%), hand-adjudicated
+**2 FP / 1 TP / 1 ambiguous → 2/4 = 50.0%**. Both false positives shared one root
+cause: `AAK-MCP-001` recognized only `Authorization`/`Bearer`/`X-API-Key`/`Api-Key`
+and **missed vendor-prefixed API-key headers**, so `ai.nefesh/human-state`
+(`X-Nefesh-Key`) and `ai.satoshidata/wallet-intelligence` (`X-WR-API-Key`) were
+wrongly flagged "without authentication". **[#475](https://github.com/sattyamjjain/agent-audit-kit/issues/475)**
+extended the matcher to the `X-*-Key` / `*-API-Key` credential-header family (and
+the x402 `X-PAYMENT` access gate), value-aware so a hardcoded literal still fires.
+That cleared the 2 false positives **and** the 1 ambiguous x402 finding, leaving
+only the genuine true positive (`ai.spala/public-mcp`, whose sole header is
+`Accept`). Benign-slice HIGH/CRITICAL FP rate: **50.0% → 0.0%** (n 4 → 1). No new
+findings were introduced elsewhere.
 
 This number is deliberately labelled *benign-slice HIGH/CRITICAL false-positive
-rate* — not "false-positive rate" unqualified. It says: of the small number of
-high-severity findings AAK raises on servers that look benign, half were wrong.
-Both false positives are a single, fixable root cause (below), and the interval
-is wide because n is small — both stated plainly rather than smoothed over.
+rate* — not "false-positive rate" unqualified. It says: of the high-severity
+findings AAK raises on servers that look benign, how many were wrong. The
+interval is wide because n is tiny — stated plainly rather than smoothed over.
 
 ## Method
 
@@ -109,10 +123,11 @@ bad number and the fix is the point of this benchmark.
   registry metadata, and some flagged issues may be real.
 - **Single rater, no inter-rater agreement.** All verdicts are the maintainer's.
   There is no second independent adjudicator, so no agreement statistic is
-  reported. A different rater might move the ambiguous case.
-- **Small n → wide interval.** Only 4 HIGH/CRITICAL findings arose, so the
-  Wilson 95% CI on the FP rate spans [15%, 85%]. The point estimate (50%) should
-  not be read as precise; the interval is the honest summary.
+  reported.
+- **Small n → wide interval.** Post-#475 only 1 HIGH/CRITICAL finding arises, so
+  the Wilson 95% CI on the FP rate spans [0%, 79%]. The point estimate (0%)
+  should not be read as precise; the interval is the honest summary. (The prior
+  2026-07-20 run had n = 4 and a 50% point estimate, CI [15%, 85%].)
 - **Config-level + conversion fidelity.** Registry servers are converted to
   `.mcp.json` shape from their `remotes`/`packages` metadata (first remote only),
   so a multi-remote server's auth may be under-represented in the scanned config.

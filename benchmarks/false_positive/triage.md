@@ -45,3 +45,22 @@ should recognise common API-key credential headers (`X-*-Key`, `X-API-Key`,
 `Api-Key`, and the x402 `X-PAYMENT` case reviewed) as authentication, not just
 `Authorization`/`Bearer`. Tracked as
 [#475](https://github.com/sattyamjjain/agent-audit-kit/issues/475).
+
+## Adjudication — 2026-07-22 re-run (post-#475, n = 1 HIGH/CRITICAL)
+
+[#475](https://github.com/sattyamjjain/agent-audit-kit/issues/475) shipped:
+`AAK-MCP-001` now recognises the `X-*-Key` / `*-API-Key` credential-header family
+and the x402 `X-PAYMENT` access gate (value-aware — a hardcoded literal still
+fires). Re-running the harness on the same 368-config slice:
+
+| # | Rule ID | Config | Verdict | One-line reason |
+|--:|---------|--------|:-------:|-----------------|
+| 1 | `AAK-MCP-001` | `ai.spala/public-mcp` | **TRUE POSITIVE** | Sole header is `Accept` (content negotiation, not auth); a genuinely unauthenticated remote endpoint. Correctly flagged. |
+
+### Tally (post-#475)
+
+- False positives: **0** (both prior FPs — `X-Nefesh-Key`, `X-WR-API-Key` — cleared).
+- True positives: **1**.
+- Ambiguous: **0** (the x402 `X-PAYMENT` case is now recognised as a declared access gate).
+- **Benign-slice HIGH/CRITICAL false-positive rate = 0 / 1 = 0.0%** (Wilson 95% CI [0.0%, 79.3%]; n = 1, interval very wide).
+- No new HIGH/CRITICAL findings were introduced elsewhere on the corpus (full-corpus AAK-MCP-001 configs 497 → 492, delta −5, 0 newly firing).

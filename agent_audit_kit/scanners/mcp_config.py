@@ -33,6 +33,72 @@ INTERNAL_URL_PATTERNS = re.compile(
     re.IGNORECASE,
 )
 
+# --- AAK-MCP-001 authentication-header recognition (#475) --------------------
+# Header names historically recognized as auth. Kept NAME-only (value not
+# inspected) for backward compatibility: a hardcoded literal in one of these is
+# a secret-exposure concern (AAK-MCP-003 / AAK-SECRET-*), not "no authentication".
+_KNOWN_AUTH_HEADERS = frozenset({"authorization", "bearer", "x-api-key", "api-key"})
+
+# Custom credential / access-control header family: vendor-prefixed API keys
+# (X-<Vendor>-Key, *-API-Key, *-API-Token, *-Access-Key), bare apikey / token
+# header variants, and the x402 `X-PAYMENT` pay-to-access header (access control,
+# not identity auth, but the endpoint is not openly reachable). Recognizing this
+# family is the #475 fix: servers authenticating with a vendor key header were
+# wrongly reported as "without authentication".
+_CUSTOM_AUTH_HEADER_RE = re.compile(
+    r"^(?:"
+    r"x-[a-z0-9]+(?:-[a-z0-9]+)*-key"    # X-Nefesh-Key, X-Goog-Api-Key, x-ref-api-key
+    r"|[a-z0-9-]+-api-key"               # *-api-key
+    r"|[a-z0-9-]+-api-token"             # *-api-token
+    r"|[a-z0-9-]+-access-key"            # *-access-key
+    r"|apikey|x-auth-token|x-access-token"
+    r"|x-payment"                        # x402 pay-to-access gate
+    r")$",
+    re.IGNORECASE,
+)
+
+# A header VALUE that references a credential indirectly — env var, template, or
+# an obvious placeholder — rather than baking a literal secret into the config.
+# Only such a value counts as a genuine declared scheme for the custom family; a
+# hardcoded literal in a custom auth header still trips AAK-MCP-001 because the
+# credential is exposed in the config, so the endpoint is effectively unprotected.
+_CREDENTIAL_REF_RE = re.compile(
+    r"\$\{[^}]*\}"        # ${VAR}
+    r"|\$[A-Za-z_]\w*"    # $VAR
+    r"|\{\{[^}]*\}\}"     # {{VAR}}
+    r"|<[^>]+>"           # <your-key>
+    r"|%[A-Za-z_]\w*%"    # %VAR%
+    r"|your[_\- ]?\w*"    # YOUR_API_KEY, your-key
+    r"|change[_\- ]?me|changeme|placeholder|redacted|dummy|\bexample\b|\bsample\b"
+    r"|_here\b|x{4,}",
+    re.IGNORECASE,
+)
+
+
+def _is_credential_reference(value: str) -> bool:
+    """True when a header value is empty or an env/template/placeholder reference
+    (i.e. not a hardcoded literal secret baked into the config)."""
+    v = (value or "").strip()
+    if not v:
+        return True
+    return bool(_CREDENTIAL_REF_RE.search(v))
+
+
+def _server_declares_auth(headers: Any) -> bool:
+    """Whether a server's ``headers`` block declares an authentication or
+    access-control scheme, so AAK-MCP-001 ("without authentication") should not
+    fire. Recognizes the historical exact names (name-only) plus the custom
+    credential-header family (value-aware — a hardcoded literal does not count)."""
+    if not isinstance(headers, dict):
+        return False
+    for name, value in headers.items():
+        lname = str(name).lower()
+        if lname in _KNOWN_AUTH_HEADERS:
+            return True
+        if _CUSTOM_AUTH_HEADER_RE.match(lname) and _is_credential_reference(str(value)):
+            return True
+    return False
+
 MCP_CONFIG_FILES = [
     ".mcp.json",
     ".cursor/mcp.json",
@@ -100,14 +166,14 @@ def _check_server(
     env = server_cfg.get("env", {})
     headers_helper = server_cfg.get("headersHelper", "")
 
-    # AAK-MCP-001: Remote server without auth
+    # AAK-MCP-001: Remote server without authentication. A server declaring a
+    # recognized credential/access header — Authorization, Bearer, X-API-Key, or
+    # the custom X-*-Key / *-API-Key family and the x402 X-PAYMENT gate — is
+    # authenticated and must not fire (#475). A custom auth header whose value is
+    # a hardcoded literal secret still fires: the credential is exposed in the
+    # config, so the endpoint is effectively unprotected.
     if url:
-        headers = server_cfg.get("headers", {})
-        has_auth = any(
-            k.lower() in ("authorization", "x-api-key", "api-key", "bearer")
-            for k in headers.keys()
-        ) if isinstance(headers, dict) else False
-        if not has_auth:
+        if not _server_declares_auth(server_cfg.get("headers", {})):
             findings.append(_make_finding(
                 "AAK-MCP-001", file_path,
                 f"Server '{server_name}' URL: {url} — no authentication headers",

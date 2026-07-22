@@ -7,6 +7,24 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- **`fix(rules): AAK-MCP-001 no longer flags custom X-*-Key auth headers (#475);
+  benign-slice FP rate 50%→0%.`** `AAK-MCP-001` ("Remote MCP server without
+  authentication") recognized only `Authorization`/`Bearer`/`X-API-Key`/`Api-Key`
+  and missed vendor-prefixed credential headers, so servers authenticating with
+  `X-Nefesh-Key` / `X-WR-API-Key` were wrongly flagged. The matcher now
+  recognizes the `X-*-Key` / `*-API-Key` / `*-API-Token` / `*-Access-Key` family
+  and the x402 `X-PAYMENT` access gate — **value-aware**: a templated/env
+  reference (`${API_KEY}`) is a declared scheme (suppressed), while a **hardcoded
+  literal** secret in a custom auth header still fires (the credential is exposed
+  in the config). The 4 historically recognized exact names stay name-only, so no
+  configs newly fire. Measured on the #476 harness: benign-slice HIGH/CRITICAL
+  **4 → 1 finding**, adjudicated FP rate **2/4 = 50% → 0/1 = 0%**; full-corpus
+  AAK-MCP-001 configs **497 → 492 (−5, 0 newly firing)**. Version 0.3.56 → 0.3.57.
+
+## [0.3.56] - 2026-07-21
+
 ### Added — 2026-07-19..20 CVE-response pins (262 → 264 rules)
 
 - `AAK-MCP-WHATSAPP-CVE-2026-46555-001` — whatsapp-mcp < 0.2.1 (unauthenticated

@@ -291,11 +291,18 @@ def _r(
 _r(
     "AAK-MCP-001",
     "Remote MCP server without authentication",
-    "An MCP server uses HTTP transport (url field) without any authentication headers. "
-    "Unauthenticated remote servers can be MITM'd or spoofed.",
+    "An MCP server uses HTTP transport (url field) without a recognized "
+    "authentication or access-control header. Recognized schemes are "
+    "Authorization / Bearer, X-API-Key / Api-Key, the custom X-*-Key / *-API-Key "
+    "credential-header family, and the x402 X-PAYMENT gate, declared via an "
+    "env/template reference (e.g. ${API_KEY}). A custom auth header carrying a "
+    "hardcoded literal secret still fires — the credential is exposed in the "
+    "config, so the endpoint is effectively unprotected. Unauthenticated remote "
+    "servers can be MITM'd or spoofed.",
     Severity.CRITICAL,
     Category.MCP_CONFIG,
-    "Add OAuth 2.1 bearer token or API key header authentication.",
+    "Add OAuth 2.1 bearer token or API key header authentication (reference the "
+    "secret via an env var, do not hardcode it in the config).",
     sarif_name="RemoteMcpServerNoAuth",
     owasp_mcp_references=["MCP07:2025"],
     owasp_agentic_references=["ASI03"],

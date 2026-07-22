@@ -1,17 +1,17 @@
 {
   "benign_slice_n": 368,
   "benign_slice_predicate": "official MCP Registry latest-version server AND status=active AND auth_mode in {static-credential, header-nonsecret, local-stdio} AND not in AAK's shipped CVE/advisory feed (vuln_db.json + CVE-pin package names)",
-  "configs_with_high_critical": 4,
-  "finding_set_digest": "49223e1968553c0d835e05d417457ad465dd2a1119bf8abeb012d923e92de568",
+  "configs_with_high_critical": 1,
+  "finding_set_digest": "6a00de66acf2ab433f934d050ac1b720f375df3173f7cbda9f396b1c3ecafab3",
   "findings_per_config": 2.15,
-  "high_critical_config_rate": 0.0109,
-  "high_critical_findings": 4,
+  "high_critical_config_rate": 0.0027,
+  "high_critical_findings": 1,
   "rule_family_buckets": {
-    "AAK-MCP": 518,
+    "AAK-MCP": 515,
     "AAK-OAUTH": 275
   },
   "severity_buckets": {
-    "critical": 4,
+    "critical": 1,
     "high": 0,
     "info": 0,
     "low": 348,
@@ -19,24 +19,6 @@
   },
   "tool": "agent-audit-kit",
   "top30_high_critical": [
-    {
-      "config": "ai.lattiq/x402-trading-signals",
-      "evidence": "Server 'x402-trading-signals' URL: https://api.lattiq.ai/mcp \u2014 no authentication headers",
-      "rule_id": "AAK-MCP-001",
-      "severity": "critical"
-    },
-    {
-      "config": "ai.nefesh/human-state",
-      "evidence": "Server 'human-state' URL: https://mcp.nefesh.ai/mcp \u2014 no authentication headers",
-      "rule_id": "AAK-MCP-001",
-      "severity": "critical"
-    },
-    {
-      "config": "ai.satoshidata/wallet-intelligence",
-      "evidence": "Server 'wallet-intelligence' URL: https://satoshidata.ai/mcp/v1/ \u2014 no authentication headers",
-      "rule_id": "AAK-MCP-001",
-      "severity": "critical"
-    },
     {
       "config": "ai.spala/public-mcp",
       "evidence": "Server 'public-mcp' URL: https://mcp.spala.ai/mcp \u2014 no authentication headers",
@@ -46,7 +28,7 @@
   ],
   "top_noisy_high_critical_rules": [
     {
-      "high_critical_findings": 4,
+      "high_critical_findings": 1,
       "rule_id": "AAK-MCP-001",
       "severity": "critical",
       "title": "Remote MCP server without authentication"
@@ -78,11 +60,11 @@
       "title": "MCP server lacks version pinning in args"
     },
     {
-      "findings": 4,
+      "findings": 1,
       "rule_id": "AAK-MCP-001",
       "severity": "critical",
       "title": "Remote MCP server without authentication"
     }
   ],
-  "total_findings": 793
+  "total_findings": 790
 }
