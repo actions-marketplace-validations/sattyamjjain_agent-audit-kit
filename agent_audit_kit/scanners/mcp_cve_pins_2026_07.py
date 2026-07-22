@@ -1,6 +1,6 @@
 """MCP/agent CVE version-pins — 2026-07 disclosure wave (table-driven).
 
-Twenty-four dependency version-pin rules for MCP/agent CVEs disclosed 2026-07-08..20
+Twenty-five dependency version-pin rules for MCP/agent CVEs disclosed 2026-07-08..21
 that have both a vendor-fixed version and a pinnable PyPI / npm artifact. Each
 pin fires when a project references the affected package below its fix floor (or
 unpinned) across dependency manifests, lockfiles, and MCP config files — the same
@@ -34,6 +34,7 @@ available) before shipping:
   - whatsapp-mcp                   >= 0.2.1   (CVE-2026-46555)
   - @agenticmail/{claudecode,codex,core,openclaw} (CVE-2026-57495; fix floors
     0.2.39 / 0.1.33 / 0.9.43 / 0.5.71 respectively — one rule, four pins)
+  - mcp-for-stata                  >= 1.17.3  (CVE-2026-47708)
 
 CVEs without a pinnable PyPI/npm artifact (aerostack-mcp SSRF, MaxKB stdio
 command-injection, mastergo-magic-mcp path-traversal/SSRF with no vendor fix,
@@ -167,6 +168,9 @@ _PINS: tuple[_Pin, ...] = (
          ("@agenticmail/core",), (0, 9, 43), fix_label="0.9.43"),
     _Pin("AAK-MCP-AGENTICMAIL-CVE-2026-57495-001", "@agenticmail/openclaw",
          ("@agenticmail/openclaw",), (0, 5, 71), fix_label="0.5.71"),
+    # --- 2026-07-21 wave ---
+    _Pin("AAK-MCP-STATA-CVE-2026-47708-001", "mcp-for-stata", ("mcp-for-stata",),
+         (1, 17, 3), fix_label="1.17.3"),
 )
 
 _CANDIDATE_NAMES = (

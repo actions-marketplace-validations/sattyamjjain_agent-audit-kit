@@ -158,6 +158,7 @@ _AICM_TAGS: dict[str, list[str]] = {
     "AAK-MCP-HEALTHOMICS-CVE-2026-15415-001": ["IVS-04", "STA-08"],
     "AAK-MCP-WHATSAPP-CVE-2026-46555-001": ["IAM-01", "IVS-04", "STA-08"],
     "AAK-MCP-AGENTICMAIL-CVE-2026-57495-001": ["AIS-07", "AIS-12", "STA-08"],
+    "AAK-MCP-STATA-CVE-2026-47708-001": ["AIS-08", "IAM-05", "STA-08"],
     "AAK-LMDEPLOY-VL-SSRF-001": ["IVS-04", "AIS-08"],
     "AAK-SPLUNK-MCP-TOKEN-LEAK-001": ["DSP-17", "LOG-06"],
     "AAK-MARKETPLACE-001": ["STA-10"],
@@ -5750,22 +5751,27 @@ _r(
 
 _r(
     "AAK-MCP-PRAISONAI-CVE-2026-61427-001",
-    "PraisonAI MCP HTTP-stream unauthenticated by default (< 4.6.78)",
+    "PraisonAI MCP unauthenticated-default + path traversal (< 4.6.78)",
     "PraisonAI before 4.6.78 exposes the MCP HTTP-stream transport without "
     "authentication by default: `praisonai mcp serve --transport http-stream` "
     "defaults `--api-key` to None and only enforces Authorization/Bearer checks "
     "when a key is configured, so an unauthenticated client can initialize a "
     "session, enumerate tools (`tools/list`), and invoke them (`tools/call`); "
     "arguments are also forwarded without validating the advertised inputSchema "
-    "(CVE-2026-61427, CVSS 7.3). Default bind is 127.0.0.1, so remote reach needs "
-    "a network bind. Treat < 4.6.78 (and unpinned) as exposed.",
+    "(CVE-2026-61427, CVSS 7.3). The same pin also covers CVE-2026-47394 — an "
+    "arbitrary-file-read path traversal via `workflow.show` (and the dispatcher's "
+    "unvalidated `**kwargs` from `tools/call`), an incomplete prior path-handling "
+    "fix that was fully closed only in 4.6.40. The 4.6.78 floor is the "
+    "higher of the two, so a project pinned below it is exposed to both. Default "
+    "bind is 127.0.0.1, so remote reach needs a network bind. Treat < 4.6.78 "
+    "(and unpinned) as exposed.",
     Severity.HIGH,
     Category.SUPPLY_CHAIN,
     "Upgrade `praisonai` to >= 4.6.78 and pin it. Always configure `--api-key` for "
     "the HTTP-stream transport and never bind it to a non-loopback interface "
     "without authentication.",
     sarif_name="PraisonAiMcpNoAuthDefault",
-    cve_references=["CVE-2026-61427"],
+    cve_references=["CVE-2026-61427", "CVE-2026-47394"],
     owasp_mcp_references=["MCP01:2025"],
     owasp_agentic_references=["ASI04"],
     adversa_references=["ADV-AUTH-01"],
@@ -6097,6 +6103,38 @@ _r(
     cve_references=["CVE-2026-57495"],
     owasp_mcp_references=["MCP01:2025"],
     owasp_agentic_references=["ASI03"],
+    adversa_references=["ADV-AUTH-01"],
+)
+
+# ---------------------------------------------------------------------------
+# 2026-07-21 MCP CVE-response wave (pinnable). Detector: mcp_cve_pins_2026_07.
+# (Four sibling CVEs from the same batch are NOT new pins — CVE-2026-47394 is
+# class-covered by the PraisonAI pin above; CVE-2026-50758 by the next-ai-draw-io
+# pin (fires < 0.4.15, catches the affected 0.4.13); CVE-2026-15829 is a Go
+# googleapis/mcp-toolbox SQL-injection with no pinnable artifact; CVE-2026-65056
+# is an mcp-webresearch SSRF with no published fix version. All dispositioned in
+# CHANGELOG.cves.md.)
+# ---------------------------------------------------------------------------
+
+_r(
+    "AAK-MCP-STATA-CVE-2026-47708-001",
+    "MCP-for-Stata < 1.17.3 (log_file_name Stata command injection)",
+    "MCP-for-Stata before 1.17.3 interpolates the `log_file_name` parameter of "
+    "the `stata_do` API/CLI directly into a Stata command string without "
+    "sanitization. Its `GuardValidator` scans only the do-file content, not this "
+    "parameter, so a crafted `log_file_name` containing quotes, newlines, or "
+    "Stata command separators injects arbitrary Stata commands — including "
+    "`shell`, `python`, and `erase` — reaching OS command execution "
+    "(CVE-2026-47708). Fixed in 1.17.3; treat < 1.17.3 (and unpinned) as exposed.",
+    Severity.HIGH,
+    Category.SUPPLY_CHAIN,
+    "Upgrade `mcp-for-stata` to >= 1.17.3 and pin it. Validate/allow-list the "
+    "`log_file_name` parameter (reject quotes, newlines, and Stata separators) in "
+    "addition to the do-file content guard.",
+    sarif_name="McpForStataCommandInjection",
+    cve_references=["CVE-2026-47708"],
+    owasp_mcp_references=["MCP01:2025"],
+    owasp_agentic_references=["ASI04"],
     adversa_references=["ADV-AUTH-01"],
 )
 

@@ -7,6 +7,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added — 2026-07-21 CVE-response triage (264 → 265 rules)
+
+- `AAK-MCP-STATA-CVE-2026-47708-001` — MCP-for-Stata < 1.17.3 (`log_file_name`
+  Stata command injection → `shell`/`python`/`erase`). Fix floor 1.17.3.
+- Triaged four more `cve-response` issues without a new rule (see
+  `CHANGELOG.cves.md`): CVE-2026-47394 (PraisonAI, class-covered by the existing
+  praisonai pin — CVE added to its refs); CVE-2026-50758 (next-ai-draw-io,
+  class-covered by the existing `< 0.4.15` pin); CVE-2026-15829 (Go
+  googleapis/mcp-toolbox SQLi — not pinnable) and CVE-2026-65056 (mcp-webresearch
+  SSRF — class-covered by `AAK-MCP-SSRF-001`, no published fix version to pin).
+  Clears the `cve-response` backlog blocking the v0.3.57 release gate.
+
 ### Fixed
 
 - **`fix(rules): AAK-MCP-001 no longer flags custom X-*-Key auth headers (#475);

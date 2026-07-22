@@ -40,6 +40,8 @@ PINS = {
     # 2026-07-19..20 wave
     "AAK-MCP-WHATSAPP-CVE-2026-46555-001": "high",
     "AAK-MCP-AGENTICMAIL-CVE-2026-57495-001": "high",
+    # 2026-07-21 wave
+    "AAK-MCP-STATA-CVE-2026-47708-001": "high",
 }
 
 
@@ -369,3 +371,29 @@ def test_agenticmail_pin_does_not_match_bare_openclaw(tmp_path: Path) -> None:
     # fire on it (distinct scoped @agenticmail/openclaw only).
     content = '{"dependencies": {"openclaw": "0.5.0"}}'
     assert "AAK-MCP-AGENTICMAIL-CVE-2026-57495-001" not in _ids(tmp_path, "package.json", content)
+
+
+# ---------------------------------------------------------------------------
+# 2026-07-21 wave
+# ---------------------------------------------------------------------------
+
+
+def test_stata_below_floor_fires(tmp_path: Path) -> None:
+    assert "AAK-MCP-STATA-CVE-2026-47708-001" in _ids(
+        tmp_path, "requirements.txt", "mcp-for-stata==1.17.0\n"
+    )
+
+
+def test_stata_patched_passes(tmp_path: Path) -> None:
+    assert "AAK-MCP-STATA-CVE-2026-47708-001" not in _ids(
+        tmp_path, "requirements.txt", "mcp-for-stata==1.17.3\n"
+    )
+
+
+def test_praisonai_pin_covers_incomplete_fix_cve(tmp_path: Path) -> None:
+    """The PraisonAI pin (floor 4.6.78) also covers CVE-2026-47394 (path
+    traversal fixed 4.6.40) — any affected version is < 4.6.78 and fires."""
+    assert "CVE-2026-47394" in RULES["AAK-MCP-PRAISONAI-CVE-2026-61427-001"].cve_references
+    assert "AAK-MCP-PRAISONAI-CVE-2026-61427-001" in _ids(
+        tmp_path, "requirements.txt", "praisonai==4.6.30\n"
+    )

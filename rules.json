@@ -3558,9 +3558,10 @@
       "auto_fixable": false,
       "category": "supply-chain",
       "cve_references": [
-        "CVE-2026-61427"
+        "CVE-2026-61427",
+        "CVE-2026-47394"
       ],
-      "description": "PraisonAI before 4.6.78 exposes the MCP HTTP-stream transport without authentication by default: `praisonai mcp serve --transport http-stream` defaults `--api-key` to None and only enforces Authorization/Bearer checks when a key is configured, so an unauthenticated client can initialize a session, enumerate tools (`tools/list`), and invoke them (`tools/call`); arguments are also forwarded without validating the advertised inputSchema (CVE-2026-61427, CVSS 7.3). Default bind is 127.0.0.1, so remote reach needs a network bind. Treat < 4.6.78 (and unpinned) as exposed.",
+      "description": "PraisonAI before 4.6.78 exposes the MCP HTTP-stream transport without authentication by default: `praisonai mcp serve --transport http-stream` defaults `--api-key` to None and only enforces Authorization/Bearer checks when a key is configured, so an unauthenticated client can initialize a session, enumerate tools (`tools/list`), and invoke them (`tools/call`); arguments are also forwarded without validating the advertised inputSchema (CVE-2026-61427, CVSS 7.3). The same pin also covers CVE-2026-47394 \u2014 an arbitrary-file-read path traversal via `workflow.show` (and the dispatcher's unvalidated `**kwargs` from `tools/call`), an incomplete prior path-handling fix that was fully closed only in 4.6.40. The 4.6.78 floor is the higher of the two, so a project pinned below it is exposed to both. Default bind is 127.0.0.1, so remote reach needs a network bind. Treat < 4.6.78 (and unpinned) as exposed.",
       "incident_references": [],
       "owasp_agentic_references": [
         "ASI04"
@@ -3572,7 +3573,7 @@
       "rule_id": "AAK-MCP-PRAISONAI-CVE-2026-61427-001",
       "sarif_name": "PraisonAiMcpNoAuthDefault",
       "severity": "high",
-      "title": "PraisonAI MCP HTTP-stream unauthenticated by default (< 4.6.78)"
+      "title": "PraisonAI MCP unauthenticated-default + path traversal (< 4.6.78)"
     },
     {
       "adversa_references": [
@@ -3759,6 +3760,34 @@
       "sarif_name": "McpToolArgUrlSsrf",
       "severity": "medium",
       "title": "MCP tool handler fetches a caller-supplied URL without host/scheme allow-list"
+    },
+    {
+      "adversa_references": [
+        "ADV-AUTH-01"
+      ],
+      "aicm_references": [
+        "AIS-08",
+        "IAM-05",
+        "STA-08"
+      ],
+      "auto_fixable": false,
+      "category": "supply-chain",
+      "cve_references": [
+        "CVE-2026-47708"
+      ],
+      "description": "MCP-for-Stata before 1.17.3 interpolates the `log_file_name` parameter of the `stata_do` API/CLI directly into a Stata command string without sanitization. Its `GuardValidator` scans only the do-file content, not this parameter, so a crafted `log_file_name` containing quotes, newlines, or Stata command separators injects arbitrary Stata commands \u2014 including `shell`, `python`, and `erase` \u2014 reaching OS command execution (CVE-2026-47708). Fixed in 1.17.3; treat < 1.17.3 (and unpinned) as exposed.",
+      "incident_references": [],
+      "owasp_agentic_references": [
+        "ASI04"
+      ],
+      "owasp_mcp_references": [
+        "MCP01:2025"
+      ],
+      "remediation": "Upgrade `mcp-for-stata` to >= 1.17.3 and pin it. Validate/allow-list the `log_file_name` parameter (reject quotes, newlines, and Stata separators) in addition to the do-file content guard.",
+      "rule_id": "AAK-MCP-STATA-CVE-2026-47708-001",
+      "sarif_name": "McpForStataCommandInjection",
+      "severity": "high",
+      "title": "MCP-for-Stata < 1.17.3 (log_file_name Stata command injection)"
     },
     {
       "adversa_references": [],

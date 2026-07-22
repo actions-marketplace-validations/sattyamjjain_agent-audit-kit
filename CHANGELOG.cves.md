@@ -16,6 +16,19 @@ open.
 > issue. The per-CVE latency figures in the tables are **measurements recorded at
 > the time**, kept as dated facts, not a standing promise.
 
+## 2026-07-22 (v0.3.57)
+
+Five `cve-response` issues triaged for the v0.3.57 cut — one new pin, one
+class-covered by an existing pin, three dispositioned with rationale.
+
+| CVE | Reference | AAK rule / disposition | Triaged |
+|---|---|---|---|
+| CVE-2026-47708 (MCP-for-Stata < 1.17.3 — `log_file_name` interpolated into a Stata command string with no sanitization → arbitrary Stata `shell`/`python`/`erase` command injection) | [NVD](https://nvd.nist.gov/vuln/detail/CVE-2026-47708) | **Pinned** `AAK-MCP-STATA-CVE-2026-47708-001` (fix floor `mcp-for-stata` 1.17.3) | 2026-07-22 |
+| CVE-2026-47394 (PraisonAI < 4.6.40 — incomplete fix of CVE-2026-44336; `workflow.show` + unvalidated `tools/call` kwargs → arbitrary file read) | [NVD](https://nvd.nist.gov/vuln/detail/CVE-2026-47394) | **Class-covered** by the existing `AAK-MCP-PRAISONAI-CVE-2026-61427-001` pin (floor 4.6.78 ⊇ every < 4.6.40 affected version); CVE added to the rule's `cve_references`. | 2026-07-22 |
+| CVE-2026-50758 (next-ai-draw-io 0.4.13 — XSS via the `mcp` parameter) | [NVD](https://nvd.nist.gov/vuln/detail/CVE-2026-50758) | **Class-covered** by the existing `AAK-NEXT-AI-DRAW-001` pin, which fires on `next-ai-draw-io < 0.4.15` and so catches the affected 0.4.13. No separate rule (a DoS-titled pin should not carry an unrelated XSS CVE); no vendor fix version for the XSS is published. | 2026-07-22 |
+| CVE-2026-15829 (googleapis/mcp-toolbox — `bigquery-forecast` SQL injection / `allowedDatasets` bypass) | [NVD](https://nvd.nist.gov/vuln/detail/CVE-2026-15829) | **Not pinnable** — mcp-toolbox is a Go binary (`googleapis/genai-toolbox`), not an npm/PyPI dependency a scanned project pins, and no fixed version is published. SQLi class; outside AAK's pin/config surface. No rule. | 2026-07-22 |
+| CVE-2026-65056 (mcp-webresearch 0.1.7 — SSRF: `visit_page` validates URL scheme only, not private/reserved IP ranges → cloud-metadata/internal reach; HIGH 8.2) | [NVD](https://nvd.nist.gov/vuln/detail/CVE-2026-65056) | **Class-covered, not pinned** — the caller-URL→fetch-without-allow-list pattern is exactly `AAK-MCP-SSRF-001` (CVE-2026-14748 anchor). No published fix version, so a version pin would false-positive after any future fix; tracked here instead. | 2026-07-22 |
+
 ## 2026-07-21 (v0.3.56)
 
 Five `cve-response` issues triaged for the v0.3.56 cut — two pinned, three
