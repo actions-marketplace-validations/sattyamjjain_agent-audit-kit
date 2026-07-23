@@ -1096,8 +1096,10 @@ def sbom_cmd(path: str, sbom_format: str, output_file: str | None) -> None:
         "india-dpdp",
         "alabama-dppa",
         "tennessee-sb1580",
+        "standards-crosswalk",
     ]),
-    help="Compliance framework to format for.",
+    help="Compliance framework to format for. 'standards-crosswalk' emits the "
+         "static rule → NSA MCP CSI + OWASP Agentic Top-10 mapping (no scan).",
 )
 @click.option(
     "--format",
@@ -1109,6 +1111,18 @@ def sbom_cmd(path: str, sbom_format: str, output_file: str | None) -> None:
 @click.option("--output", "-o", "output_file", type=click.Path(), default=None)
 def report_cmd(path: str, framework: str, report_format: str, output_file: str | None) -> None:
     """Produce an auditor-ready compliance report (EU AI Act Article 15 etc.)."""
+    # The standards crosswalk is a static rule→control mapping — no scan needed.
+    if framework == "standards-crosswalk":
+        from agent_audit_kit.output.crosswalk import render_markdown, render_text
+
+        text = render_text() if report_format == "text" else render_markdown()
+        if output_file:
+            Path(output_file).write_text(text, encoding="utf-8")
+            click.echo(f"wrote {output_file}", err=True)
+        else:
+            click.echo(text)
+        return
+
     from agent_audit_kit.output.pdf_report import emit_pdf, _text_report
 
     project = Path(path)

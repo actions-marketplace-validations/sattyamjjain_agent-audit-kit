@@ -129,6 +129,7 @@ FRAMEWORKS = {
             },
             "Design for boundaries (p.10)": {
                 "rule_ids": [
+                    "AAK-TASKS-004",
                     "AAK-TRUST-001", "AAK-TRUST-002", "AAK-TRUST-003",
                     "AAK-TRUST-004", "AAK-TRUST-005", "AAK-TRUST-006",
                     "AAK-TRUST-007",
@@ -141,6 +142,7 @@ FRAMEWORKS = {
             },
             "Validate parameters (p.11)": {
                 "rule_ids": [
+                    "AAK-MCP-ROUTING-DESYNC-001",
                     "AAK-POISON-002", "AAK-MCP-FHI-001",
                     "AAK-IPI-WILD-CORPUS-001", "AAK-PRTITLE-IPI-001",
                     "AAK-LANGCHAIN-PROMPT-LOADER-PATH-001",
@@ -152,6 +154,7 @@ FRAMEWORKS = {
             },
             "Constrain and sandbox tool execution (p.11)": {
                 "rule_ids": [
+                    "AAK-MCP-APPS-001",
                     "AAK-MCP-002", "AAK-MCP-006",
                     "AAK-MCP-STDIO-CMD-INJ-001", "AAK-MCP-STDIO-CMD-INJ-002",
                     "AAK-MCP-STDIO-CMD-INJ-003", "AAK-MCP-STDIO-CMD-INJ-004",
@@ -174,6 +177,7 @@ FRAMEWORKS = {
             },
             "Filter and monitor output pipelines and chained execution (p.12)": {
                 "rule_ids": [
+                    "AAK-MCP-APPS-002",
                     "AAK-POISON-001", "AAK-POISON-002", "AAK-POISON-003",
                     "AAK-POISON-004", "AAK-POISON-005", "AAK-POISON-006",
                     "AAK-RUGPULL-001", "AAK-RUGPULL-002", "AAK-RUGPULL-003",

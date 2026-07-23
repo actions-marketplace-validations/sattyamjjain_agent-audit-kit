@@ -7,6 +7,34 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added — MCP 2026-07-28 spec-ahead pack + NSA-CSI / OWASP-Agentic crosswalk (265 → 269 rules)
+
+Positioning: the two wedges a free hosted scanner can't match are **offline
+determinism** and **standards-provenance compliance evidence** — this ships both,
+plus coverage for the 2026-07-28 MCP spec surface before it ratifies. All static,
+deterministic, no LLM-graded findings; SARIF shape unchanged.
+
+- **4 spec-ahead rules** (no new CVE anchors):
+  - `AAK-MCP-ROUTING-DESYNC-001` — routable `Mcp-Method`/`Mcp-Name` header
+    (SEP-2243) used for routing/authorization without cross-checking the JSON-RPC
+    body method → header/body desync (confused-deputy). Detector:
+    `mcp_routing_desync`.
+  - `AAK-MCP-APPS-001` / `AAK-MCP-APPS-002` — MCP Apps (SEP-1865) UI iframe
+    rendered without a hardening `sandbox`, and UI content written to a raw-HTML
+    sink without sanitization (DOM XSS). Detector: `mcp_apps_ui`.
+  - `AAK-TASKS-004` — MCP Tasks (SEP-2663) creation path with no quota /
+    concurrency bound → task-flood DoS (distinct from `AAK-TASKS-003`'s
+    TTL/cancellation). Detector: `mcp_tasks`.
+  - **Not added** (anti-duplicate): the SEP-2468 `iss`-validation surface is
+    already shipped as `AAK-OAUTH-006` (RFC 9207); it was deliberately not
+    re-added.
+- **Standards crosswalk** — a new `report --framework standards-crosswalk`
+  artifact and committed doc ([`docs/crosswalk/nsa-csi-owasp-agentic.md`](docs/crosswalk/nsa-csi-owasp-agentic.md))
+  mapping every AAK rule to the **NSA MCP Security CSI** control it evidences and
+  its **OWASP Agentic Top-10 (2026)** item. Reuses the committed compliance +
+  OWASP mappings (no invented mapping), so it can't drift from the reports.
+- Version 0.3.57 → 0.3.58.
+
 ### Added — 2026-07-21 CVE-response triage (264 → 265 rules)
 
 - `AAK-MCP-STATA-CVE-2026-47708-001` — MCP-for-Stata < 1.17.3 (`log_file_name`

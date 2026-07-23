@@ -1,8 +1,8 @@
 {
   "schema_version": "1",
-  "last_updated": "2026-07-22T08:08:48Z",
-  "aak_version": "0.3.57",
-  "rule_count": 265,
+  "last_updated": "2026-07-23T06:36:09Z",
+  "aak_version": "0.3.58",
+  "rule_count": 269,
   "coverage": [
     {
       "asi_id": "ASI01",
@@ -561,7 +561,7 @@
     {
       "asi_id": "ASI03",
       "title": "Memory Poisoning",
-      "rule_density": 63,
+      "rule_density": 64,
       "rules": [
         {
           "id": "AAK-A2A-005",
@@ -802,6 +802,15 @@
           "aicm_references": [
             "IAM-01",
             "STA-08"
+          ]
+        },
+        {
+          "id": "AAK-MCP-ROUTING-DESYNC-001",
+          "severity": "high",
+          "cve_references": [],
+          "aicm_references": [
+            "AIS-07",
+            "IAM-01"
           ]
         },
         {
@@ -1574,7 +1583,7 @@
     {
       "asi_id": "ASI05",
       "title": "Cascading Failures",
-      "rule_density": 33,
+      "rule_density": 35,
       "rules": [
         {
           "id": "AAK-CREWAI-CHAIN-2026-04-001",
@@ -1724,6 +1733,24 @@
           "severity": "medium",
           "cve_references": [],
           "aicm_references": []
+        },
+        {
+          "id": "AAK-MCP-APPS-001",
+          "severity": "high",
+          "cve_references": [],
+          "aicm_references": [
+            "AIS-08",
+            "IVS-04"
+          ]
+        },
+        {
+          "id": "AAK-MCP-APPS-002",
+          "severity": "high",
+          "cve_references": [],
+          "aicm_references": [
+            "AIS-07",
+            "AIS-08"
+          ]
         },
         {
           "id": "AAK-MCP-STDIO-LAUNCHER-INJECT-001",
@@ -2212,7 +2239,7 @@
     {
       "asi_id": "ASI08",
       "title": "Agent Communication Poisoning",
-      "rule_density": 4,
+      "rule_density": 5,
       "rules": [
         {
           "id": "AAK-A2A-003",
@@ -2236,6 +2263,15 @@
           "cve_references": [],
           "aicm_references": [
             "AIS-07"
+          ]
+        },
+        {
+          "id": "AAK-TASKS-004",
+          "severity": "medium",
+          "cve_references": [],
+          "aicm_references": [
+            "AIS-08",
+            "BCR-04"
           ]
         },
         {

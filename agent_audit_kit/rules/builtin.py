@@ -125,6 +125,11 @@ _AICM_TAGS: dict[str, list[str]] = {
     "AAK-MCP-DEPRECATED-001": ["AIS-08"],
     "AAK-MCP-DEPRECATED-002": ["AIS-07", "AIS-08"],
     "AAK-MCP-DEPRECATED-003": ["AIS-08", "LOG-06"],
+    # ---- 2026-07-28 spec-ahead pack (SEP-2243 / SEP-1865 / SEP-2663) ----
+    "AAK-MCP-ROUTING-DESYNC-001": ["IAM-01", "AIS-07"],
+    "AAK-MCP-APPS-001": ["AIS-08", "IVS-04"],
+    "AAK-MCP-APPS-002": ["AIS-07", "AIS-08"],
+    "AAK-TASKS-004": ["BCR-04", "AIS-08"],
     "AAK-OAUTH-006": ["IAM-01", "IAM-16"],
     "AAK-OAUTH-007": ["IAM-01", "IAM-16"],
     "AAK-OAUTH-008": ["IAM-01", "IAM-16"],
@@ -2606,6 +2611,99 @@ _r(
     owasp_mcp_references=["MCP05:2025"],
     owasp_agentic_references=["ASI03"],
     adversa_references=["ADV-TASKS-03"],
+)
+
+_r(
+    "AAK-TASKS-004",
+    "MCP Tasks creation has no quota / concurrency bound (task-flood DoS)",
+    "The MCP Tasks primitive (SEP-2663) exposes a task-creation path "
+    "(`tasks/create`, `create_task`, `enqueue`, `submit`) with no per-caller "
+    "quota, max-in-flight, or concurrency bound. Unbounded task creation lets a "
+    "caller flood the server with long-running tasks and exhaust memory / worker "
+    "capacity — a task-flood denial of service. This is distinct from a missing "
+    "TTL / cancellation path (AAK-TASKS-003): a server may expire and cancel "
+    "tasks yet still accept unlimited concurrent creation.",
+    Severity.MEDIUM,
+    Category.MCP_CONFIG,
+    "Bound task creation: a per-caller quota and a max-in-flight / concurrency "
+    "cap (e.g. a bounded semaphore or a queue depth limit), and reject or "
+    "back-pressure creation once the bound is reached.",
+    sarif_name="TasksNoQuota",
+    owasp_mcp_references=["MCP05:2025"],
+    owasp_agentic_references=["ASI08"],
+    adversa_references=["ADV-TASKS-04"],
+)
+
+# ---------------------------------------------------------------------------
+# MCP 2026-07-28 spec-ahead pack — routable-header desync (SEP-2243) + MCP Apps
+# UI hardening (SEP-1865). Static, deterministic, offline. Detectors:
+# mcp_routing_desync, mcp_apps_ui. (The SEP-2468 `iss`-validation surface from
+# the same RC is already shipped as AAK-OAUTH-006, not re-added here.)
+# ---------------------------------------------------------------------------
+
+_r(
+    "AAK-MCP-ROUTING-DESYNC-001",
+    "MCP routable header (Mcp-Method/Mcp-Name) trusted without body cross-check",
+    "The 2026-07-28 spec (SEP-2243) adds routable request-metadata headers — "
+    "`Mcp-Method` and `Mcp-Name` — so proxies can route and pre-authorize a "
+    "JSON-RPC call from the HTTP header. This server/proxy makes a routing or "
+    "authorization decision from that header but never cross-checks it against "
+    "the authoritative JSON-RPC body `method`/`name`. A caller can set "
+    "`Mcp-Method: tools/list` (allowed at the gateway) while the body invokes "
+    "`tools/call` on a privileged tool — a header/body desync that smuggles the "
+    "real call past the gate (confused-deputy). A flow that asserts the header "
+    "equals the body method does not fire.",
+    Severity.HIGH,
+    Category.TRANSPORT_SECURITY,
+    "Never authorize or route on `Mcp-Method`/`Mcp-Name` alone. Parse the "
+    "JSON-RPC body and reject the request unless the routable header equals the "
+    "body `method`/tool `name`; apply the security decision to the body.",
+    sarif_name="McpRoutableHeaderBodyDesync",
+    owasp_mcp_references=["MCP07:2025"],
+    owasp_agentic_references=["ASI03"],
+    adversa_references=["ADV-AUTH-01"],
+)
+
+_r(
+    "AAK-MCP-APPS-001",
+    "MCP Apps UI iframe rendered without a hardening sandbox",
+    "An MCP Apps (SEP-1865) `text/html` UI resource is rendered in an `<iframe>` "
+    "with no `sandbox` attribute, or with a self-defeating "
+    "`sandbox=\"allow-scripts allow-same-origin\"` (which lets the framed "
+    "document script the host origin). MCP Apps UI is server-controlled, "
+    "untrusted content running next to the user's agent session; without a "
+    "restrictive sandbox it executes in the host context (XSS / token theft / "
+    "tool invocation).",
+    Severity.HIGH,
+    Category.TOOL_POISONING,
+    "Render MCP Apps UI in a sandboxed iframe. Set an explicit `sandbox` and do "
+    "NOT combine `allow-scripts` with `allow-same-origin`; drive tool calls over "
+    "`postMessage` with origin checks rather than granting host-origin access.",
+    sarif_name="McpAppsIframeNoSandbox",
+    owasp_mcp_references=["MCP05:2025"],
+    owasp_agentic_references=["ASI05"],
+    adversa_references=["ADV-INJECT-01"],
+)
+
+_r(
+    "AAK-MCP-APPS-002",
+    "MCP Apps UI content rendered without sanitization (DOM XSS)",
+    "An MCP Apps (SEP-1865) UI writes content to the DOM through a raw-HTML sink "
+    "(`innerHTML` / `outerHTML` / `insertAdjacentHTML` / React "
+    "`dangerouslySetInnerHTML` / Vue `v-html` / Svelte `{@html}`) with no "
+    "sanitizer (DOMPurify / `sanitize*` / escaping) in the file. Server- or "
+    "tool-provided content reaching an unsanitized HTML sink is DOM XSS — the "
+    "injected script runs in the app frame with access to its postMessage tool "
+    "bridge.",
+    Severity.HIGH,
+    Category.TOOL_POISONING,
+    "Sanitize all server/tool-provided content before rendering (e.g. DOMPurify), "
+    "or render as text. Never pass untrusted content to innerHTML / "
+    "dangerouslySetInnerHTML / v-html without sanitization.",
+    sarif_name="McpAppsUnsanitizedHtml",
+    owasp_mcp_references=["MCP05:2025"],
+    owasp_agentic_references=["ASI05"],
+    adversa_references=["ADV-INJECT-01"],
 )
 
 # ---------------------------------------------------------------------------
