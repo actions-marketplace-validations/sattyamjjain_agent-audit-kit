@@ -42,6 +42,8 @@ PINS = {
     "AAK-MCP-AGENTICMAIL-CVE-2026-57495-001": "high",
     # 2026-07-21 wave
     "AAK-MCP-STATA-CVE-2026-47708-001": "high",
+    # 2026-07-22 wave
+    "AAK-MCP-N8N-CVE-2026-65594-001": "high",
 }
 
 
@@ -397,3 +399,33 @@ def test_praisonai_pin_covers_incomplete_fix_cve(tmp_path: Path) -> None:
     assert "AAK-MCP-PRAISONAI-CVE-2026-61427-001" in _ids(
         tmp_path, "requirements.txt", "praisonai==4.6.30\n"
     )
+
+
+# ---------------------------------------------------------------------------
+# 2026-07-22 wave — n8n CVE-2026-65594 (two-branch fix, distinct from 59207)
+# ---------------------------------------------------------------------------
+
+
+def _n8n(tmp_path: Path, ver: str) -> set[str]:
+    return _ids(tmp_path, "package.json", '{"dependencies": {"n8n": "%s"}}' % ver)
+
+
+def test_n8n_65594_mainline_range_fires(tmp_path: Path) -> None:
+    assert "AAK-MCP-N8N-CVE-2026-65594-001" in _n8n(tmp_path, "2.28.5")
+
+
+def test_n8n_65594_before_introduced_passes(tmp_path: Path) -> None:
+    # Affected only from 2.27.0; an earlier release predates the OAuth flow.
+    assert "AAK-MCP-N8N-CVE-2026-65594-001" not in _n8n(tmp_path, "2.26.0")
+
+
+def test_n8n_65594_mainline_patched_passes(tmp_path: Path) -> None:
+    assert "AAK-MCP-N8N-CVE-2026-65594-001" not in _n8n(tmp_path, "2.29.8")
+
+
+def test_n8n_65594_230_branch_fires(tmp_path: Path) -> None:
+    assert "AAK-MCP-N8N-CVE-2026-65594-001" in _n8n(tmp_path, "2.30.0")
+
+
+def test_n8n_65594_230_branch_patched_passes(tmp_path: Path) -> None:
+    assert "AAK-MCP-N8N-CVE-2026-65594-001" not in _n8n(tmp_path, "2.30.1")

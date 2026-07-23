@@ -1,6 +1,6 @@
 """MCP/agent CVE version-pins — 2026-07 disclosure wave (table-driven).
 
-Twenty-five dependency version-pin rules for MCP/agent CVEs disclosed 2026-07-08..21
+Twenty-six dependency version-pin rules for MCP/agent CVEs disclosed 2026-07-08..22
 that have both a vendor-fixed version and a pinnable PyPI / npm artifact. Each
 pin fires when a project references the affected package below its fix floor (or
 unpinned) across dependency manifests, lockfiles, and MCP config files — the same
@@ -171,6 +171,14 @@ _PINS: tuple[_Pin, ...] = (
     # --- 2026-07-21 wave ---
     _Pin("AAK-MCP-STATA-CVE-2026-47708-001", "mcp-for-stata", ("mcp-for-stata",),
          (1, 17, 3), fix_label="1.17.3"),
+    # --- 2026-07-22 wave ---
+    # n8n CVE-2026-65594 is fixed on two branches (2.29.8 mainline, 2.30.1 on the
+    # 2.30.x line) and affects only from 2.27.0 — two pin arms, one rule_id, each
+    # bounded by `introduced` so patched releases on either branch clear.
+    _Pin("AAK-MCP-N8N-CVE-2026-65594-001", "n8n", ("n8n",), (2, 29, 8),
+         introduced=(2, 27, 0), fix_label="2.29.8", regexes=(_N8N_RE,)),
+    _Pin("AAK-MCP-N8N-CVE-2026-65594-001", "n8n", ("n8n",), (2, 30, 1),
+         introduced=(2, 30, 0), fix_label="2.30.1", regexes=(_N8N_RE,)),
 )
 
 _CANDIDATE_NAMES = (

@@ -164,6 +164,7 @@ _AICM_TAGS: dict[str, list[str]] = {
     "AAK-MCP-WHATSAPP-CVE-2026-46555-001": ["IAM-01", "IVS-04", "STA-08"],
     "AAK-MCP-AGENTICMAIL-CVE-2026-57495-001": ["AIS-07", "AIS-12", "STA-08"],
     "AAK-MCP-STATA-CVE-2026-47708-001": ["AIS-08", "IAM-05", "STA-08"],
+    "AAK-MCP-N8N-CVE-2026-65594-001": ["IAM-01", "IAM-16", "STA-08"],
     "AAK-LMDEPLOY-VL-SSRF-001": ["IVS-04", "AIS-08"],
     "AAK-SPLUNK-MCP-TOKEN-LEAK-001": ["DSP-17", "LOG-06"],
     "AAK-MARKETPLACE-001": ["STA-10"],
@@ -6233,6 +6234,38 @@ _r(
     cve_references=["CVE-2026-47708"],
     owasp_mcp_references=["MCP01:2025"],
     owasp_agentic_references=["ASI04"],
+    adversa_references=["ADV-AUTH-01"],
+)
+
+# ---------------------------------------------------------------------------
+# 2026-07-22 MCP CVE-response wave. Detector: mcp_cve_pins_2026_07.
+# (Sibling CVE-2026-44192 — Ansible Lightspeed MCP path traversal / indirect
+# prompt injection — is dispositioned in CHANGELOG.cves.md: a Red Hat product
+# component with no npm/PyPI artifact and no published fix version, so no pin.)
+# ---------------------------------------------------------------------------
+
+_r(
+    "AAK-MCP-N8N-CVE-2026-65594-001",
+    "n8n MCP Server Trigger OAuth workflow-authorization bypass (2.27.0–<2.29.8, 2.30.0–<2.30.1)",
+    "n8n before 2.29.8 (and the 2.30.x line before 2.30.1), affected from 2.27.0 "
+    "when the OAuth 2.1 consent / token-issuance flow was introduced, does not "
+    "verify that the authenticated user has access to the workflow referenced as "
+    "the OAuth resource. On an instance with an active MCP Server Trigger "
+    "workflow using n8n OAuth2 auth, a member-level user can register an OAuth "
+    "client, self-approve consent for another user's workflow, and obtain a valid "
+    "token; the workflow then runs in the owner's project with the owner's stored "
+    "credentials, breaking user/project isolation (CVE-2026-65594). This is a "
+    "distinct fix line from n8n's earlier 2.27.4 / 2.28.1 MCP auth-bypass pin, so "
+    "it has its own rule. Treat 2.27.0–2.29.7 and 2.30.0 as exposed.",
+    Severity.HIGH,
+    Category.SUPPLY_CHAIN,
+    "Upgrade `n8n` to >= 2.29.8 (or >= 2.30.1 on the 2.30.x line) and pin it. "
+    "Ensure the MCP Server Trigger OAuth consent/token flow verifies the "
+    "authenticated user's access to the referenced workflow before issuing a token.",
+    sarif_name="N8nMcpOAuthWorkflowAuthzBypass",
+    cve_references=["CVE-2026-65594"],
+    owasp_mcp_references=["MCP07:2025"],
+    owasp_agentic_references=["ASI03"],
     adversa_references=["ADV-AUTH-01"],
 )
 

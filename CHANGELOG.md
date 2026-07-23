@@ -7,6 +7,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added — 2026-07-22 CVE-response triage (269 → 270 rules)
+
+- `AAK-MCP-N8N-CVE-2026-65594-001` — n8n MCP Server Trigger OAuth workflow-authz
+  bypass (affected 2.27.0–<2.29.8 and 2.30.0–<2.30.1). Two pin arms (one rule)
+  for the two fix branches; a distinct fix line from the existing CVE-2026-59207
+  pin. Also dispositioned CVE-2026-44192 (Ansible Lightspeed MCP path traversal —
+  Red Hat product component, no pinnable artifact / published fix) in
+  `CHANGELOG.cves.md`. Clears the `cve-response` backlog for the v0.3.58 gate.
+
 ### Added — MCP 2026-07-28 spec-ahead pack + NSA-CSI / OWASP-Agentic crosswalk (265 → 269 rules)
 
 Positioning: the two wedges a free hosted scanner can't match are **offline

@@ -16,6 +16,16 @@ open.
 > issue. The per-CVE latency figures in the tables are **measurements recorded at
 > the time**, kept as dated facts, not a standing promise.
 
+## 2026-07-23 (v0.3.58)
+
+Two `cve-response` issues triaged for the v0.3.58 cut — one new pin, one
+dispositioned.
+
+| CVE | Reference | AAK rule / disposition | Triaged |
+|---|---|---|---|
+| CVE-2026-65594 (n8n MCP Server Trigger — the OAuth 2.1 consent/token flow does not verify the authenticated user's access to the referenced workflow → member-level user self-approves consent for another user's workflow and runs it in the owner's project with the owner's credentials; affected 2.27.0–<2.29.8 and 2.30.0–<2.30.1) | [NVD](https://nvd.nist.gov/vuln/detail/CVE-2026-65594) | **Pinned** `AAK-MCP-N8N-CVE-2026-65594-001` — two arms (mainline floor 2.29.8 introduced 2.27.0; 2.30.x floor 2.30.1 introduced 2.30.0). A distinct fix line from CVE-2026-59207 (2.27.4/2.28.1), so its own rule rather than a floor bump — the old pin must not false-positive the 2.28.x line, and this one must not miss it. | 2026-07-23 |
+| CVE-2026-44192 (Ansible Lightspeed MCP server — path traversal via indirect prompt injection → writes files to unauthorized locations; MEDIUM 6.6) | [NVD](https://nvd.nist.gov/vuln/detail/CVE-2026-44192) | **Not pinnable** — a Red Hat product component (Ansible Lightspeed), not a standalone npm/PyPI dependency a scanned project pins, and no fixed version is published (a floorless pin would false-positive after any future fix). Path-traversal / indirect-prompt-injection class. No rule. | 2026-07-23 |
+
 ## 2026-07-22 (v0.3.57)
 
 Five `cve-response` issues triaged for the v0.3.57 cut — one new pin, one
