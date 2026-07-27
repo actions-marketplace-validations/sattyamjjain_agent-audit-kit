@@ -44,6 +44,8 @@ PINS = {
     "AAK-MCP-STATA-CVE-2026-47708-001": "high",
     # 2026-07-22 wave
     "AAK-MCP-N8N-CVE-2026-65594-001": "high",
+    # 2026-07-23..24 wave
+    "AAK-MCP-AWSAPIMCP-CVE-2026-16584-001": "high",
 }
 
 
@@ -98,6 +100,22 @@ def test_deepseek_before_introduced_passes(tmp_path: Path) -> None:
     # The flaw was introduced in 1.4.2; 1.3.0 predates it and must not fire.
     content = '{"dependencies": {"@arikusi/deepseek-mcp-server": "1.3.0"}}'
     assert "AAK-MCP-DEEPSEEK-CVE-2026-55604-001" not in _ids(tmp_path, "package.json", content)
+
+
+def test_aws_api_mcp_in_affected_range_fires(tmp_path: Path) -> None:
+    content = '{"mcpServers": {"aws": {"command": "uvx", "args": ["awslabs.aws-api-mcp-server@1.3.46"]}}}'
+    assert "AAK-MCP-AWSAPIMCP-CVE-2026-16584-001" in _ids(tmp_path, ".mcp.json", content)
+
+
+def test_aws_api_mcp_patched_passes(tmp_path: Path) -> None:
+    content = '{"mcpServers": {"aws": {"command": "uvx", "args": ["awslabs.aws-api-mcp-server@1.3.47"]}}}'
+    assert "AAK-MCP-AWSAPIMCP-CVE-2026-16584-001" not in _ids(tmp_path, ".mcp.json", content)
+
+
+def test_aws_api_mcp_before_introduced_passes(tmp_path: Path) -> None:
+    # Affected range starts at 0.2.13; 0.2.12 predates it and must not fire.
+    content = '{"mcpServers": {"aws": {"command": "uvx", "args": ["awslabs.aws-api-mcp-server@0.2.12"]}}}'
+    assert "AAK-MCP-AWSAPIMCP-CVE-2026-16584-001" not in _ids(tmp_path, ".mcp.json", content)
 
 
 def test_k8s_below_floor_fires(tmp_path: Path) -> None:

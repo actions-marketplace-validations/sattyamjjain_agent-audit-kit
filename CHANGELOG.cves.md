@@ -16,6 +16,22 @@ open.
 > issue. The per-CVE latency figures in the tables are **measurements recorded at
 > the time**, kept as dated facts, not a standing promise.
 
+## 2026-07-27 (v0.3.60)
+
+Seven `cve-response` issues adjudicated for the v0.3.60 cut — one new pin, one
+class-covered by an existing pin, five dispositioned out of scope with rationale.
+Each was verified against the NVD record (not the issue title) before a verdict.
+
+| CVE | Reference | AAK rule / disposition | Triaged |
+|---|---|---|---|
+| CVE-2026-16584 (AWS API MCP Server 0.2.13–1.3.46 — when security-policy enforcement data fails to initialize at startup, the policy check is skipped for the process lifetime → actor executes AWS API operations the policy was set to deny/gate; fixed 1.3.47; HIGH 7.0) | [NVD](https://nvd.nist.gov/vuln/detail/CVE-2026-16584) | **Pinned** `AAK-MCP-AWSAPIMCP-CVE-2026-16584-001` — fix floor `awslabs.aws-api-mcp-server` 1.3.47, `introduced` 0.2.13 (pre-0.2.13 and ≥1.3.47 clear). Pinnable `uvx`/PyPI artifact referenced with a version in `.mcp.json`. (#491) | 2026-07-27 |
+| CVE-2026-63732 (9router 0.4.59 — hardcoded default password `123456` + spoofed-Host LOCAL_ONLY bypass + unvalidated `child_process.spawn()` MCP-plugin registration → RCE; fixed 0.4.60; CRITICAL 9.9) | [NVD](https://nvd.nist.gov/vuln/detail/CVE-2026-63732) | **Class-covered** by the existing `AAK-MCP-9ROUTER-CVE-2026-46339-001` pin (floor `9router` 0.5.2 ⊇ the affected 0.4.59); CVE added to the rule's `cve_references`. (#496) | 2026-07-27 |
+| CVE-2026-66012 (SiYuan < v3.7.2 — missing authorization on the `POST /mcp` kernel endpoint + anonymous Publish reverse-proxy → remote unauthenticated MCP access → admin takeover; CRITICAL 10.0) | [NVD](https://nvd.nist.gov/vuln/detail/CVE-2026-66012) | **Out of scope** — server-side authz flaw in a desktop app referenced by URL, not a pinned `npx`/`uvx` artifact; a static config scan can't see SiYuan's version or internal auth gating. The reachable posture (no-auth remote MCP endpoint) is flagged by `AAK-MCP-001`. Upgrade to ≥3.7.2 + disable anonymous Publish. (#499) | 2026-07-27 |
+| CVE-2026-15015 (MountDev AI MCP Connector for WordPress ≤ 1.6.1 — public Dynamic Client Registration + unprotected authorization endpoint → unauthenticated attacker mints admin-bound OAuth bearer token; CRITICAL 9.8) | [NVD](https://nvd.nist.gov/vuln/detail/CVE-2026-15015) | **Out of scope** — server-side WordPress plugin authz bypass; the plugin version is not present in a client config, and open-DCR is a server property AAK can't observe from the client side. Upgrade the plugin > 1.6.1 + require admin approval for OAuth client registration. (#490) | 2026-07-27 |
+| CVE-2026-66005 (Jan ≤ 0.8.4 — local API server replaces user-configured trusted hosts with a wildcard reflecting arbitrary origins with credentials → network-adjacent / DNS-rebinding access to the unauthenticated OpenAI-compatible API + MCP tools; MEDIUM 6.3) | [NVD](https://nvd.nist.gov/vuln/detail/CVE-2026-66005) | **Out of scope** — runtime CORS misconfiguration in a desktop app's local server; not a pinned MCP package and not visible in any file a static scanner reads. Fix is a commit (3e1c1e7), no version floor. Upgrade Jan + bind the local API to loopback. (#498) | 2026-07-27 |
+| CVE-2026-17433 (NanoClaw ≤ 2.0.64 — improper authorization in `createChatSdkBridge.setup` / "MCP Server Approval"; local; CVSS 3.1 5.3) | [NVD](https://nvd.nist.gov/vuln/detail/CVE-2026-17433) | **Out of scope** — local, source-level authz flaw in NanoClaw's own TypeScript, invisible to a client-config scan, and **no vendor fix exists** (project unresponsive) so there is no floor to pin against. Revisit if a fixed version ships. (#500) | 2026-07-27 |
+| CVE-2026-47769 (APIFold before commit 7f19b52 — `/webhooks/:serverSlug/:eventName` accepts unauthenticated JSON with the signature check unconditionally skipped → attacker-controlled data served as trusted MCP resource state; MEDIUM 5.3) | [NVD](https://nvd.nist.gov/vuln/detail/CVE-2026-47769) | **Out of scope** — server-side trust-boundary flaw fixed by a git commit (no PyPI/npm version floor), and the APIFold-generated endpoint is referenced by URL, exposing neither its version nor the missing validators map. Update APIFold past 7f19b52 + require webhook signature validation. (#492) | 2026-07-27 |
+
 ## 2026-07-23 (v0.3.58)
 
 Two `cve-response` issues triaged for the v0.3.58 cut — one new pin, one

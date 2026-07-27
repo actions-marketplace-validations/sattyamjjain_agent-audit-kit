@@ -165,6 +165,7 @@ _AICM_TAGS: dict[str, list[str]] = {
     "AAK-MCP-AGENTICMAIL-CVE-2026-57495-001": ["AIS-07", "AIS-12", "STA-08"],
     "AAK-MCP-STATA-CVE-2026-47708-001": ["AIS-08", "IAM-05", "STA-08"],
     "AAK-MCP-N8N-CVE-2026-65594-001": ["IAM-01", "IAM-16", "STA-08"],
+    "AAK-MCP-AWSAPIMCP-CVE-2026-16584-001": ["IAM-01", "AIS-07", "STA-08"],
     "AAK-LMDEPLOY-VL-SSRF-001": ["IVS-04", "AIS-08"],
     "AAK-SPLUNK-MCP-TOKEN-LEAK-001": ["DSP-17", "LOG-06"],
     "AAK-MARKETPLACE-001": ["STA-10"],
@@ -6021,7 +6022,10 @@ _r(
     "registration and command execution through the MCP bridge (CVE-2026-46339, "
     "CVSS 10); the `isLocalRequest()` gate trusts spoofable Host/Origin headers "
     "(CVE-2026-49353); and unvalidated MCP plugin args reach `child_process.spawn()` "
-    "for RCE via `/api/mcp//sse` (CVE-2026-62312). Treat < 0.5.2 (and unpinned) as "
+    "for RCE via `/api/mcp//sse` (CVE-2026-62312). CVE-2026-63732 (CVSS 9.9) "
+    "re-reports the same default-credential (`123456`) + spoofed-Host LOCAL_ONLY "
+    "bypass + unvalidated `child_process.spawn()` plugin-registration chain on "
+    "0.4.59, also remediated by the 0.5.2 floor. Treat < 0.5.2 (and unpinned) as "
     "exposed.",
     Severity.CRITICAL,
     Category.SUPPLY_CHAIN,
@@ -6029,7 +6033,7 @@ _r(
     "`/api/cli-tools/*`, do not gate on Host/Origin headers, and validate plugin "
     "args before spawning subprocesses.",
     sarif_name="NineRouterMcpUnauthRce",
-    cve_references=["CVE-2026-46339", "CVE-2026-49353", "CVE-2026-62312"],
+    cve_references=["CVE-2026-46339", "CVE-2026-49353", "CVE-2026-62312", "CVE-2026-63732"],
     owasp_mcp_references=["MCP04:2025"],
     owasp_agentic_references=["ASI04"],
     adversa_references=["ADV-AUTH-01"],
@@ -6266,6 +6270,34 @@ _r(
     cve_references=["CVE-2026-65594"],
     owasp_mcp_references=["MCP07:2025"],
     owasp_agentic_references=["ASI03"],
+    adversa_references=["ADV-AUTH-01"],
+)
+
+# ---------------------------------------------------------------------------
+# 2026-07-23..24 MCP CVE-response wave. Detector: mcp_cve_pins_2026_07.
+# ---------------------------------------------------------------------------
+
+_r(
+    "AAK-MCP-AWSAPIMCP-CVE-2026-16584-001",
+    "AWS API MCP Server security-policy bypass on init failure (0.2.13–<1.3.47)",
+    "The AWS API MCP Server (`awslabs.aws-api-mcp-server`) from 0.2.13 through "
+    "1.3.46 improperly handles a startup initialization failure: when the security "
+    "policy enforcement data fails to initialize, the policy check is skipped for "
+    "the entire lifetime of the process, so an actor can execute AWS API operations "
+    "the user-configured policy was set to deny or gate. The IAM permissions on the "
+    "configured credentials still apply, but the extra deny/gate layer the operator "
+    "relied on is silently absent (CVE-2026-16584, CVSS 7.0). Fixed in 1.3.47; "
+    "treat 0.2.13–1.3.46 (and unpinned) as exposed.",
+    Severity.HIGH,
+    Category.SUPPLY_CHAIN,
+    "Upgrade `awslabs.aws-api-mcp-server` to >= 1.3.47 and pin it. Fail the server "
+    "closed when security-policy initialization fails rather than continuing with "
+    "policy enforcement disabled, and scope the configured IAM credentials to the "
+    "minimum operations required.",
+    sarif_name="AwsApiMcpServerPolicyBypass",
+    cve_references=["CVE-2026-16584"],
+    owasp_mcp_references=["MCP01:2025"],
+    owasp_agentic_references=["ASI04"],
     adversa_references=["ADV-AUTH-01"],
 )
 

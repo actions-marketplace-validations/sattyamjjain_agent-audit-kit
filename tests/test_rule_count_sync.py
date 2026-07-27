@@ -143,25 +143,87 @@ def test_docs_comparison_anchors_match_registry() -> None:
             )
 
 
+# Docs that are intentionally frozen, dated, point-in-time snapshots: their
+# counts are historical facts, not current-state claims, so the prose guard skips
+# them. Keep this list tight — a path only belongs here if its counts are meant
+# to stay pinned to a past release.
+_PROSE_COUNT_EXEMPT_PREFIXES = (
+    "docs/research/mcp-security-baseline-v1.0.md",  # frozen v1.0 baseline (262 rules)
+    "docs/presets/",                                 # "shipped in vX" dated preset facts
+)
+
+
+def _canonical_prose_counts() -> dict[str, int]:
+    """The three numbers current-state prose is allowed to claim, each computed
+    from the live source of truth — never hard-coded here."""
+    from agent_audit_kit import SCANNER_COUNT
+    from agent_audit_kit.cli import cli
+
+    return {
+        "rules": _actual_rule_count(),        # len(RULES)
+        "scanners": SCANNER_COUNT,
+        "commands": len(cli.commands),        # the real Click root-group command set
+    }
+
+
+# (compiled pattern, count-key). Each pattern targets an unambiguous *headline
+# total* phrasing so per-category tables ("**12 rules**", "2 scanners", "≥ 1
+# deterministic rule") and historical quotes ("read '77 rules, 13 scanners'")
+# never trip it. Bare "N rules" in launch copy is covered by
+# test_rule_count_is_canonical; here we fence the prose surfaces the sync script
+# does NOT drive: README.md, CLAUDE.md, and docs/**/*.md.
+_PROSE_COUNT_PATTERNS = (
+    # rules — bold "**N rules** across", "all N rules", "N RuleDefinition
+    # entries", "N deterministic rules", "rule (N total".
+    (re.compile(r"\*\*(\d+)\s+(?:deterministic |detection )?rules?\*\*\s+across", re.I), "rules"),
+    (re.compile(r"\ball (\d+) rules\b", re.I), "rules"),
+    (re.compile(r"\b(\d+)\s+RuleDefinition entries\b"), "rules"),
+    (re.compile(r"\b(\d+)\s+deterministic rules\b", re.I), "rules"),
+    (re.compile(r"\brule\s*\((\d+)\s+total\b", re.I), "rules"),
+    # scanners — canonical phrasing is "N scanner modules" (never bare "N
+    # scanners", which appears as per-language counts).
+    (re.compile(r"\b(\d+)\s+scanner modules?\b", re.I), "scanners"),
+    # CLI commands — "N CLI commands" and "(N commands)" entry-point note.
+    (re.compile(r"\b(\d+)\s+CLI commands?\b", re.I), "commands"),
+    (re.compile(r"entry point\s*\((\d+)\s+commands?\)", re.I), "commands"),
+)
+
+
 def test_no_stale_hardcoded_counts_in_prose() -> None:
-    """Anything still saying '77 rules' or '124 rules' is a bug: the launch history
-    kept those counts as historical artefacts in CHANGELOG.md but they must not
-    appear in README.md / action.yml as current-state text."""
-    for rel in ("README.md", "action.yml"):
-        text = (REPO_ROOT / rel).read_text(encoding="utf-8")
-        # Only flag specifically the old rule-count phrases we know about.
-        for stale in ("77 rules", "124 rules", "138 rules total"):
-            if stale == f"{_actual_rule_count()} rules":
-                continue
-            if stale == f"{_actual_rule_count()} rules total":
-                continue
-            if f"{_actual_rule_count()}" in stale:
-                continue
-            # The phrase must not appear as a current-state claim.
-            assert stale not in text, (
-                f"{rel} still contains stale phrase {stale!r}; "
-                "run scripts/sync_rule_count.py."
-            )
+    """Every current-state count claim in prose must equal the live registry.
+
+    Extended fence (v0.3.60): scans README.md, CLAUDE.md, and all docs/**/*.md
+    for headline 'N rules' / 'N scanner modules' / 'N CLI commands' phrasings and
+    fails on any disagreement with the canonical counts computed from the code
+    (len(RULES), SCANNER_COUNT, len(cli.commands)). Historical/dated snapshots
+    are exempt via _PROSE_COUNT_EXEMPT_PREFIXES; per-category and singular-rule
+    phrasings are excluded by construction of the patterns.
+    """
+    counts = _canonical_prose_counts()
+
+    files = [REPO_ROOT / "README.md", REPO_ROOT / "CLAUDE.md"]
+    files += sorted((REPO_ROOT / "docs").rglob("*.md"))
+
+    failures: list[str] = []
+    for path in files:
+        rel = path.relative_to(REPO_ROOT).as_posix()
+        if any(rel == p or rel.startswith(p) for p in _PROSE_COUNT_EXEMPT_PREFIXES):
+            continue
+        text = path.read_text(encoding="utf-8")
+        for pattern, key in _PROSE_COUNT_PATTERNS:
+            for m in pattern.finditer(text):
+                claimed = int(m.group(1))
+                if claimed != counts[key]:
+                    failures.append(
+                        f"{rel}: {m.group(0).strip()!r} claims {claimed} {key}; "
+                        f"canonical is {counts[key]}"
+                    )
+
+    assert not failures, (
+        "stale count(s) in prose — reconcile to the registry "
+        "(run scripts/sync_rule_count.py where it applies):\n  "
+        + "\n  ".join(failures)
+    )
 
 
 def test_rule_count_is_canonical() -> None:

@@ -7,6 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.3.60] - 2026-07-27
+
+Collapses the previously shipped-but-untagged 0.3.58 → 0.3.60 work (State-of-MCP
+report, `--emit-coverage` crosswalk, CI codeql-action pin) into one tagged
+release, together with the 2026-07-27 release-truth / doc-count reconciliation /
+CVE-backlog adjudication (see the "Fixed — release truth" and "Security" sections
+below).
+
 ### Added — State of MCP Security 2026 data report (fresh 2,303-config corpus)
 
 Publish the credibility artifact — no new detection, nothing gated.
@@ -29,14 +37,13 @@ Publish the credibility artifact — no new detection, nothing gated.
   claiming "first". Added a **human PDF** via `output/pdf_report.py`
   (`emit_report_pdf`): `state-of-mcp-security-2026.pdf`.
 - README "State of MCP Security 2026" section refreshed with the live headline.
-- Counts stay canonical (**270 rules / 86 scanners**, one number everywhere,
-  guarded by `test_rule_count_is_canonical` / scanner-count) — the reported
-  drift did not exist.
-- Version 0.3.59 → 0.3.60.
+- Counts stay canonical — this data report added no rules. The release total
+  lands at **271 rules / 86 scanners** after the CVE-backlog pin below; see
+  "Fixed — release truth" for the full one-number-everywhere reconciliation.
 
 ### Added — coverage crosswalk asset (`--emit-coverage`) + State-of-MCP report seed
 
-Make the tool's coverage legible without adding any rules (still 270).
+Make the tool's coverage legible without adding any rules.
 
 - **`agent-audit-kit --emit-coverage [--format json|md]`** — walks the built-in
   rule registry and emits, per rule: id, title, severity, the CVE(s) it covers,
@@ -53,12 +60,66 @@ Make the tool's coverage legible without adding any rules (still 270).
 - **Reserved 2026-07-28 MCP-final crosswalk slots** (no rules invented): stateless
   `_meta`-per-request and JSON-Schema-2020-12 tool schemas are **reserved**;
   SEP-1865 MCP Apps and SEP-2663 Tasks are already **covered** by shipped rules.
-- **Count-drift guard:** the reported drift (74/221/225) did not exist — the count
-  is 270 across the README badge/anchors, `__init__.RULE_COUNT`, and the signed
-  bundle, enforced by `test_rule_count_is_canonical`. The report seed's rule count
-  is an auto-synced `<!-- rule-count:total -->` anchor, and `docs/coverage.json`
-  has a byte-staleness test — so the new artifacts can't drift either.
-- Version 0.3.58 → 0.3.59.
+- **Count-drift guard:** the count is canonical across the README badge/anchors,
+  `__init__.RULE_COUNT`, and the signed bundle, enforced by
+  `test_rule_count_is_canonical`. The report seed's rule count is an auto-synced
+  `<!-- rule-count:total -->` anchor, and `docs/coverage.json` has a byte-staleness
+  test — so the artifacts can't drift.
+
+### Fixed — release truth: version/tag + one-number-everywhere reconciliation
+
+- **Cut the real `v0.3.60` tag.** The README told users to pin
+  `sattyamjjain/agent-audit-kit@v0.3.60` and `rev: v0.3.60`, but neither the tag
+  nor the PyPI release existed (newest was v0.3.58). Collapsed the three
+  shipped-but-untagged `[Unreleased]` blocks into this single tagged release so
+  the documented install path resolves.
+- **One number everywhere.** Reconciled every count surface to the live registry:
+  **271 rules, 86 scanner modules, 25 CLI commands, 12 categories, 12 compliance
+  frameworks.** Fixed the GitHub repo description (was "225 rules across 11
+  categories"), the README CLI list (was "16 CLI commands" — the real,
+  `--help`-listed set is **25**, previously under-counted as 22; added the missing
+  `corpus`, `pipelock`, `rule`), CLAUDE.md's stale `v0.3.41` header (now references
+  `pyproject.toml` / `__version__` instead of hard-coding a version), the docs
+  standards-crosswalk total, and `docs/index.md`.
+- **Guards.** New `tests/test_version_consistency.py` fails if `pyproject`
+  version ≠ `__version__` or if any README `@vX` / `rev: vX` / `==X` self-pin
+  disagrees with the declared version. Extended
+  `test_no_stale_hardcoded_counts_in_prose` to scan README.md, CLAUDE.md, and all
+  `docs/**/*.md` for headline `N rules` / `N scanner modules` / `N CLI commands`
+  claims and fail on any disagreement with the registry.
+
+### Security — 2026-07-27 CVE-response backlog adjudicated (7 issues, 270 → 271 rules)
+
+Every open `cve-response` issue got a visible verdict against the NVD record and
+was closed, clearing the release gate:
+
+- **In scope — new pinned rule.** `AAK-MCP-AWSAPIMCP-CVE-2026-16584-001` (HIGH) —
+  the AWS API MCP Server (`awslabs.aws-api-mcp-server`) skips its security-policy
+  check for the process lifetime when policy-data init fails at startup; affected
+  0.2.13–1.3.46, fixed 1.3.47. Pinnable `uvx`/PyPI artifact → version pin in
+  `mcp_cve_pins_2026_07` (introduced-bounded). (CVE-2026-16584, #491)
+- **Already covered.** CVE-2026-63732 (9router 0.4.59, CVSS 9.9) is caught by the
+  existing `AAK-MCP-9ROUTER-CVE-2026-46339-001` (`< 0.5.2` floor); appended to its
+  CVE ledger so the crosswalk records it. (#496)
+- **Out of scope — server-side flaw / no pinnable artifact.** SiYuan `POST /mcp`
+  missing-authorization (CVE-2026-66012, #499), MountDev WordPress MCP connector
+  OAuth bypass (CVE-2026-15015, #490), Jan local-API CORS reflection
+  (CVE-2026-66005, #498), NanoClaw approval-bridge authz — no vendor fix to pin
+  (CVE-2026-17433, #500), and APIFold unauth-webhook resource poisoning —
+  commit-level fix, URL-referenced (CVE-2026-47769, #492). Each closed with a
+  one-paragraph rationale naming the upstream fix and the config-side AAK rule
+  (e.g. `AAK-MCP-001`) that flags the reachable posture.
+
+### Changed — security-response SLA rewritten to best-effort (solo maintainer)
+
+- Replaced the "**within 48 hours**" acknowledgment SLA (and the 7-day / 30-day
+  clock) in `SECURITY.md` with an honest, severity-prioritised best-effort
+  commitment — no fixed clock a single maintainer can't keep. Same for the
+  outbound 48h notification promise in `docs/disclosure-policy.md` and the
+  "correct within 48 hours" claim in `docs/comparisons.md`. Fixed the stale
+  `sla-48h` label reference in `docs/RELEASING.md` (the gate keys on
+  `cve-response`; `sla-48h` was retired in PR #432). Nothing silently deleted —
+  every claim rewritten in place.
 
 ### Fixed — CI: codeql-action version consistency + reproducible lint (#493)
 

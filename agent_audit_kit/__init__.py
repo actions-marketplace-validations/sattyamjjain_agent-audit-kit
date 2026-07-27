@@ -2,5 +2,5 @@
 from __future__ import annotations
 
 __version__ = "0.3.60"
-RULE_COUNT = 270
+RULE_COUNT = 271
 SCANNER_COUNT = 86

@@ -25,7 +25,8 @@ available) before shipping:
   - repomix                        >= 1.14.1  (CVE-2026-49988)
   - better-auth / @better-auth/oauth-provider >= 1.6.11 (CVE-2026-53512, CVE-2026-53518)
   - mcp (MCP Python SDK)            >= 1.28.1  (CVE-2026-52869, CVE-2026-52870, CVE-2026-59950)
-  - 9router                        >= 0.5.2   (CVE-2026-46339, CVE-2026-49353, CVE-2026-62312)
+  - 9router                        >= 0.5.2   (CVE-2026-46339, CVE-2026-49353, CVE-2026-62312, CVE-2026-63732)
+  - awslabs.aws-api-mcp-server     >= 1.3.47  (CVE-2026-16584; affected 0.2.13–1.3.46)
   - n8n-mcp                        >= 2.57.4  (CVE-2026-54052, CVE-2026-55608)
   - dbt-mcp                        >= 1.17.1  (CVE-2026-44968, CVE-2026-44970, CVE-2026-44969)
   - @apify/actors-mcp-server       >= 0.9.21  (CVE-2026-46341)
@@ -179,6 +180,13 @@ _PINS: tuple[_Pin, ...] = (
          introduced=(2, 27, 0), fix_label="2.29.8", regexes=(_N8N_RE,)),
     _Pin("AAK-MCP-N8N-CVE-2026-65594-001", "n8n", ("n8n",), (2, 30, 1),
          introduced=(2, 30, 0), fix_label="2.30.1", regexes=(_N8N_RE,)),
+    # --- 2026-07-23..24 wave ---
+    # AWS API MCP Server: security-policy enforcement is skipped for the process
+    # lifetime if policy-data init fails at startup — affected 0.2.13–1.3.46,
+    # fixed 1.3.47 (introduced-bounded so pre-0.2.13 and patched releases clear).
+    _Pin("AAK-MCP-AWSAPIMCP-CVE-2026-16584-001", "awslabs.aws-api-mcp-server",
+         ("awslabs.aws-api-mcp-server",), (1, 3, 47), introduced=(0, 2, 13),
+         fix_label="1.3.47 (affected 0.2.13–1.3.46)"),
 )
 
 _CANDIDATE_NAMES = (

@@ -4,7 +4,7 @@ _Context for decision-makers evaluating MCP / AI-agent static scanners
 in April 2026._
 
 Verifiable claims only. If you find a claim here that no longer holds,
-file an issue and we will correct it within 48 hours.
+file an issue and we will correct it (best-effort — no fixed clock).
 
 ## At a glance
 

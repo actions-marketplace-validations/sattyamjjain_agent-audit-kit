@@ -45,7 +45,7 @@ RULES=$(python3 -c "from agent_audit_kit import RULE_COUNT; print(RULE_COUNT)")
 # README claim, not `len(FRAMEWORKS)`, for the description string.
 FRAMEWORKS=$(grep -oE 'Compliance mapping\*\* \([0-9]+ frameworks' README.md | grep -oE '[0-9]+')
 gh repo edit sattyamjjain/agent-audit-kit \
-  --description "Static scanner for MCP-connected AI agent pipelines — ${RULES} rules across 11 categories, ${FRAMEWORKS} compliance frameworks, OWASP Agentic 10/10 + MCP 10/10, GitHub Action, SARIF, public CVE-to-rule ledger."
+  --description "Static scanner for MCP-connected AI agent pipelines — ${RULES} rules across 12 categories, ${FRAMEWORKS} compliance frameworks, OWASP Agentic 10/10 + MCP 10/10, GitHub Action, SARIF, public CVE-to-rule ledger."
 ```
 
 This drift was observed at v0.3.15 ship time: the description still
@@ -70,7 +70,8 @@ correct number. Future releases use the README-grep form.
 
 ## 5. CVE-gate hygiene
 
-Before tagging, close every open `sla-48h` issue. The release workflow's
+Before tagging, close every open `cve-response` issue (the `sla-48h`
+label was retired with the 48h SLA in PR #432). The release workflow's
 **CVE-response gate** blocks the tag-push pipeline until they are all
 closed. Most are class-coverage dups of an earlier batch — close with the
 standard citation template (`CHANGELOG.cves.md` / class-detector path).

@@ -16,15 +16,24 @@ If you discover a security vulnerability in AgentAuditKit, please report it resp
 - The potential impact (e.g., data exposure, privilege escalation, false negatives).
 - Any suggested fix, if you have one.
 
-### Response Timeline
+### Response Expectations
 
-| Stage | Timeframe |
-|-------|-----------|
-| Acknowledgment | Within **48 hours** |
-| Initial assessment | Within **7 days** |
-| Fix released | Within **30 days** (target) |
+AgentAuditKit is maintained by one person as an open-source project, so there is
+**no guaranteed response clock** — a fixed-hours SLA would be a promise we can't
+always keep. What we commit to instead is best-effort triage, prioritised by
+severity:
 
-We will coordinate disclosure with you. If you want credit, we will include your name in the advisory and changelog.
+- **Acknowledgment** — we reply as soon as we reasonably can. Critical reports
+  are read first.
+- **Assessment** — confirmed reports are triaged by severity; the most serious
+  jump the queue.
+- **Fix** — once confirmed, a fix or a documented mitigation ships in an
+  upcoming release, and critical fixes are fast-tracked.
+
+We will coordinate disclosure with you and keep you posted on progress. If you
+want credit, we will include your name in the advisory and changelog. If your
+own compliance program needs a contractual response SLA, don't rely on this
+project for it — run your own review in parallel.
 
 ## Supported Versions
 
