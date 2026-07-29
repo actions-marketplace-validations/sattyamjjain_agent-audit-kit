@@ -68,7 +68,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - uses: sattyamjjain/agent-audit-kit@v0.3.61
+      - uses: sattyamjjain/agent-audit-kit@v0.3.62
         id: scan
         with:
           fail-on: high
@@ -95,7 +95,7 @@ agent-audit-kit scan .
 # .pre-commit-config.yaml
 repos:
   - repo: https://github.com/sattyamjjain/agent-audit-kit
-    rev: v0.3.61
+    rev: v0.3.62
     hooks:
       - id: agent-audit-kit
 ```
@@ -280,7 +280,7 @@ permissions:
 
 steps:
   - uses: actions/checkout@v4
-  - uses: sattyamjjain/agent-audit-kit@v0.3.61
+  - uses: sattyamjjain/agent-audit-kit@v0.3.62
     id: scan
     with:
       fail-on: high
@@ -517,6 +517,8 @@ See which AAK rules cover each OWASP MCP slot in the
 ## CVE Response
 
 AgentAuditKit tracks newly disclosed MCP CVEs and ships rule coverage on a best-effort basis, recorded in a public ledger ([`CHANGELOG.cves.md`](CHANGELOG.cves.md)). A [GitHub Action](.github/workflows/cve-watcher.yml) watches NVD's MCP keyword feed every 6 hours and files a tracking issue for each new disclosure.
+
+> **`aak watch-cve` is experimental.** The CLI poller ships no live feed fetchers yet — it prints `feed <id>: NOT IMPLEMENTED` and exits non-zero rather than looking like a clean run that found nothing. The automated CVE tracking above runs through the `cve-watcher.yml` GitHub Action, not that command. (`aak watch`, the pinned-tool drift monitor, is a separate, functional command.)
 
 ## Supply chain
 

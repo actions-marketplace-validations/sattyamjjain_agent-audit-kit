@@ -7,6 +7,53 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.3.62] - 2026-07-28
+
+### Fixed — README Action pin is now guaranteed to resolve (pin ↔ tag CI guard)
+
+- `0.3.61` was bumped in `pyproject.toml` but never tagged, so the README's
+  `uses: sattyamjjain/agent-audit-kit@v0.3.61` snippet pointed at a tag that did
+  not exist — every user who copied it got a workflow that failed to resolve the
+  action. Cut the real `v0.3.61` tag and added a CI guard,
+  `test_version_consistency.test_readme_action_pin_matches_newest_git_tag`, that
+  fails the build when the README's `@vX.Y.Z` Action pin does not match the
+  newest git tag; `ci.yml` now fetches tags so the guard enforces in CI. Together
+  with the existing pin-vs-pyproject check, README pin == version == released tag.
+
+### Changed — retired the residual public "48h CVE-to-rule SLA" claims
+
+- The 48h CVE-to-rule SLA was retired in PR #432 (2026-07-14), but a few public
+  files still asserted it as a standing commitment. Rewrote the four live
+  `CLAUDE_PROMPT.md` lines to the best-effort language from `SECURITY.md` (no
+  guaranteed response clock; the NVD watcher + release gate stay, framed as
+  best-effort triage). The dated historical records — `releases/v0.3.5.md`,
+  `releases/v0.3.8.md`, `launch/MARKET-RESEARCH-2026-04-12.md` — were **not**
+  rewritten; each gets a one-line dated note that the SLA was retired, pointing at
+  `SECURITY.md`. `CHANGELOG.md`'s historical mentions are left as dated facts.
+
+### Changed — `aak watch-cve` fails loud instead of silently succeeding
+
+- `aak watch-cve`'s feed fetchers (`agent_audit_kit/feeds`) had been registered
+  stubs returning `[]` since v0.3.10, with docstrings promising real fetchers
+  "in v0.3.11" — 50 releases ago. The command ran, found nothing, and exited 0,
+  looking like a clean poll. It now **fails loud**: `_stub_fetcher` raises
+  `NotImplementedError` (matching the `integrations/notify.py` PagerDuty/Linear
+  stubs), `run_watch` prints `feed <id>: NOT IMPLEMENTED` and exits non-zero when
+  every configured feed is a stub, and the command is marked `[experimental]` in
+  `--help` and the README. All "lands/ship in v0.3.11" promises removed. `aak
+  watch` (the pin-drift monitor, a different module) is unaffected.
+
+### Added — placeholder-CVE CI guard
+
+- `tests/test_no_placeholder_cves.py` sweeps `agent_audit_kit/**`, `rules.json`,
+  and `docs/**` (excluding `tests/`, whose fixtures/mocks legitimately use
+  placeholder CVEs) for CVE-shaped identifiers whose sequence is a known
+  placeholder (`99999`, `999999`, `00000`, `0000`, `12345`, `11111`) and fails
+  with the offending `file:line`. Prevents a fabricated CVE from entering the rule
+  registry as a false coverage claim.
+
+## [0.3.61] - 2026-07-28
+
 ### Removed — private strategy note taken out of the public tree
 
 - Removed `KILL-CRITERIA.md` from version control (`git rm --cached` + `.gitignore`);
@@ -52,6 +99,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   references. Date-stamped `DEEP_ANALYSIS.md` as a v0.2.0 historical snapshot so its
   77-rule / 9-command figures don't read as current state.
 - No rules, scanners, CLI commands, or frameworks added; no runtime behaviour change.
+
+### Changed — public coverage artifact refreshed
+
+- Regenerated `public/owasp-agentic-coverage.json` (the gh-pages coverage board's
+  data file) so its `aak_version` / rule mapping track the count-fence work above.
+  Generated output only — no rule or scanner changes.
 
 ## [0.3.60] - 2026-07-27
 
