@@ -16,6 +16,18 @@ open.
 > issue. The per-CVE latency figures in the tables are **measurements recorded at
 > the time**, kept as dated facts, not a standing promise.
 
+## 2026-07-28 (v0.3.62)
+
+Three `cve-response` issues adjudicated for the v0.3.62 cut — all dispositioned
+out of scope with rationale (no new rule). Each was verified against the NVD
+record (not the issue title) before a verdict.
+
+| CVE | Reference | AAK rule / disposition | Triaged |
+|---|---|---|---|
+| CVE-2026-16496 (terraform-mcp-server 0.3.0–<1.1.0 — authorization bypass in the streamable-HTTP stateful transport: a user who obtains another user's MCP session ID executes tool calls with that user's Terraform credentials; HIGH 8.9) | [NVD](https://nvd.nist.gov/vuln/detail/CVE-2026-16496) | **Out of scope** — HashiCorp `terraform-mcp-server` is a Go project/binary, not a PyPI/npm artifact the pin scanner keys on (same basis as prior Go-server CVEs), and the session-ID authz bypass is a server-side runtime property invisible to a static client-config scan. Upgrade to ≥ 1.1.0; the reachable no-auth/hijackable-endpoint posture is flagged by `AAK-MCP-001`. (#505) | 2026-07-28 |
+| CVE-2026-47427 (GitHub MCP Server <1.1.0 — `CompletionsHandler` in `pkg/github/server.go` dereferences a nil `params.Ref` on a completion/complete request with a missing ref → pre-auth Go panic → DoS; HIGH 7.5) | [NVD](https://nvd.nist.gov/vuln/detail/CVE-2026-47427) | **Out of scope** — `github-mcp-server` is a Go binary (not PyPI/npm), and a nil-deref crash in the server's Go source is not detectable from a client config. Upgrade to ≥ 1.1.0. (#504) | 2026-07-28 |
+| CVE-2026-9680 (alibabacloud-rds-openapi-mcp-server 1.8.0–3.1.2 — the MCP endpoint listens on all interfaces (`0.0.0.0`) by default → remote unauthenticated tool invocation; MEDIUM 5.8) | [NVD](https://nvd.nist.gov/vuln/detail/CVE-2026-9680) | **Out of scope** — no published fix version (no floor to pin against) and a default-bind exposure is a server/deployment condition, not visible in a client `.mcp.json`. Bind to loopback + require auth; the no-auth-remote-endpoint class is flagged by `AAK-MCP-001`. (#503) | 2026-07-28 |
+
 ## 2026-07-27 (v0.3.60)
 
 Seven `cve-response` issues adjudicated for the v0.3.60 cut — one new pin, one
