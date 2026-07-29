@@ -1426,9 +1426,12 @@ def watch_cve_cmd(
     max_iterations: int,
     dry_run: bool,
 ) -> None:
-    """Poll CVE feeds and surface new entries that lack an AAK rule.
+    """[experimental] Poll CVE feeds and surface new entries that lack an AAK rule.
 
-    Distinct from `aak watch` (legacy pin-drift monitor)."""
+    No live feed fetchers ship yet — every feed is an unimplemented stub, so this
+    prints "feed <id>: NOT IMPLEMENTED" and exits non-zero rather than looking
+    like a clean run that found nothing. Distinct from `aak watch` (the pin-drift
+    monitor, which is fully functional)."""
     from agent_audit_kit.feeds import run_watch as run_feed_watch
 
     feed_ids = [f.strip() for f in feeds.split(",") if f.strip()]

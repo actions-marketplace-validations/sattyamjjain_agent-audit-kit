@@ -1,24 +1,26 @@
-"""F2 — `aak watch` CVE-feed daemon.
+"""`aak watch-cve` CVE-feed poller.
 
 Polls disclosed-CVE feeds (OX timeline, CERT/CC, ThaiCERT advisories,
-IronPlate weekly intel) and surfaces entries that AAK does not yet
-cover. The daemon is intentionally minimal — fetch, dedupe, dispatch
-— so a downstream operator can wire it into Slack / a webhook / a
-GitHub-issue creator without taking on a heavyweight runtime.
+IronPlate weekly intel) and surfaces entries that AAK does not yet cover. The
+daemon is intentionally minimal — fetch, dedupe, dispatch — so a downstream
+operator can wire it into Slack / a webhook / a GitHub-issue creator without
+taking on a heavyweight runtime.
 
-`run_watch(feed_ids, emit, interval_seconds, max_iterations, dry_run)`
-is the entry point. Unknown feed IDs are skipped with a stderr
-warning. Each iteration:
+**Status: [experimental] — no live feed fetchers are wired yet.** Every entry in
+`FEED_REGISTRY` is `_stub_fetcher`, which raises `NotImplementedError`. Rather
+than fetch nothing and exit 0 (which looks like a clean run that found no new
+CVEs), `run_watch` classifies its feeds up front, prints `feed <id>: NOT
+IMPLEMENTED` for each stub, and exits non-zero when *every* configured feed is a
+stub. A real fetcher can be registered by overriding `FEED_REGISTRY[<id>]` with
+a callable returning `list[dict]`; `run_watch` then polls only the live feeds.
 
-    1. Fetch the feed (cached, ETag-aware once a real feed lands).
-    2. Diff against the local "seen" set in
-       `~/.agent-audit-kit/watch-state.json`.
-    3. For every new entry without an AAK rule mapping, emit a
-       notification (or, in dry-run, print the body to stdout).
+`run_watch(feed_ids, emit, interval_seconds, max_iterations, dry_run)` is the
+entry point. Each iteration over the *live* feeds:
 
-This v0.3.10 ship includes the framework + an in-process stub for
-each feed. Wiring real fetchers (OX RSS, NVD JSON) lands in v0.3.11
-behind the same interface.
+    1. Fetch the feed.
+    2. Diff against the local "seen" set in `~/.agent-audit-kit/watch-state.json`.
+    3. For every new entry without an AAK rule mapping, emit a notification
+       (or, in dry-run, print the body to stdout).
 """
 from __future__ import annotations
 
@@ -49,12 +51,19 @@ def _save_state(state: dict[str, Any]) -> None:
 
 
 def _stub_fetcher(feed_id: str) -> list[dict[str, Any]]:
-    """Placeholder fetcher. Returns empty until a feed-specific fetcher
-    lands in v0.3.11 (real OX RSS / NVD JSON / IronPlate pull).
+    """Explicitly-unimplemented feed fetcher. Raises so `aak watch-cve` fails
+    loud instead of silently reporting an empty feed.
 
-    Tests inject a mock via FEED_REGISTRY override.
+    `run_watch` never calls this directly — it detects stub feeds by identity
+    and reports them as NOT IMPLEMENTED — but raising keeps the contract honest
+    for any caller that invokes a stub fetcher through `FEED_REGISTRY`. Tests
+    inject a real fetcher by overriding `FEED_REGISTRY[<id>]`.
     """
-    return []
+    raise NotImplementedError(
+        f"feed {feed_id!r} has no fetcher — `aak watch-cve` is an experimental "
+        "stub and ships no live CVE feeds. File an issue at "
+        "https://github.com/sattyamjjain/agent-audit-kit/issues if you need it."
+    )
 
 
 FEED_REGISTRY: dict[str, Callable[[str], list[dict[str, Any]]]] = {
@@ -70,10 +79,10 @@ def _emit(target: str | None, payload: dict[str, Any], *, dry_run: bool) -> None
         sys.stdout.write(json.dumps(payload, indent=2) + "\n")
         sys.stdout.flush()
         return
-    # Real sinks ship in v0.3.11. For now, log to stderr so consumers
-    # know the daemon isn't silently dropping events.
+    # Notification sinks are not implemented. Log to stderr so consumers know
+    # the daemon isn't silently dropping events.
     sys.stderr.write(
-        f"[aak watch] sink {target!r} not yet implemented; payload follows:\n"
+        f"[aak watch] sink {target!r} not implemented; payload follows:\n"
     )
     sys.stderr.write(json.dumps(payload, indent=2) + "\n")
     sys.stderr.flush()
@@ -87,18 +96,41 @@ def run_watch(
     max_iterations: int,
     dry_run: bool,
 ) -> int:
-    """Run the watch loop. Returns 0 on clean exit."""
+    """Run the watch loop over the *live* feeds.
+
+    Returns 0 on a clean poll of at least one live feed, and non-zero (2) when
+    every configured feed is an unimplemented stub — so a run that could only
+    ever find nothing fails loud instead of masquerading as success.
+    """
+    unknown = [f for f in feed_ids if f not in FEED_REGISTRY]
+    stub = [f for f in feed_ids if FEED_REGISTRY.get(f) is _stub_fetcher]
+    live = [
+        f for f in feed_ids
+        if f in FEED_REGISTRY and FEED_REGISTRY.get(f) is not _stub_fetcher
+    ]
+
+    for feed_id in unknown:
+        sys.stderr.write(f"[aak watch] unknown feed: {feed_id}\n")
+    for feed_id in stub:
+        sys.stderr.write(f"[aak watch] feed {feed_id}: NOT IMPLEMENTED\n")
+
+    if not live:
+        sys.stderr.write(
+            "[aak watch] no live feed fetchers configured — `aak watch-cve` is "
+            "[experimental] and ships no live CVE feeds. Exiting non-zero so this "
+            "does not look like a clean run that found nothing.\n"
+        )
+        sys.stderr.flush()
+        return 2
+
     state = _load_state()
     seen: set[str] = set(state.get("seen", []) or [])
     iteration = 0
     try:
         while True:
             iteration += 1
-            for feed_id in feed_ids:
-                fetcher = FEED_REGISTRY.get(feed_id)
-                if fetcher is None:
-                    sys.stderr.write(f"[aak watch] unknown feed: {feed_id}\n")
-                    continue
+            for feed_id in live:
+                fetcher = FEED_REGISTRY[feed_id]
                 try:
                     entries = fetcher(feed_id)
                 except Exception as exc:  # noqa: BLE001 — keep daemon alive
