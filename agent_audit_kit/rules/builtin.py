@@ -166,6 +166,7 @@ _AICM_TAGS: dict[str, list[str]] = {
     "AAK-MCP-STATA-CVE-2026-47708-001": ["AIS-08", "IAM-05", "STA-08"],
     "AAK-MCP-N8N-CVE-2026-65594-001": ["IAM-01", "IAM-16", "STA-08"],
     "AAK-MCP-AWSAPIMCP-CVE-2026-16584-001": ["IAM-01", "AIS-07", "STA-08"],
+    "AAK-MCP-FLYTO-CVE-2026-67425-001": ["DSP-17", "STA-08", "IVS-04"],
     "AAK-LMDEPLOY-VL-SSRF-001": ["IVS-04", "AIS-08"],
     "AAK-SPLUNK-MCP-TOKEN-LEAK-001": ["DSP-17", "LOG-06"],
     "AAK-MARKETPLACE-001": ["STA-10"],
@@ -6296,6 +6297,31 @@ _r(
     "minimum operations required.",
     sarif_name="AwsApiMcpServerPolicyBypass",
     cve_references=["CVE-2026-16584"],
+    owasp_mcp_references=["MCP01:2025"],
+    owasp_agentic_references=["ASI04"],
+    adversa_references=["ADV-AUTH-01"],
+)
+
+
+_r(
+    "AAK-MCP-FLYTO-CVE-2026-67425-001",
+    "Flyto2 Core forwards provider API keys to a caller-controlled base_url (<2.26.6)",
+    "Flyto2 Core (`flyto-core`), an MCP-native execution kernel for AI-agent "
+    "workflows, before 2.26.6 has `llm.chat` read provider credentials such as "
+    "`OPENAI_API_KEY` and `ANTHROPIC_API_KEY` from the environment and send them in "
+    "the `Authorization: Bearer` header to a caller-controlled `base_url`. An actor "
+    "who can steer `base_url` to a public host that clears the SSRF guard receives "
+    "the operator's provider key (CVE-2026-67425, CVSS 8.6). Fixed in 2.26.6; treat "
+    "< 2.26.6 (and unpinned) as exposed. The env-var-key exfil-to-caller-controlled-"
+    "endpoint class here is adjacent to the config-side env-secret exfil surface "
+    "`AAK-MCP-ENV-PLACEHOLDER-EXFIL-001` covers.",
+    Severity.HIGH,
+    Category.SUPPLY_CHAIN,
+    "Upgrade `flyto-core` to >= 2.26.6 and pin it. Restrict `llm.chat` `base_url` to "
+    "an allow-list of trusted provider hosts, and never forward environment-sourced "
+    "provider keys to a caller-supplied endpoint.",
+    sarif_name="Flyto2CoreProviderKeyExfil",
+    cve_references=["CVE-2026-67425"],
     owasp_mcp_references=["MCP01:2025"],
     owasp_agentic_references=["ASI04"],
     adversa_references=["ADV-AUTH-01"],

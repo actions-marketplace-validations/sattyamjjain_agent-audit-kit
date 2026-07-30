@@ -16,6 +16,27 @@ open.
 > issue. The per-CVE latency figures in the tables are **measurements recorded at
 > the time**, kept as dated facts, not a standing promise.
 
+## 2026-07-30 (v0.3.63)
+
+Six `cve-response` issues adjudicated for the v0.3.63 cut — one new pin
+(`flyto-core`, a PyPI artifact) and five dispositioned out of scope. The five
+disposed CVEs are one upstream: the official MCP Ruby SDK (`mcp` gem, vendor
+`modelcontextprotocol`) before 0.23.0 — a RubyGems ecosystem the client-config /
+dependency-manifest pin scanner does not read (its candidate set is PyPI/npm
+manifests, lockfiles, and MCP config files; no `Gemfile`/`Gemfile.lock`), plus
+server-side transport internals invisible to a static client scan. Their shared
+remediation: upgrade the `mcp` gem to ≥ 0.23.0. Each CVE was verified against the
+NVD record (not the issue title) before a verdict.
+
+| CVE | Reference | AAK rule / disposition | Triaged |
+|---|---|---|---|
+| CVE-2026-67425 (Flyto2 Core `flyto-core` < 2.26.6 — `llm.chat` reads provider keys (`OPENAI_API_KEY`/`ANTHROPIC_API_KEY`) from the environment and forwards them in the `Authorization: Bearer` header to a caller-controlled `base_url` that clears the SSRF guard → operator provider-key exfiltration; HIGH 8.6) | [NVD](https://nvd.nist.gov/vuln/detail/CVE-2026-67425) | **Pinned** `AAK-MCP-FLYTO-CVE-2026-67425-001` — fix floor `flyto-core` 2.26.6 (all prior versions affected; no `introduced` bound). `flyto-core` is a pinnable PyPI artifact the pin scanner resolves from `pyproject.toml`/`requirements.txt`/`uv.lock` (same basis as the `awslabs.aws-api-mcp-server` PyPI pin). The env-var-key exfil-to-caller-controlled-`base_url` class is adjacent to the config-side env-secret exfil surface `AAK-MCP-ENV-PLACEHOLDER-EXFIL-001` (`tests/test_mcp_env_placeholder_exfil.py`). (#507) | 2026-07-30 |
+| CVE-2026-67432 (MCP Ruby SDK / `mcp` gem < 0.23.0 — `StreamableHTTPTransport` parses an unbounded JSON-RPC POST body → unauthenticated remote memory-exhaustion DoS; HIGH 7.5) | [NVD](https://nvd.nist.gov/vuln/detail/CVE-2026-67432) | **Out of scope** — RubyGems artifact + server-side transport-internal resource exhaustion; a gem version is invisible to the pin scanner (no `Gemfile`/`Gemfile.lock` in its candidate set) and an unbounded-body DoS leaves no client-config signal. Upgrade the `mcp` gem to ≥ 0.23.0; the reachable posture at most is the exposed remote endpoint (`AAK-MCP-001`). (#512) | 2026-07-30 |
+| CVE-2026-67431 (MCP Ruby SDK / `mcp` gem < 0.23.0 — `StreamableHTTPTransport` does not bind a session ID to a session owner → an attacker with a stolen session ID runs `tools/call` in the victim's session; HIGH CVSS 4.0 8.3) | [NVD](https://nvd.nist.gov/vuln/detail/CVE-2026-67431) | **Out of scope** — RubyGems + server-side session-authorization internals, invisible to a static client-config/manifest scan (no `Gemfile` in the pin surface). Upgrade to ≥ 0.23.0. The reachable posture — an unauthenticated/hijackable remote MCP endpoint — is flagged by `AAK-MCP-001`. (#511) | 2026-07-30 |
+| CVE-2026-63118 (MCP Ruby SDK / `mcp` gem < 0.23.0 — `StreamableHTTPTransport` does not validate the HTTP `Host`/`Origin` headers → a malicious browser page uses DNS rebinding to reach a locally running MCP server and invoke tools; MEDIUM CVSS 4.0 6.9) | [NVD](https://nvd.nist.gov/vuln/detail/CVE-2026-63118) | **Out of scope** — RubyGems + server-side transport internals not visible to a static client scan (no `Gemfile` in the pin surface). Upgrade to ≥ 0.23.0. The DNS-rebinding / missing-`Host`-validation class is covered on AAK's side by the transport-security rule `AAK-DNS-REBIND-001` (browser DNS-rebind → loopback MCP server). (#508) | 2026-07-30 |
+| CVE-2026-67430 (MCP Ruby SDK / `mcp` gem < 0.23.0 — `StreamableHTTPTransport` does not expire sessions → repeated `initialize` requests retain unbounded `ServerSession` objects → memory-exhaustion DoS; MEDIUM 5.3) | [NVD](https://nvd.nist.gov/vuln/detail/CVE-2026-67430) | **Out of scope** — RubyGems + server-side session-lifecycle internals; no client-config signal and no `Gemfile` in the pin surface. Upgrade to ≥ 0.23.0. Reachable posture at most is the exposed remote endpoint (`AAK-MCP-001`). (#510) | 2026-07-30 |
+| CVE-2026-63119 (MCP Ruby SDK / `mcp` gem < 0.23.0 — `StdioTransport` / `Client::Stdio` use `IO#gets` with no byte limit → a peer sending data without a newline exhausts process memory; MEDIUM 6.2) | [NVD](https://nvd.nist.gov/vuln/detail/CVE-2026-63119) | **Out of scope** — RubyGems + a local stdio-transport resource exhaustion in the gem's Ruby source; not visible in any client config and no `Gemfile` in the pin surface. Being a local stdio DoS, the remote-endpoint `AAK-MCP-001` posture does not apply. Upgrade to ≥ 0.23.0. (#509) | 2026-07-30 |
+
 ## 2026-07-28 (v0.3.62)
 
 Three `cve-response` issues adjudicated for the v0.3.62 cut — all dispositioned

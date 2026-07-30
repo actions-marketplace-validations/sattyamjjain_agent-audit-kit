@@ -187,6 +187,14 @@ _PINS: tuple[_Pin, ...] = (
     _Pin("AAK-MCP-AWSAPIMCP-CVE-2026-16584-001", "awslabs.aws-api-mcp-server",
          ("awslabs.aws-api-mcp-server",), (1, 3, 47), introduced=(0, 2, 13),
          fix_label="1.3.47 (affected 0.2.13–1.3.46)"),
+    # --- 2026-07-29..30 wave ---
+    # Flyto2 Core (`flyto-core`, PyPI) < 2.26.6: `llm.chat` reads provider keys
+    # (OPENAI_API_KEY / ANTHROPIC_API_KEY) from the environment and forwards them in
+    # the Authorization: Bearer header to a caller-controlled `base_url` that clears
+    # the SSRF guard → operator provider-key exfiltration. Fixed 2.26.6 (all prior
+    # versions affected, so no `introduced` bound).
+    _Pin("AAK-MCP-FLYTO-CVE-2026-67425-001", "flyto-core", ("flyto-core",),
+         (2, 26, 6), fix_label="2.26.6"),
 )
 
 _CANDIDATE_NAMES = (

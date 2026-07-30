@@ -1,16 +1,20 @@
 # Distribution Checklist — State of MCP Security 2026
 
 Manual launch checklist + **ready-to-post copy** for the data report
-([`research/state-of-mcp-2026/PREVALENCE.md`](../research/state-of-mcp-2026/PREVALENCE.md)).
+([`research/state-of-mcp-2026/REPORT.md`](../research/state-of-mcp-2026/REPORT.md),
+with score-calibration detail in
+[`PREVALENCE.md`](../research/state-of-mcp-2026/PREVALENCE.md)).
 **Nothing here auto-posts.** Copy, sanity-check the links, post one surface at a
 time, reply to comments.
 
-**Canonical numbers (from `results.json` — do not round up):**
-664 distinct configs · 26.1% with a critical finding · median grade B (top 10% A) ·
-top misconfig = `npx`/`uvx` fetch-and-execute (43.7%) · 24.2% no-auth remote ·
-99.4% trip OWASP MCP07 (authorization). Static, offline, deterministic.
+**Canonical numbers (from `results.json` — do not round):**
+2,303 distinct configs · 52.8% (1,217) with a critical finding · median grade B
+(top 10% A) · top misconfig = remote server with **no authentication**
+(`AAK-MCP-001`, critical, 52.3%) · 52.3% (1,205) no-auth remote · 19.5% (450)
+`npx`/`uvx` fetch-and-execute · 99.8% trip OWASP MCP07 (authorization).
+Static, offline, deterministic.
 
-Report link: `https://github.com/sattyamjjain/agent-audit-kit/blob/main/research/state-of-mcp-2026/PREVALENCE.md`
+Report link: `https://github.com/sattyamjjain/agent-audit-kit/blob/main/research/state-of-mcp-2026/REPORT.md`
 
 ---
 
@@ -18,25 +22,28 @@ Report link: `https://github.com/sattyamjjain/agent-audit-kit/blob/main/research
 
 **Title:**
 ```
-Show HN: I scanned 664 public MCP server configs — 1 in 4 has a critical flaw
+Show HN: I scanned 2,303 public MCP server configs — 52% expose a remote server with no auth
 ```
 
 **First comment (post immediately, as author):**
 ```
 I run an open-source static scanner for MCP/agent configs (agent-audit-kit,
-MIT). I took 664 distinct public .mcp.json files and scanned each one offline
-and deterministically — no cloud, no LLM, same input gives the same result.
+MIT). I took 2,303 distinct public MCP configs — a GitHub crawl plus the official
+MCP Registry's latest-version servers — and scanned each one offline and
+deterministically: no cloud, no LLM, same input gives the same result.
 
-Findings: 26.1% have at least one critical issue; the median config grades a B. The
-two big ones are boring and fixable — 44% launch their server with npx/uvx and
-no pinned version (so it runs whatever the registry serves that second), and 24%
-declare a remote server with no auth. That last one lines up with Knostic's
-separate finding that 119 of 119 exposed servers they probed allowed
-unauthenticated tool-listing.
+Headline: 52.3% (1,205 of 2,303) declare a remote server with no authentication —
+that's the single most common finding, and it's critical-severity. 52.8% carry at
+least one critical finding overall; the median config still grades a B. It lines
+up with Knostic's separate finding that 119 of 119 exposed servers they probed
+allowed unauthenticated tool-listing. The next most common issue is more boring
+and fixable: 19.5% launch their server with npx/uvx and no pinned version.
 
-I tried to keep it honest: the sample skews to public repos, static analysis
-over- and under-counts, and I say "664 configs", not "the MCP ecosystem". Full
-method + the exact command to reproduce it is in the report.
+I tried to keep it honest: the sample skews to public repos and registry
+latest-version entries, static analysis over- and under-counts, auth posture is
+inferred from declared config (not a live probe), and I say "2,303 configs", not
+"the MCP ecosystem". Full method + the exact command to reproduce it is in the
+report.
 
 Not trying to replace runtime tools like Snyk agent-scan — this is the
 static/CI/offline angle. You can scan your own in 30s: pip install
@@ -54,24 +61,27 @@ Repo: https://github.com/sattyamjjain/agent-audit-kit
 
 **Title:**
 ```
-The State of MCP Security 2026: 664 public MCP configs scanned (data + reproducible method)
+The State of MCP Security 2026: 2,303 public MCP configs scanned (data + reproducible method)
 ```
 
 **Body:**
 ```
-MCP servers are proliferating (the official registry listed 9,652 as of
-2026-05-24) and the config hygiene is rough. I scanned 664 distinct public
-.mcp.json files with an offline, deterministic static analyzer and aggregated
-the results.
+MCP servers are proliferating and the config hygiene is rough. I scanned 2,303
+distinct public MCP configs — a GitHub crawl plus the official MCP Registry's
+latest-version servers — with an offline, deterministic static analyzer and
+aggregated the results.
 
-Headline: 26.1% have a critical finding; median grade B. Mapped to the OWASP MCP
-Top 10, 99.4% trip MCP07 (authorization / excessive permissions). Most common
-issues: npx/uvx fetch-and-execute at launch (43.4%), no-auth remote server
-(24.2%), secret inlined in the config env block (11%).
+Headline: 52.3% (1,205 of 2,303) declare a remote server with no authentication
+(critical severity, the single most common finding); 52.8% carry at least one
+critical finding; median grade B. Mapped to the OWASP MCP Top 10, 99.8% trip
+MCP07 (authorization / excessive permissions). Other common issues: npx/uvx
+fetch-and-execute at launch (19.5%), secret inlined in the config env block
+(3.0%).
 
 Method and raw aggregate (results.json) are committed; there's an exact
-reproduce command. The scanner is open source (agent-audit-kit, MIT); I've kept
-the caveats in the report (sample skew, static over/under-count, N=664 is a
+reproduce command (`make report`, offline + byte-deterministic). The scanner is
+open source (agent-audit-kit, MIT); I've kept the caveats in the report (sample
+skew, static over/under-count, inferred-from-config auth posture, N=2,303 is a
 sample).
 
 Report + data + method: <report link>
@@ -90,14 +100,14 @@ real-world data). Open a Discussion first, not a cold PR.
 **One-paragraph note:**
 ```
 Sharing real-world prevalence data that may be useful evidence for the MCP Top
-10. I statically scanned 664 distinct public MCP server configs (offline,
+10. I statically scanned 2,303 distinct public MCP server configs (offline,
 deterministic; method + raw results committed and reproducible). Mapped to the
-current list: 99.4% of configs trip MCP07 (authorization/excessive perms),
-43.4% trip the supply-chain/untrusted-execution risk (npx/uvx unpinned launch),
-and 24.2% declare a remote server with no authentication — which corroborates
-Knostic's 119-of-119 unauthenticated-tool-listing finding from the deployment
-side. Happy to contribute the dataset or a category-by-category breakdown.
-Report: <report link>
+current list: 99.8% of configs trip MCP07 (authorization/excessive perms), and
+52.3% declare a remote server with no authentication (critical, the single most
+common finding) — which corroborates Knostic's 119-of-119 unauthenticated-tool-
+listing finding from the deployment side. 19.5% trip the supply-chain/untrusted-
+execution risk (npx/uvx unpinned launch). Happy to contribute the dataset or a
+category-by-category breakdown. Report: <report link>
 ```
 
 - [ ] Contribute *data*, not a tool plug. Permalink to the merged report commit.
@@ -125,7 +135,7 @@ Report: <report link>
 
 ## Guardrails
 - Every number must trace to `results.json`. External figures stay attributed
-  (MCP Registry, Knostic, the 2,614-server survey).
+  (Knostic, the 2,614-server survey).
 - No paywall, no email gate, no cloud upload of anyone's configs — the pitch is
   offline/deterministic; don't undercut it.
 - If a maintainer whose config is graded asks for a fix window, honor the 90-day

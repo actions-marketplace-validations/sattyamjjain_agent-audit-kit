@@ -7,6 +7,58 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.3.63] - 2026-07-30
+
+### Fixed — one canonical State-of-MCP corpus N (2,303) across every publication surface
+
+- The State-of-MCP-2026 corpus grew to **2,303 distinct configs** (a GitHub crawl
+  plus the official MCP Registry's latest-version servers; `results.json` is the
+  drift-guarded source of truth), but four published surfaces still quoted the
+  earlier crawl-only run — a 3.5× discrepancy on the headline. Reconciled all four
+  to `results.json`:
+  - `research/state-of-mcp-2026/PREVALENCE.md`: 664 → 2,303; critical rate
+    26.1% → **52.8% (1,217)**; grade table, OWASP MCP table (99.4%/660 → 99.8%/2,299),
+    top-10 findings, and methodology re-derived from the aggregate.
+  - `docs/DISTRIBUTION-CHECKLIST.md`: canonical block + all launch copy re-based to
+    2,303; report link repointed from `PREVALENCE.md` to the CI-guarded `REPORT.md`;
+    the internal 43.7-vs-43.4 `npx`/`uvx` disagreement removed.
+  - `docs/STATE-OF-MCP-SECURITY-2026.md`: 1,374 → 2,303; 35.1% (482/1,374) →
+    **52.3% (1,205/2,303)** no-auth remote (the 0%-RFC-9728 claim retained).
+  - `README.md`: the auth-profile bullet re-based from the pre-dedup 748-file count
+    to 2,303 (0% RFC 9728; 52.3% no-auth remote; 100% (421/421) inline-auth static
+    credential), with the dated 2026-07-18 748-config readiness scan kept as a
+    separate, explicitly-dated point-in-time link.
+- **The headline finding reversed, not just drifted.** On the 664-corpus the top
+  misconfiguration was `AAK-MCP-005` (`npx`/`uvx` fetch-and-execute, MEDIUM, 43.7%);
+  on the 2,303-corpus it is `AAK-MCP-001` (remote server with no authentication,
+  **CRITICAL, 52.3%**), and `npx`/`uvx` fell to 19.5%. Every "the top one is boring
+  and fixable" framing was renamed to the correct lead at the correct severity.
+- Collapsed the two divergent hand-maintained launch-copy blocks into one generated
+  home (`docs/DISTRIBUTION-CHECKLIST.md`); `PREVALENCE.md` now points to it instead
+  of carrying a second, drifting copy.
+- Extended the report drift guard from `REPORT.md`-only to every publication
+  surface:
+  `tests/test_state_of_mcp_report.py::test_every_publication_surface_matches_results`
+  asserts the current corpus N appears and denylists superseded corpus tokens /
+  percentages (664/748/1,374 · 26.1/35.1/43.7/43.4/24.2/99.4) outside a narrow,
+  commented allowlist of dated lines, so the next corpus refresh fails the build
+  until the prose follows.
+
+### Changed — adjudicated 6 open cve-response issues (clears the release gate)
+
+- One new pin: `AAK-MCP-FLYTO-CVE-2026-67425-001` — `flyto-core` < 2.26.6
+  (CVE-2026-67425, HIGH 8.6; provider-key exfiltration to a caller-controlled
+  `base_url`), a pinnable PyPI artifact the pin scanner resolves from
+  `pyproject.toml`/`requirements.txt`/`uv.lock` (same basis as the
+  `awslabs.aws-api-mcp-server` PyPI pin). Rule count **271 → 272**, sync-driven
+  across every surface.
+- Five dispositioned out of scope — all one upstream, the official MCP Ruby SDK
+  (`mcp` gem < 0.23.0: CVE-2026-67432 / 67431 / 67430, CVE-2026-63118 / 63119): a
+  RubyGems ecosystem the pin scanner does not read (no `Gemfile` in its candidate
+  set) plus server-side transport internals invisible to a static client scan. Each
+  row states the reachable-posture rule (`AAK-MCP-001` / `AAK-DNS-REBIND-001`) and
+  the ≥ 0.23.0 upgrade floor. Full verdicts in `CHANGELOG.cves.md`.
+
 ## [0.3.62] - 2026-07-28
 
 ### Fixed — README Action pin is now guaranteed to resolve (pin ↔ tag CI guard)

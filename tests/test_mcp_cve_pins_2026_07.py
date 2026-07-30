@@ -46,6 +46,8 @@ PINS = {
     "AAK-MCP-N8N-CVE-2026-65594-001": "high",
     # 2026-07-23..24 wave
     "AAK-MCP-AWSAPIMCP-CVE-2026-16584-001": "high",
+    # 2026-07-29..30 wave
+    "AAK-MCP-FLYTO-CVE-2026-67425-001": "high",
 }
 
 
@@ -447,3 +449,32 @@ def test_n8n_65594_230_branch_fires(tmp_path: Path) -> None:
 
 def test_n8n_65594_230_branch_patched_passes(tmp_path: Path) -> None:
     assert "AAK-MCP-N8N-CVE-2026-65594-001" not in _n8n(tmp_path, "2.30.1")
+
+
+# ---------------------------------------------------------------------------
+# 2026-07-29..30 wave — flyto-core CVE-2026-67425 (provider-key exfil, <2.26.6)
+# ---------------------------------------------------------------------------
+
+
+def test_flyto_below_floor_fires(tmp_path: Path) -> None:
+    assert "AAK-MCP-FLYTO-CVE-2026-67425-001" in _ids(
+        tmp_path, "requirements.txt", "flyto-core==2.26.5\n"
+    )
+
+
+def test_flyto_patched_passes(tmp_path: Path) -> None:
+    # All versions below 2.26.6 are affected; the fix floor clears.
+    assert "AAK-MCP-FLYTO-CVE-2026-67425-001" not in _ids(
+        tmp_path, "requirements.txt", "flyto-core==2.26.6\n"
+    )
+
+
+def test_flyto_unpinned_fires(tmp_path: Path) -> None:
+    assert "AAK-MCP-FLYTO-CVE-2026-67425-001" in _ids(
+        tmp_path, "requirements.txt", "flyto-core\n"
+    )
+
+
+def test_flyto_uv_lock_resolved_below_floor_fires(tmp_path: Path) -> None:
+    lock = '[[package]]\nname = "flyto-core"\nversion = "2.20.0"\n'
+    assert "AAK-MCP-FLYTO-CVE-2026-67425-001" in _ids(tmp_path, "uv.lock", lock)

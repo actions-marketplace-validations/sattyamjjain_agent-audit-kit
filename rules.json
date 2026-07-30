@@ -3161,6 +3161,34 @@
     },
     {
       "adversa_references": [
+        "ADV-AUTH-01"
+      ],
+      "aicm_references": [
+        "DSP-17",
+        "STA-08",
+        "IVS-04"
+      ],
+      "auto_fixable": false,
+      "category": "supply-chain",
+      "cve_references": [
+        "CVE-2026-67425"
+      ],
+      "description": "Flyto2 Core (`flyto-core`), an MCP-native execution kernel for AI-agent workflows, before 2.26.6 has `llm.chat` read provider credentials such as `OPENAI_API_KEY` and `ANTHROPIC_API_KEY` from the environment and send them in the `Authorization: Bearer` header to a caller-controlled `base_url`. An actor who can steer `base_url` to a public host that clears the SSRF guard receives the operator's provider key (CVE-2026-67425, CVSS 8.6). Fixed in 2.26.6; treat < 2.26.6 (and unpinned) as exposed. The env-var-key exfil-to-caller-controlled-endpoint class here is adjacent to the config-side env-secret exfil surface `AAK-MCP-ENV-PLACEHOLDER-EXFIL-001` covers.",
+      "incident_references": [],
+      "owasp_agentic_references": [
+        "ASI04"
+      ],
+      "owasp_mcp_references": [
+        "MCP01:2025"
+      ],
+      "remediation": "Upgrade `flyto-core` to >= 2.26.6 and pin it. Restrict `llm.chat` `base_url` to an allow-list of trusted provider hosts, and never forward environment-sourced provider keys to a caller-supplied endpoint.",
+      "rule_id": "AAK-MCP-FLYTO-CVE-2026-67425-001",
+      "sarif_name": "Flyto2CoreProviderKeyExfil",
+      "severity": "high",
+      "title": "Flyto2 Core forwards provider API keys to a caller-controlled base_url (<2.26.6)"
+    },
+    {
+      "adversa_references": [
         "ADV-SUPPLY-01"
       ],
       "aicm_references": [
