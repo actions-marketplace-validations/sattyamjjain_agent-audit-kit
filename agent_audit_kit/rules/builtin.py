@@ -167,6 +167,7 @@ _AICM_TAGS: dict[str, list[str]] = {
     "AAK-MCP-N8N-CVE-2026-65594-001": ["IAM-01", "IAM-16", "STA-08"],
     "AAK-MCP-AWSAPIMCP-CVE-2026-16584-001": ["IAM-01", "AIS-07", "STA-08"],
     "AAK-MCP-FLYTO-CVE-2026-67425-001": ["DSP-17", "STA-08", "IVS-04"],
+    "AAK-MCP-LANGFLOW-CVE-2026-12940-001": ["STA-08", "AIS-07", "IVS-04"],
     "AAK-LMDEPLOY-VL-SSRF-001": ["IVS-04", "AIS-08"],
     "AAK-SPLUNK-MCP-TOKEN-LEAK-001": ["DSP-17", "LOG-06"],
     "AAK-MARKETPLACE-001": ["STA-10"],
@@ -6323,6 +6324,30 @@ _r(
     sarif_name="Flyto2CoreProviderKeyExfil",
     cve_references=["CVE-2026-67425"],
     owasp_mcp_references=["MCP01:2025"],
+    owasp_agentic_references=["ASI04"],
+    adversa_references=["ADV-AUTH-01"],
+)
+
+
+_r(
+    "AAK-MCP-LANGFLOW-CVE-2026-12940-001",
+    "Langflow MCP stdio launcher env-var-injection RCE (1.0.0–<1.11.0)",
+    "IBM Langflow OSS (`langflow`) from 1.0.0 through 1.10.1 is vulnerable to "
+    "unauthenticated remote code execution through its MCP stdio launcher: the "
+    "`DANGEROUS_ENV_VARS` blocklist in `src/lfx/base/mcp/util.py` omits `SHELLOPTS`, "
+    "`BASHOPTS`, and `PS4`, so an unauthenticated attacker can inject those "
+    "environment variables into a launched stdio MCP server process and achieve "
+    "arbitrary code execution (CVE-2026-12940, CVSS 9.8). Fixed in 1.11.0; treat "
+    "1.0.0–1.10.1 (and unpinned) as exposed. Pre-1.0.0 releases predate the MCP "
+    "stdio launcher and are not in the affected range.",
+    Severity.CRITICAL,
+    Category.SUPPLY_CHAIN,
+    "Upgrade `langflow` to >= 1.11.0 and pin it. Do not pass an attacker-influenced "
+    "environment through to a launched stdio MCP server; blocklist (or, better, "
+    "allowlist) the process environment, including `SHELLOPTS`/`BASHOPTS`/`PS4`.",
+    sarif_name="LangflowMcpStdioEnvInjectionRce",
+    cve_references=["CVE-2026-12940"],
+    owasp_mcp_references=["MCP10:2025"],
     owasp_agentic_references=["ASI04"],
     adversa_references=["ADV-AUTH-01"],
 )

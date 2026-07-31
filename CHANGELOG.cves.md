@@ -16,6 +16,26 @@ open.
 > issue. The per-CVE latency figures in the tables are **measurements recorded at
 > the time**, kept as dated facts, not a standing promise.
 
+## 2026-07-31 (v0.3.64)
+
+Six `cve-response` issues adjudicated for the v0.3.64 cut — one new pin
+(`langflow`, a PyPI artifact) and five dispositioned out of scope. The five disposed
+CVEs are one upstream: Google `mcp-toolbox` (`googleapis/genai-toolbox`), a **Go
+binary** the client-config / dependency-manifest pin scanner does not read (its
+candidate set is PyPI/npm manifests, lockfiles, and MCP config files; no `go.mod`),
+plus server-side runtime flaws invisible to a static client scan — the same basis on
+which CVE-2026-15829 (also `mcp-toolbox`) was dispositioned. Each CVE was verified
+against the NVD record (not the issue title) before a verdict.
+
+| CVE | Reference | AAK rule / disposition | Triaged |
+|---|---|---|---|
+| CVE-2026-12940 (IBM Langflow OSS `langflow` 1.0.0–1.10.1 — the MCP stdio launcher's `DANGEROUS_ENV_VARS` blocklist (`src/lfx/base/mcp/util.py`) omits `SHELLOPTS`/`BASHOPTS`/`PS4` → unauthenticated env-var-injection RCE; CRITICAL 9.8) | [NVD](https://nvd.nist.gov/vuln/detail/CVE-2026-12940) · GHSA-gx45-8jc3-gqqr | **Pinned** `AAK-MCP-LANGFLOW-CVE-2026-12940-001` — fix floor `langflow` 1.11.0, `introduced` 1.0.0 (1.11.0 is the first PyPI release after the affected 1.10.1; there is no 1.10.2, and pre-1.0.0 predates the MCP stdio launcher). A pinnable PyPI artifact the pin scanner resolves from `requirements.txt`/`pyproject.toml`/`uv.lock`. (#513) | 2026-07-31 |
+| CVE-2026-14537 (Google `mcp-toolbox` v1.3.0/v1.4.0 — incorrect authorization on the direct HTTP API tool-invocation endpoint when `--enable-api` is active → an unauthenticated attacker invokes `scopeRequired`-protected tools via legacy HTTP endpoints; HIGH CVSS 4.0 8.1) | [NVD](https://nvd.nist.gov/vuln/detail/CVE-2026-14537) | **Out of scope** — `mcp-toolbox` is a Go binary (`googleapis/genai-toolbox`), not a PyPI/npm artifact the pin scanner keys on (no `go.mod` in its candidate set), and the authz bypass is a server-side runtime property; same basis as CVE-2026-15829. The reachable posture — an exposed MCP HTTP endpoint — is flagged by `AAK-MCP-001`. Upgrade past the affected releases. (#514) | 2026-07-31 |
+| CVE-2026-14538 (Google `mcp-toolbox` 0.16.1–1.4.0 — a fail-open logic error in the `bigquery-execute-sql` dry-run enforcement lets an authenticated user bypass `allowedDatasets` validation and read excluded/federated schemas; MEDIUM CVSS 4.0 5.7) | [NVD](https://nvd.nist.gov/vuln/detail/CVE-2026-14538) | **Out of scope** — Go binary (`googleapis/genai-toolbox`), not pinnable, and a server-side data-authorization bug invisible to a static client-config scan. Upgrade past the affected range. (#515) | 2026-07-31 |
+| CVE-2026-14539 (Google `mcp-toolbox` ≤ 1.4.0 — the `/mcp` HTTP handler reads request bodies into memory with no size limit → unauthenticated memory-exhaustion DoS; MEDIUM CVSS 4.0 6.6) | [NVD](https://nvd.nist.gov/vuln/detail/CVE-2026-14539) | **Out of scope** — Go binary, not pinnable (no `go.mod` surface), and a transport-internal resource-exhaustion DoS with no client-config signal. Reachable posture at most is the exposed endpoint (`AAK-MCP-001`). Upgrade past 1.4.0. (#516) | 2026-07-31 |
+| CVE-2026-14540 (Google `mcp-toolbox` 0.3.0–1.4.0 — the generic HTTP source/tool client lacks redirect validation and private-IP checks → SSRF via open redirect; HIGH CVSS 4.0 8.0) | [NVD](https://nvd.nist.gov/vuln/detail/CVE-2026-14540) | **Out of scope** — Go binary (`googleapis/genai-toolbox`), not pinnable. The caller-URL→fetch-without-allow-list SSRF class is what `AAK-MCP-SSRF-001` covers on AAK's client-scan side. Upgrade past the affected range. (#517) | 2026-07-31 |
+| CVE-2026-14541 (Google `mcp-toolbox` 1.4.0 — the Google OAuth provider skips audience validation for opaque tokens when `mcpEnabled: true` but no audience/clientId is configured → auth bypass / audience confusion; HIGH CVSS 4.0 8.0) | [NVD](https://nvd.nist.gov/vuln/detail/CVE-2026-14541) | **Out of scope** — Go binary, not pinnable, and a server-side OAuth-validation flaw. The audience-confusion / missing-resource-binding class is `AAK-OAUTH-007`'s territory (RFC 8707 resource indicators) on the client side. Upgrade past 1.4.0. (#518) | 2026-07-31 |
+
 ## 2026-07-30 (v0.3.63)
 
 Six `cve-response` issues adjudicated for the v0.3.63 cut — one new pin

@@ -1,8 +1,8 @@
 {
   "schema_version": "1",
-  "last_updated": "2026-07-30T09:34:59Z",
-  "aak_version": "0.3.63",
-  "rule_count": 272,
+  "last_updated": "2026-07-31T10:06:29Z",
+  "aak_version": "0.3.64",
+  "rule_count": 273,
   "coverage": [
     {
       "asi_id": "ASI01",
@@ -1096,7 +1096,7 @@
     {
       "asi_id": "ASI04",
       "title": "Identity & Privilege Abuse",
-      "rule_density": 54,
+      "rule_density": 55,
       "rules": [
         {
           "id": "AAK-AGENT-HARNESS-SHARED-STATE-001",
@@ -1365,6 +1365,18 @@
           ],
           "aicm_references": [
             "DSP-17",
+            "IVS-04",
+            "STA-08"
+          ]
+        },
+        {
+          "id": "AAK-MCP-LANGFLOW-CVE-2026-12940-001",
+          "severity": "critical",
+          "cve_references": [
+            "CVE-2026-12940"
+          ],
+          "aicm_references": [
+            "AIS-07",
             "IVS-04",
             "STA-08"
           ]

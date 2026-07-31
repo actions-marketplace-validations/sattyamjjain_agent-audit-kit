@@ -195,6 +195,15 @@ _PINS: tuple[_Pin, ...] = (
     # versions affected, so no `introduced` bound).
     _Pin("AAK-MCP-FLYTO-CVE-2026-67425-001", "flyto-core", ("flyto-core",),
          (2, 26, 6), fix_label="2.26.6"),
+    # --- 2026-07-30..31 wave ---
+    # IBM Langflow OSS (`langflow`, PyPI) 1.0.0–1.10.1: the MCP stdio launcher's
+    # DANGEROUS_ENV_VARS blocklist (`src/lfx/base/mcp/util.py`) omits SHELLOPTS /
+    # BASHOPTS / PS4 → unauthenticated env-var-injection RCE (CVE-2026-12940,
+    # CRITICAL 9.8). Fixed 1.11.0 (the first release after the affected 1.10.1;
+    # introduced-bounded at 1.0.0 so pre-MCP 0.x releases clear).
+    _Pin("AAK-MCP-LANGFLOW-CVE-2026-12940-001", "langflow", ("langflow",),
+         (1, 11, 0), introduced=(1, 0, 0),
+         fix_label="1.11.0 (affected 1.0.0–1.10.1)"),
 )
 
 _CANDIDATE_NAMES = (

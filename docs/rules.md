@@ -6,7 +6,7 @@
 
 | Category | Rules |
 |----------|-------|
-| Supply Chain | 70 |
+| Supply Chain | 71 |
 | MCP Configuration | 62 |
 | Tool Poisoning | 29 |
 | Secret Exposure | 18 |
@@ -18,11 +18,21 @@
 | Transport Security | 12 |
 | Trust Boundaries | 12 |
 | MCP Server Card | 4 |
-| **Total** | **272** |
+| **Total** | **273** |
 
 <!-- END rules-summary -->
 
 _Counts are generated from the rule registry; run `agent-audit-kit export-rules` for the authoritative machine-readable list._
+
+> **Language coverage — flow analysis vs pattern matching.** Real data-flow (taint)
+> analysis, which models reachability from a user-controlled source to a dangerous
+> sink, is implemented for **Python only** (an AST source→sink pass in
+> `taint_analysis.py`). **TypeScript/JavaScript and Rust** are covered by regex
+> **dangerous-sink pattern scanners** (`typescript_pattern_scan.py` /
+> `rust_pattern_scan.py`): they flag risky sinks (`eval`, `child_process.exec`,
+> `std::process::Command` with `format!`, etc.) but do **not** track flow from a
+> source to those sinks. A true tree-sitter AST flow analyzer for TS/Rust is tracked
+> as [issue #22](https://github.com/sattyamjjain/agent-audit-kit/issues/22).
 
 ## Full Rule List
 

@@ -27,10 +27,9 @@ The three things `agent-audit-kit` ships that the field does **not** do well:
 
 Carried over from the earlier `DEEP_ANALYSIS.md` plus the new market context:
 
-1. **Retire the three dead RUGPULL rules** (`AAK-RUGPULL-001/002/003`) or wire them into `pinning.verify_pins`. Today they are defined but never fired by any scanner — a static-scanner shipping silent rules is a credibility problem.
-2. **Exception handling around `engine.run_scan`** — today a single bad scanner crashes the whole scan. Add per-scanner try/except that emits an `AAK-INTERNAL-SCANNER-FAIL` INFO finding and continues.
-3. **TypeScript/Rust taint analyzers are regex, not taint flow** — match the marketing. Either (a) rewrite `typescript_scan.py` and `rust_scan.py` using tree-sitter AST traversal, or (b) rename them to `typescript_pattern_scan.py` / `rust_pattern_scan.py` and remove "taint analysis" language from docs. The current state burns credibility when a security researcher reads the source.
-4. **LLM-assisted scanner** (`llm_scan.py`) — today depends on Ollama silently. Wire it into Claude / OpenAI / Gemini with a `--llm claude-haiku-4-5` CLI flag and make it explicit-opt-in, not silent.
+1. **Exception handling around `engine.run_scan`** — today a single bad scanner crashes the whole scan. Add per-scanner try/except that emits an `AAK-INTERNAL-SCANNER-FAIL` INFO finding and continues.
+2. **TypeScript/Rust scanners: rename done, AST rewrite still open** — the two modules were renamed to `typescript_pattern_scan.py` / `rust_pattern_scan.py` (v0.3.0, with back-compat shims) and the docs no longer describe them as "taint analysis", so the source now matches the marketing (they are honest regex pattern scanners). The remaining half — a real tree-sitter AST rewrite that models source→sink reachability for TS/Rust — stays open as **issue #22**; do not restart it here.
+3. **LLM-assisted scanner** (`llm_scan.py`) — today depends on Ollama silently. Wire it into Claude / OpenAI / Gemini with a `--llm claude-haiku-4-5` CLI flag and make it explicit-opt-in, not silent.
 
 ### 2.2 Must-add coverage for 2026 threat landscape
 

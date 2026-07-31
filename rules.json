@@ -3380,6 +3380,34 @@
       "title": "Kong Konnect MCP server < 1.0.0 (indirect prompt injection)"
     },
     {
+      "adversa_references": [
+        "ADV-AUTH-01"
+      ],
+      "aicm_references": [
+        "STA-08",
+        "AIS-07",
+        "IVS-04"
+      ],
+      "auto_fixable": false,
+      "category": "supply-chain",
+      "cve_references": [
+        "CVE-2026-12940"
+      ],
+      "description": "IBM Langflow OSS (`langflow`) from 1.0.0 through 1.10.1 is vulnerable to unauthenticated remote code execution through its MCP stdio launcher: the `DANGEROUS_ENV_VARS` blocklist in `src/lfx/base/mcp/util.py` omits `SHELLOPTS`, `BASHOPTS`, and `PS4`, so an unauthenticated attacker can inject those environment variables into a launched stdio MCP server process and achieve arbitrary code execution (CVE-2026-12940, CVSS 9.8). Fixed in 1.11.0; treat 1.0.0\u20131.10.1 (and unpinned) as exposed. Pre-1.0.0 releases predate the MCP stdio launcher and are not in the affected range.",
+      "incident_references": [],
+      "owasp_agentic_references": [
+        "ASI04"
+      ],
+      "owasp_mcp_references": [
+        "MCP10:2025"
+      ],
+      "remediation": "Upgrade `langflow` to >= 1.11.0 and pin it. Do not pass an attacker-influenced environment through to a launched stdio MCP server; blocklist (or, better, allowlist) the process environment, including `SHELLOPTS`/`BASHOPTS`/`PS4`.",
+      "rule_id": "AAK-MCP-LANGFLOW-CVE-2026-12940-001",
+      "sarif_name": "LangflowMcpStdioEnvInjectionRce",
+      "severity": "critical",
+      "title": "Langflow MCP stdio launcher env-var-injection RCE (1.0.0\u2013<1.11.0)"
+    },
+    {
       "adversa_references": [],
       "aicm_references": [
         "STA-02",

@@ -48,6 +48,8 @@ PINS = {
     "AAK-MCP-AWSAPIMCP-CVE-2026-16584-001": "high",
     # 2026-07-29..30 wave
     "AAK-MCP-FLYTO-CVE-2026-67425-001": "high",
+    # 2026-07-30..31 wave
+    "AAK-MCP-LANGFLOW-CVE-2026-12940-001": "critical",
 }
 
 
@@ -478,3 +480,33 @@ def test_flyto_unpinned_fires(tmp_path: Path) -> None:
 def test_flyto_uv_lock_resolved_below_floor_fires(tmp_path: Path) -> None:
     lock = '[[package]]\nname = "flyto-core"\nversion = "2.20.0"\n'
     assert "AAK-MCP-FLYTO-CVE-2026-67425-001" in _ids(tmp_path, "uv.lock", lock)
+
+
+# ---------------------------------------------------------------------------
+# 2026-07-30..31 wave — langflow CVE-2026-12940 (MCP stdio env-injection RCE)
+# ---------------------------------------------------------------------------
+
+
+def test_langflow_in_affected_range_fires(tmp_path: Path) -> None:
+    assert "AAK-MCP-LANGFLOW-CVE-2026-12940-001" in _ids(
+        tmp_path, "requirements.txt", "langflow==1.10.1\n"
+    )
+
+
+def test_langflow_patched_passes(tmp_path: Path) -> None:
+    assert "AAK-MCP-LANGFLOW-CVE-2026-12940-001" not in _ids(
+        tmp_path, "requirements.txt", "langflow==1.11.0\n"
+    )
+
+
+def test_langflow_before_introduced_passes(tmp_path: Path) -> None:
+    # Affected range starts at 1.0.0; a pre-MCP 0.x release predates the launcher.
+    assert "AAK-MCP-LANGFLOW-CVE-2026-12940-001" not in _ids(
+        tmp_path, "requirements.txt", "langflow==0.6.19\n"
+    )
+
+
+def test_langflow_unpinned_fires(tmp_path: Path) -> None:
+    assert "AAK-MCP-LANGFLOW-CVE-2026-12940-001" in _ids(
+        tmp_path, "requirements.txt", "langflow\n"
+    )

@@ -7,6 +7,40 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.3.64] - 2026-07-31
+
+### Changed — roadmap correctness: two stale "dead code" notes closed against reality
+
+- **The three RUGPULL rules were never dead.** `ROADMAP_2026.md` §2.1 claimed
+  `AAK-RUGPULL-001/002/003` are "defined but never fired by any scanner." In fact
+  they fire two ways: `scanners/pin_drift.py` (registered in `engine.py`) emits them
+  during a standard scan when a pinned tool's recorded digest changes, and
+  `pinning.verify_pins` emits them during `aak verify` — both covered by passing
+  tests (`test_pin_drift.py`, `test_pinning.py`, `test_pinning_mod.py`). Removed the
+  stale roadmap item; no rule change.
+- **TypeScript/Rust "taint analyzers" are honestly named already.** The modules were
+  renamed to `typescript_pattern_scan.py` / `rust_pattern_scan.py` back in v0.3.0
+  (with back-compat shims), and `engine.py` registers the pattern-scan names. Fixed
+  the last stale prose that still called them "taint analysis" (`CLAUDE.md`) and added
+  a `docs/rules.md` note stating plainly that real source→sink flow analysis is
+  Python-only while TS/JS and Rust are regex dangerous-sink pattern scanners. The
+  tree-sitter AST rewrite for TS/Rust remains open as issue #22. Rule IDs and the
+  `TAINT_ANALYSIS` category name are unchanged (public contract).
+
+### Changed — adjudicated 6 open cve-response issues (clears the release gate)
+
+- One new pin: `AAK-MCP-LANGFLOW-CVE-2026-12940-001` — IBM Langflow OSS `langflow`
+  1.0.0–1.10.1 (CVE-2026-12940, **CRITICAL 9.8**): the MCP stdio launcher's
+  `DANGEROUS_ENV_VARS` blocklist omits `SHELLOPTS`/`BASHOPTS`/`PS4` → unauthenticated
+  env-var-injection RCE. Fix floor `langflow` 1.11.0 (introduced 1.0.0), a pinnable
+  PyPI artifact. Rule count **272 → 273**, sync-driven across every surface.
+- Five dispositioned out of scope — all one upstream, Google `mcp-toolbox`
+  (`googleapis/genai-toolbox`): CVE-2026-14537 / 14538 / 14539 / 14540 / 14541. It is
+  a Go binary the pin scanner cannot read (no `go.mod` in its candidate set) plus
+  server-side runtime flaws invisible to a static client scan — same basis as the
+  earlier CVE-2026-15829. Each row names the reachable-posture rule (`AAK-MCP-001` /
+  `AAK-MCP-SSRF-001` / `AAK-OAUTH-007`). Full verdicts in `CHANGELOG.cves.md`.
+
 ## [0.3.63] - 2026-07-30
 
 ### Fixed — one canonical State-of-MCP corpus N (2,303) across every publication surface
