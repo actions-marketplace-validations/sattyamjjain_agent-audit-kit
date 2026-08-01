@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.3.65] - 2026-08-01
+
 ### Fixed — EU AI Act Article 15 application date corrected for the AI Omnibus
 
 - **The repo asserted in seven live places that Article 15 is "binding on
@@ -32,6 +34,28 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   <https://digital-strategy.ec.europa.eu/en/policies/regulatory-framework-ai> and
   the AI Omnibus Regulation itself
   <https://eur-lex.europa.eu/legal-content/EN/TXT/?uri=OJ:L_202601744>.
+
+### Changed — determinism evidence artifact re-cut at v0.3.65 and fenced against staling
+
+- **`benchmarks/determinism/RESULTS.md` still advertised "Generated … on AAK
+  v0.3.46 (231 rules)"** — 18 patch releases and 42 rules behind HEAD when caught —
+  with a digest that no longer reproduced on the shipped version, so a reader who
+  did the one thing the artifact invites (run it on the installed build) would
+  wrongly conclude reproducibility was broken. Re-cut it at v0.3.65 (273 rules) via
+  `python benchmarks/determinism/run.py --write`. The finding-set SHA-256 changed
+  (`199278f2…` → `189055d0…`) and findings-per-run went 9 → 10 **because the rule
+  set grew, not because determinism regressed** — every run in the batch still
+  produces one shared digest (0% variance); that invariant is unchanged.
+- **Added `test_published_results_md_matches_live_run`** — the freshness fence that
+  did not exist. It asserts the RESULTS.md header stamps
+  `v{__version__} ({RULE_COUNT} rules)` and that the published SHA-256 equals a live
+  `run_benchmark` digest, failing with the exact regenerate command. The artifact
+  drifted for 18 releases precisely because no test read it; it now cannot re-stale
+  without failing CI. This matters as third-party AI/cyber evaluation capacity comes
+  online (EU Action Plan on Cybersecurity and AI, 2026-07-07) and CRA reporting
+  obligations phase in (Regulation (EU) 2024/2847 — manufacturer reporting from
+  2026-09-11, full obligations 2027-12-11): published evidence digests that
+  re-verify against the shipped version are the whole differentiator.
 
 ## [0.3.64] - 2026-07-31
 
