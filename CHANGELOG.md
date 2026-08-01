@@ -24,9 +24,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Corrected the `AAK-EU-AI-ACT-ART15-LOCALE-001` finding evidence, its rule
   description and module docstring, the `compliance.py` Article-15 evidence
   subsection, and the README Legal Compliance row; regenerated `rules.json` via
-  `scripts/sync_rule_count.py` (no rule count change — still 273). Severity stays
-  INFO and the rule carries no OWASP-Agentic tag, so the Article-15 control status
-  is unchanged.
+  `scripts/sync_rule_count.py` (the date correction itself adds no rule). Severity
+  stays INFO and the rule carries no OWASP-Agentic tag, so the Article-15 control
+  status is unchanged.
 - The previously shipped 2 Aug 2026 date was **superseded by a regulation change,
   not invented** — the historical 0.3.x CHANGELOG entry that recorded it is left
   intact (rewriting shipped history would itself be a credibility defect). Sources:
@@ -41,7 +41,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   v0.3.46 (231 rules)"** — 18 patch releases and 42 rules behind HEAD when caught —
   with a digest that no longer reproduced on the shipped version, so a reader who
   did the one thing the artifact invites (run it on the installed build) would
-  wrongly conclude reproducibility was broken. Re-cut it at v0.3.65 (273 rules) via
+  wrongly conclude reproducibility was broken. Re-cut it at v0.3.65 (274 rules) via
   `python benchmarks/determinism/run.py --write`. The finding-set SHA-256 changed
   (`199278f2…` → `189055d0…`) and findings-per-run went 9 → 10 **because the rule
   set grew, not because determinism regressed** — every run in the batch still
@@ -56,6 +56,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   obligations phase in (Regulation (EU) 2024/2847 — manufacturer reporting from
   2026-09-11, full obligations 2027-12-11): published evidence digests that
   re-verify against the shipped version are the whole differentiator.
+
+### Security — pinned gemini-bridge tool-argument path traversal (CVE-2026-54785)
+
+- **New pin `AAK-MCP-GEMINIBRIDGE-CVE-2026-54785-001`** — `gemini-bridge` (PyPI)
+  1.0.0–1.3.0 reads any file path passed to `consult_gemini_with_files` (inline
+  mode) without confining it to the working directory, then forwards the contents
+  to the Gemini CLI → path-traversal file exfiltration (CVE-2026-54785, MEDIUM 6.2).
+  Fix floor `gemini-bridge` 1.3.1 (`introduced` 1.0.0; the npm `gemini-bridge` 0.1.x
+  is an unrelated package below the affected range). The NVD watcher filed this
+  (`cve-response` #519) while this release was being cut; it was adjudicated and
+  pinned here rather than deferred, so the release gate stays honest. Rule count
+  **273 → 274**. Full row in `CHANGELOG.cves.md`.
 
 ## [0.3.64] - 2026-07-31
 

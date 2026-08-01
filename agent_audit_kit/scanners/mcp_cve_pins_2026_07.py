@@ -204,6 +204,16 @@ _PINS: tuple[_Pin, ...] = (
     _Pin("AAK-MCP-LANGFLOW-CVE-2026-12940-001", "langflow", ("langflow",),
          (1, 11, 0), introduced=(1, 0, 0),
          fix_label="1.11.0 (affected 1.0.0–1.10.1)"),
+    # --- 2026-08-01 wave ---
+    # gemini-bridge (PyPI) 1.0.0–1.3.0: `consult_gemini_with_files` inline mode reads
+    # any file path in the `files` argument without confining it to the working
+    # directory, then forwards the contents to the Gemini CLI → path-traversal file
+    # exfiltration (CVE-2026-54785, MEDIUM 6.2). Fixed 1.3.1. The npm `gemini-bridge`
+    # (0.1.x) is an unrelated package below the affected range; the PyPI artifact is
+    # the one the CVE versions (1.0.0–1.3.1) match, so this pins the PyPI package.
+    _Pin("AAK-MCP-GEMINIBRIDGE-CVE-2026-54785-001", "gemini-bridge", ("gemini-bridge",),
+         (1, 3, 1), introduced=(1, 0, 0),
+         fix_label="1.3.1 (affected 1.0.0–1.3.0)"),
 )
 
 _CANDIDATE_NAMES = (

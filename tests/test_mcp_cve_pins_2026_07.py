@@ -50,6 +50,8 @@ PINS = {
     "AAK-MCP-FLYTO-CVE-2026-67425-001": "high",
     # 2026-07-30..31 wave
     "AAK-MCP-LANGFLOW-CVE-2026-12940-001": "critical",
+    # 2026-08-01 wave
+    "AAK-MCP-GEMINIBRIDGE-CVE-2026-54785-001": "medium",
 }
 
 
@@ -509,4 +511,28 @@ def test_langflow_before_introduced_passes(tmp_path: Path) -> None:
 def test_langflow_unpinned_fires(tmp_path: Path) -> None:
     assert "AAK-MCP-LANGFLOW-CVE-2026-12940-001" in _ids(
         tmp_path, "requirements.txt", "langflow\n"
+    )
+
+
+# ---------------------------------------------------------------------------
+# 2026-08-01 wave — gemini-bridge CVE-2026-54785 (tool-arg path traversal)
+# ---------------------------------------------------------------------------
+
+
+def test_gemini_bridge_in_affected_range_fires(tmp_path: Path) -> None:
+    assert "AAK-MCP-GEMINIBRIDGE-CVE-2026-54785-001" in _ids(
+        tmp_path, "requirements.txt", "gemini-bridge==1.3.0\n"
+    )
+
+
+def test_gemini_bridge_patched_passes(tmp_path: Path) -> None:
+    assert "AAK-MCP-GEMINIBRIDGE-CVE-2026-54785-001" not in _ids(
+        tmp_path, "requirements.txt", "gemini-bridge==1.3.1\n"
+    )
+
+
+def test_gemini_bridge_before_introduced_passes(tmp_path: Path) -> None:
+    # Affected range starts at 1.0.0; the unrelated 0.1.x line must not fire.
+    assert "AAK-MCP-GEMINIBRIDGE-CVE-2026-54785-001" not in _ids(
+        tmp_path, "requirements.txt", "gemini-bridge==0.1.1\n"
     )

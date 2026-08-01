@@ -168,6 +168,7 @@ _AICM_TAGS: dict[str, list[str]] = {
     "AAK-MCP-AWSAPIMCP-CVE-2026-16584-001": ["IAM-01", "AIS-07", "STA-08"],
     "AAK-MCP-FLYTO-CVE-2026-67425-001": ["DSP-17", "STA-08", "IVS-04"],
     "AAK-MCP-LANGFLOW-CVE-2026-12940-001": ["STA-08", "AIS-07", "IVS-04"],
+    "AAK-MCP-GEMINIBRIDGE-CVE-2026-54785-001": ["AIS-07", "STA-08"],
     "AAK-LMDEPLOY-VL-SSRF-001": ["IVS-04", "AIS-08"],
     "AAK-SPLUNK-MCP-TOKEN-LEAK-001": ["DSP-17", "LOG-06"],
     "AAK-MARKETPLACE-001": ["STA-10"],
@@ -6352,6 +6353,29 @@ _r(
     owasp_mcp_references=["MCP10:2025"],
     owasp_agentic_references=["ASI04"],
     adversa_references=["ADV-AUTH-01"],
+)
+
+
+_r(
+    "AAK-MCP-GEMINIBRIDGE-CVE-2026-54785-001",
+    "gemini-bridge tool-argument path traversal reads arbitrary files (1.0.0–<1.3.1)",
+    "The `gemini-bridge` MCP server (PyPI) from 1.0.0 through 1.3.0 has a path "
+    "traversal in `consult_gemini_with_files`: in inline mode it reads any file "
+    "path supplied in the `files` argument without confining it to the working "
+    "directory, then forwards the contents to the Gemini CLI — so a caller can "
+    "exfiltrate arbitrary files the server process can read (CVE-2026-54785, "
+    "CVSS 6.2). Fixed in 1.3.1; treat 1.0.0–1.3.0 (and unpinned) as exposed. The "
+    "npm `gemini-bridge` (0.1.x) is an unrelated package below the affected range.",
+    Severity.MEDIUM,
+    Category.SUPPLY_CHAIN,
+    "Upgrade `gemini-bridge` to >= 1.3.1 and pin it. Confine tool-supplied file "
+    "paths to the working directory (resolve and containment-check every path "
+    "before reading) rather than reading whatever the caller names.",
+    sarif_name="GeminiBridgePathTraversal",
+    cve_references=["CVE-2026-54785"],
+    owasp_mcp_references=["MCP04:2025"],
+    owasp_agentic_references=["ASI09"],
+    adversa_references=["ADV-SUPPLY-01"],
 )
 
 

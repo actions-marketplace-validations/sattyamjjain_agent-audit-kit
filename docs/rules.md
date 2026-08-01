@@ -6,7 +6,7 @@
 
 | Category | Rules |
 |----------|-------|
-| Supply Chain | 71 |
+| Supply Chain | 72 |
 | MCP Configuration | 62 |
 | Tool Poisoning | 29 |
 | Secret Exposure | 18 |
@@ -18,7 +18,7 @@
 | Transport Security | 12 |
 | Trust Boundaries | 12 |
 | MCP Server Card | 4 |
-| **Total** | **273** |
+| **Total** | **274** |
 
 <!-- END rules-summary -->
 

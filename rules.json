@@ -3216,6 +3216,33 @@
     },
     {
       "adversa_references": [
+        "ADV-SUPPLY-01"
+      ],
+      "aicm_references": [
+        "AIS-07",
+        "STA-08"
+      ],
+      "auto_fixable": false,
+      "category": "supply-chain",
+      "cve_references": [
+        "CVE-2026-54785"
+      ],
+      "description": "The `gemini-bridge` MCP server (PyPI) from 1.0.0 through 1.3.0 has a path traversal in `consult_gemini_with_files`: in inline mode it reads any file path supplied in the `files` argument without confining it to the working directory, then forwards the contents to the Gemini CLI \u2014 so a caller can exfiltrate arbitrary files the server process can read (CVE-2026-54785, CVSS 6.2). Fixed in 1.3.1; treat 1.0.0\u20131.3.0 (and unpinned) as exposed. The npm `gemini-bridge` (0.1.x) is an unrelated package below the affected range.",
+      "incident_references": [],
+      "owasp_agentic_references": [
+        "ASI09"
+      ],
+      "owasp_mcp_references": [
+        "MCP04:2025"
+      ],
+      "remediation": "Upgrade `gemini-bridge` to >= 1.3.1 and pin it. Confine tool-supplied file paths to the working directory (resolve and containment-check every path before reading) rather than reading whatever the caller names.",
+      "rule_id": "AAK-MCP-GEMINIBRIDGE-CVE-2026-54785-001",
+      "sarif_name": "GeminiBridgePathTraversal",
+      "severity": "medium",
+      "title": "gemini-bridge tool-argument path traversal reads arbitrary files (1.0.0\u2013<1.3.1)"
+    },
+    {
+      "adversa_references": [
         "ADV-SSRF-01"
       ],
       "aicm_references": [

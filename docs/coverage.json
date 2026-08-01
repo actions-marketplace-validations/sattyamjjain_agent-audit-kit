@@ -3021,6 +3021,26 @@
     {
       "category": "supply-chain",
       "cve_references": [
+        "CVE-2026-54785"
+      ],
+      "eu_ai_act": [
+        "Art. 13 - Transparency",
+        "Art. 14 - Human Oversight"
+      ],
+      "nsa_mcp_csi": [],
+      "owasp_agentic": [
+        "ASI09 Human-Agent Trust Exploitation"
+      ],
+      "owasp_mcp": [
+        "MCP04:2025 Command Injection"
+      ],
+      "rule_id": "AAK-MCP-GEMINIBRIDGE-CVE-2026-54785-001",
+      "severity": "medium",
+      "title": "gemini-bridge tool-argument path traversal reads arbitrary files (1.0.0\u2013<1.3.1)"
+    },
+    {
+      "category": "supply-chain",
+      "cve_references": [
         "CVE-2026-15643"
       ],
       "eu_ai_act": [
@@ -6076,7 +6096,7 @@
       "mcp-config": 62,
       "mcp-server-card": 4,
       "secret-exposure": 18,
-      "supply-chain": 71,
+      "supply-chain": 72,
       "taint-analysis": 13,
       "tool-poisoning": 29,
       "transport-security": 12,
@@ -6084,8 +6104,8 @@
     },
     "by_eu_ai_act": {
       "Art. 10 - Data Governance": 88,
-      "Art. 13 - Transparency": 29,
-      "Art. 14 - Human Oversight": 37,
+      "Art. 13 - Transparency": 30,
+      "Art. 14 - Human Oversight": 38,
       "Art. 15 - Robustness & Security": 159,
       "Art. 9 - Risk Management": 86
     },
@@ -6109,14 +6129,14 @@
       "ASI06": 35,
       "ASI07": 9,
       "ASI08": 5,
-      "ASI09": 17,
+      "ASI09": 18,
       "ASI10": 20
     },
     "by_owasp_mcp": {
       "MCP01:2025": 67,
       "MCP02:2025": 13,
       "MCP03:2025": 27,
-      "MCP04:2025": 27,
+      "MCP04:2025": 28,
       "MCP05:2025": 51,
       "MCP06:2025": 13,
       "MCP07:2025": 30,
@@ -6129,10 +6149,10 @@
       "high": 125,
       "info": 5,
       "low": 8,
-      "medium": 70
+      "medium": 71
     },
-    "total_cves_covered": 115,
-    "total_rules": 273
+    "total_cves_covered": 116,
+    "total_rules": 274
   },
   "tool": "agent-audit-kit"
 }

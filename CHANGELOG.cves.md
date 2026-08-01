@@ -16,6 +16,16 @@ open.
 > issue. The per-CVE latency figures in the tables are **measurements recorded at
 > the time**, kept as dated facts, not a standing promise.
 
+## 2026-08-01 (v0.3.65)
+
+One `cve-response` issue adjudicated for the v0.3.65 cut — filed by the NVD watcher
+while the release was being tagged, and pinned (not deferred) so the release gate
+stayed honest. Verified against the NVD record before a verdict.
+
+| CVE | Reference | AAK rule / disposition | Triaged |
+|---|---|---|---|
+| CVE-2026-54785 (gemini-bridge `1.0.0`–`1.3.0` — `consult_gemini_with_files` inline mode reads any file path in the `files` argument without confining it to the working directory, then forwards the contents to the Gemini CLI → path-traversal file exfiltration; MEDIUM 6.2) | [NVD](https://nvd.nist.gov/vuln/detail/CVE-2026-54785) | **Pinned** `AAK-MCP-GEMINIBRIDGE-CVE-2026-54785-001` — fix floor `gemini-bridge` 1.3.1, `introduced` 1.0.0. The PyPI `gemini-bridge` (versions 1.0.0–1.3.1) is the artifact the CVE range matches and is resolvable from `requirements.txt`/`pyproject.toml`/`uv.lock`; the npm `gemini-bridge` (0.1.x) is an unrelated package below the affected range. (#519) | 2026-08-01 |
+
 ## 2026-07-31 (v0.3.64)
 
 Six `cve-response` issues adjudicated for the v0.3.64 cut — one new pin
