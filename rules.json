@@ -933,7 +933,7 @@
       "auto_fixable": false,
       "category": "legal-compliance",
       "cve_references": [],
-      "description": "An agent config declares two or more locales (or `multilingual: true`) for a user-facing surface, but the repository's eval / test fixtures reference only a single language. Cross-lingual robustness is a required-evidence axis under EU AI Act Article 15 (binding for high-risk systems on 2026-08-02), and Ford et al. 2026 (arXiv:2605.23157) document that single-language safety eval misses language-specific jailbreak / refusal-regression vectors that scale non-uniformly across languages.",
+      "description": "An agent config declares two or more locales (or `multilingual: true`) for a user-facing surface, but the repository's eval / test fixtures reference only a single language. Cross-lingual robustness is a required-evidence axis under EU AI Act Article 15 (binding for Annex III high-risk use cases on 2027-12-02 and for Annex I product-embedded high-risk systems on 2028-08-02), and Ford et al. 2026 (arXiv:2605.23157) document that single-language safety eval misses language-specific jailbreak / refusal-regression vectors that scale non-uniformly across languages.",
       "incident_references": [],
       "owasp_agentic_references": [],
       "owasp_mcp_references": [],

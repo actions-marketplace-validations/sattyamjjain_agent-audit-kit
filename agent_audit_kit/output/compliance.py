@@ -288,8 +288,9 @@ def _get_rules_for_asi(asi_code: str) -> list[str]:
 # ---------------------------------------------------------------------------
 # EU AI Act Article 15 evidence subsection
 #
-# Article 15 of Regulation (EU) 2024/1689 (binding for high-risk AI systems
-# on 2026-08-02) requires "an appropriate level of accuracy, robustness and
+# Article 15 of Regulation (EU) 2024/1689 (binding for Annex III high-risk AI
+# systems on 2027-12-02; Annex I 2028-08-02, per the AI Omnibus Regulation)
+# requires "an appropriate level of accuracy, robustness and
 # cybersecurity throughout the lifecycle". The default control row above
 # only summarises PASS/FAIL via OWASP-Agentic ASI mapping; this subsection
 # adds itemised evidence lines that auditors expect to see in an Article-15

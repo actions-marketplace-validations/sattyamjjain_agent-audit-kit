@@ -3052,9 +3052,10 @@ _r(
 # achieve an "appropriate level of accuracy, robustness and cybersecurity
 # throughout their lifecycle" — robustness explicitly covering "errors,
 # faults or inconsistencies that may occur within the system or the
-# environment in which the system operates". The Article-15 obligations
-# become binding for high-risk AI systems on 2026-08-02 under the staged
-# Regulation timetable.
+# environment in which the system operates". Under the AI Omnibus Regulation
+# (OJ L_202601744) the Article-15 obligations are binding for Annex III
+# high-risk use cases on 2027-12-02 and for Annex I product-embedded high-risk
+# systems on 2028-08-02.
 #
 # Cross-lingual robustness is a documented blind spot in current safety
 # stacks: Ford et al. 2026 (arXiv:2605.23157) "Same Model, Different
@@ -3080,7 +3081,8 @@ _r(
     "for a user-facing surface, but the repository's eval / test fixtures "
     "reference only a single language. Cross-lingual robustness is a "
     "required-evidence axis under EU AI Act Article 15 (binding for "
-    "high-risk systems on 2026-08-02), and Ford et al. 2026 "
+    "Annex III high-risk use cases on 2027-12-02 and for Annex I "
+    "product-embedded high-risk systems on 2028-08-02), and Ford et al. 2026 "
     "(arXiv:2605.23157) document that single-language safety eval misses "
     "language-specific jailbreak / refusal-regression vectors that scale "
     "non-uniformly across languages.",

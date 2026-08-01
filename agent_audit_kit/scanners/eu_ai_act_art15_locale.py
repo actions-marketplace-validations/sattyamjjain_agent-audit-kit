@@ -1,11 +1,15 @@
 """AAK-EU-AI-ACT-ART15-LOCALE-001 — multilingual-eval coverage evidence.
 
-The 2026-08-02 EU AI Act high-risk obligations (Regulation (EU) 2024/1689,
-Article 15) require an "appropriate level of accuracy, robustness and
-cybersecurity" — robustness explicitly covering "errors, faults or
-inconsistencies that may occur within the system or the environment". For
-multilingual user-facing AI systems, that means demonstrating robustness
-across each language the system claims to serve.
+The EU AI Act high-risk obligations (Regulation (EU) 2024/1689, Article 15,
+as amended by the AI Omnibus Regulation, OJ L_202601744, in force July 2026)
+require an "appropriate level of accuracy, robustness and cybersecurity" —
+robustness explicitly covering "errors, faults or inconsistencies that may
+occur within the system or the environment". Under the AI Omnibus these
+obligations are binding for Annex III high-risk use cases on 2027-12-02 and
+for Annex I product-embedded high-risk systems on 2028-08-02; the original
+2 August 2026 application date was superseded by that regulation change (not
+removed by us). For multilingual user-facing AI systems, that means
+demonstrating robustness across each language the system claims to serve.
 
 Ford et al. 2026 (arXiv:2605.23157) documents the gap empirically: a
 363-prompt red-team across four frontier MLLMs in US English and Mexican
@@ -323,7 +327,7 @@ def scan(project_root: Path) -> tuple[list[Finding], set[str]]:
             (
                 f"Agent declares locales=[{declared_sorted}] for a user-facing "
                 f"surface; eval/test fixtures cover locales=[{covered_sorted}]. "
-                f"EU AI Act Article 15 (binding 2026-08-02) requires per-language "
+                f"EU AI Act Article 15 (Annex III high-risk: binding 2027-12-02; Annex I: 2028-08-02) requires per-language "
                 f"robustness evidence."
             ),
             line_number=1,

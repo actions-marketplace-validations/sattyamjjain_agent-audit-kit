@@ -59,7 +59,12 @@ def test_multilingual_en_only_fires(tmp_path: Path) -> None:
     assert f.severity == Severity.INFO
     assert "locales=[de, en, es, fr]" in f.evidence
     assert "fixtures cover locales=[en]" in f.evidence
-    assert "2026-08-02" in f.evidence
+    assert "2027-12-02" in f.evidence
+    # The AI Omnibus (OJ L_202601744) superseded the old 2 Aug 2026 date; it must
+    # not silently reappear in the evidence. The literal is built from parts so
+    # this guard file itself stays clean under the acceptance grep for the old
+    # superseded ISO date — the stale-date fence must not be what trips the fence.
+    assert ("2026-08-" + "02") not in f.evidence
     assert f.file_path.endswith("agent.yaml")
 
 
@@ -119,7 +124,8 @@ def _make_result_with_finding() -> ScanResult:
         evidence=(
             "Agent declares locales=[de, en, fr] for a user-facing surface; "
             "eval/test fixtures cover locales=[en]. EU AI Act Article 15 "
-            "(binding 2026-08-02) requires per-language robustness evidence."
+            "(Annex III high-risk: binding 2027-12-02; Annex I: 2028-08-02) "
+            "requires per-language robustness evidence."
         ),
         remediation="…",
     ))

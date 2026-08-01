@@ -7,6 +7,32 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed — EU AI Act Article 15 application date corrected for the AI Omnibus
+
+- **The repo asserted in seven live places that Article 15 is "binding on
+  2026-08-02"** — the original Regulation (EU) 2024/1689 Article 113 staging. The
+  **AI Omnibus Regulation** (OJ L_202601744, in force July 2026) moved those dates:
+  **Annex III high-risk use cases to 2027-12-02** and **Annex I product-embedded
+  high-risk systems to 2028-08-02**. Per the European Commission's AI Act page
+  (updated 2026-07-27): *"the rules for high-risk AI systems embedded into
+  regulated products (Annex I) have an extended transition period until 2 August
+  2028 and the rules for high-risk use cases in certain sensitive areas (Annex III)
+  have been extended to 2 December 2027 as a result of the political agreement on
+  the proposal to simplify the AI Act – 'AI Omnibus'."*
+- Corrected the `AAK-EU-AI-ACT-ART15-LOCALE-001` finding evidence, its rule
+  description and module docstring, the `compliance.py` Article-15 evidence
+  subsection, and the README Legal Compliance row; regenerated `rules.json` via
+  `scripts/sync_rule_count.py` (no rule count change — still 273). Severity stays
+  INFO and the rule carries no OWASP-Agentic tag, so the Article-15 control status
+  is unchanged.
+- The previously shipped 2 Aug 2026 date was **superseded by a regulation change,
+  not invented** — the historical 0.3.x CHANGELOG entry that recorded it is left
+  intact (rewriting shipped history would itself be a credibility defect). Sources:
+  the Commission AI Act page
+  <https://digital-strategy.ec.europa.eu/en/policies/regulatory-framework-ai> and
+  the AI Omnibus Regulation itself
+  <https://eur-lex.europa.eu/legal-content/EN/TXT/?uri=OJ:L_202601744>.
+
 ## [0.3.64] - 2026-07-31
 
 ### Changed — roadmap correctness: two stale "dead code" notes closed against reality
