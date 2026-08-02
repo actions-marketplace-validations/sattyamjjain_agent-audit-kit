@@ -2712,7 +2712,9 @@
       "category": "supply-chain",
       "cve_references": [
         "CVE-2026-53512",
-        "CVE-2026-53518"
+        "CVE-2026-53518",
+        "CVE-2026-67333",
+        "CVE-2026-67336"
       ],
       "eu_ai_act": [
         "Art. 15 - Robustness & Security"
@@ -2730,7 +2732,7 @@
       ],
       "rule_id": "AAK-MCP-BETTERAUTH-CVE-2026-53512-001",
       "severity": "high",
-      "title": "Better Auth OAuth/MCP token-endpoint auth bypass + code replay (< 1.6.11)"
+      "title": "Better Auth OAuth/MCP plugin flaw cluster \u2014 token bypass, code replay, weak crypto, open redirect (< 1.6.13)"
     },
     {
       "category": "mcp-server-card",
@@ -6151,7 +6153,7 @@
       "low": 8,
       "medium": 71
     },
-    "total_cves_covered": 116,
+    "total_cves_covered": 118,
     "total_rules": 274
   },
   "tool": "agent-audit-kit"

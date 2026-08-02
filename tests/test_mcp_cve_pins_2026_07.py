@@ -227,13 +227,23 @@ def test_betterauth_scoped_provider_below_floor_fires(tmp_path: Path) -> None:
 
 
 def test_betterauth_patched_passes(tmp_path: Path) -> None:
-    content = '{"dependencies": {"better-auth": "1.6.11"}}'
+    # Floor raised to 1.6.13 for CVE-2026-67333; 1.6.13 is the first clear release.
+    content = '{"dependencies": {"better-auth": "1.6.13"}}'
     assert "AAK-MCP-BETTERAUTH-CVE-2026-53512-001" not in _ids(tmp_path, "package.json", content)
 
 
-def test_betterauth_rule_cites_both_cves() -> None:
+def test_betterauth_1612_fires_for_67333(tmp_path: Path) -> None:
+    # 1.6.11/1.6.12 fixed the earlier flaws but are still exposed to CVE-2026-67333
+    # (redirect_uri scheme not validated; fixed 1.6.13), so the raised floor fires.
+    content = '{"dependencies": {"better-auth": "1.6.12"}}'
+    assert "AAK-MCP-BETTERAUTH-CVE-2026-53512-001" in _ids(tmp_path, "package.json", content)
+
+
+def test_betterauth_rule_cites_all_cves() -> None:
     rule = RULES["AAK-MCP-BETTERAUTH-CVE-2026-53512-001"]
-    assert set(rule.cve_references) == {"CVE-2026-53512", "CVE-2026-53518"}
+    assert set(rule.cve_references) == {
+        "CVE-2026-53512", "CVE-2026-53518", "CVE-2026-67333", "CVE-2026-67336",
+    }
 
 
 # --- 2026-07-15..17 wave -----------------------------------------------------

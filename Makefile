@@ -22,7 +22,7 @@ report:
 
 ## corpus: refresh the MCP Registry corpus manifest (the one network step)
 corpus:
-	python $(RESEARCH)/fetch_registry.py --target 700
+	python $(RESEARCH)/fetch_registry.py --target 5000
 
 ## report-check: fail if results.json is not byte-identical to a fresh run (drift guard)
 report-check:

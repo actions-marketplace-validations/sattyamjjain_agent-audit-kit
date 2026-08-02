@@ -88,6 +88,14 @@ python research/state-of-mcp-2026/run_report.py \
 Refreshing the corpus itself (the one network step) is separate:
 `python research/state-of-mcp-2026/fetch_registry.py --target 5000`.
 
+At the published run this walk collected **1,641 distinct latest-version servers**
+(`corpus/registry-manifest.json` → `distinct_latest_servers`, `fetched_at`
+**2026-07-26**). `--target 5000` is deliberately larger than that count so the walk
+runs to cursor-exhaustion rather than stopping early; the MCP Registry grows over
+time, so a later rerun that returns a larger N is registry growth, not a broken
+command. (`--target` is kept identical across the Makefile, the fetcher default, and
+this document by `tests/test_corpus_target_consistency.py`.)
+
 ## Grade distribution (score calibration)
 
 | Grade | Configs | Share |

@@ -12,7 +12,7 @@ cached manifest offline and deterministically, so every number in REPORT.md is
 reproducible from the committed manifest without hitting the network.
 
 Usage:
-    python research/state-of-mcp-2026/fetch_registry.py --target 700
+    python research/state-of-mcp-2026/fetch_registry.py --target 5000
 """
 
 from __future__ import annotations
@@ -163,8 +163,13 @@ def fetch(target: int, page_size: int = 100, max_pages: int = 40, sleep: float =
 
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--target", type=int, default=700,
-                        help="Stop once this many distinct latest servers are collected.")
+    parser.add_argument("--target", type=int, default=5000,
+                        help="Stop once this many distinct latest servers are collected. "
+                             "The canonical value is 5000 — large enough to walk the whole "
+                             "registry to cursor-exhaustion (the published run collected "
+                             "1641 distinct latest servers on 2026-07-26) rather than stop "
+                             "early. Kept in sync with the Makefile + the docs by "
+                             "tests/test_corpus_target_consistency.py.")
     parser.add_argument("--fetched-at", default=None,
                         help="Override the fetch date stamp (ISO, for reproducibility).")
     args = parser.parse_args()

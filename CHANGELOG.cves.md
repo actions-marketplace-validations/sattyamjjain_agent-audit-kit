@@ -16,6 +16,19 @@ open.
 > issue. The per-CVE latency figures in the tables are **measurements recorded at
 > the time**, kept as dated facts, not a standing promise.
 
+## 2026-08-02 (v0.3.66)
+
+Three `cve-response` issues adjudicated for the v0.3.66 cut — one out of scope, and
+two `better-auth` CVEs folded into the existing `better-auth` pin (its floor raised
+1.6.11 → 1.6.13). No new rule. Each was verified against the NVD record (not the
+issue title) before a verdict.
+
+| CVE | Reference | AAK rule / disposition | Triaged |
+|---|---|---|---|
+| CVE-2026-15988 (AI Engine – The Chatbot, AI Framework & MCP for WordPress plugin ≤ 3.6.5 — CSRF via missing/incorrect nonce validation on `reauth_for_authorize`; HIGH 8.8) | [NVD](https://nvd.nist.gov/vuln/detail/CVE-2026-15988) | **Out of scope** — a WordPress/PHP plugin, an ecosystem the pin detector does not read (no PyPI/npm artifact, no version in a client `.mcp.json`/manifest), and a server-side CSRF on a web endpoint with no config-detectable signature. Same basis as the prior WordPress-plugin dispositions (CVE-2026-15015 #490, CVE-2026-9810). Upgrade the plugin to ≥ 3.6.6. (#523) | 2026-08-02 |
+| CVE-2026-67333 (`better-auth` < 1.6.13 — the deprecated `oidc-provider` and `mcp` plugins do not validate the scheme of registered `redirect_uris`, so a `javascript:` redirect URI executes in the authorization-server origin → session theft / account takeover; HIGH 7.2 / CVSS 4.0 5.1) | [NVD](https://nvd.nist.gov/vuln/detail/CVE-2026-67333) | **Pinned** — folded into the existing `AAK-MCP-BETTERAUTH-CVE-2026-53512-001` pin, whose floor is **raised 1.6.11 → 1.6.13** (1.6.11/1.6.12 fixed the earlier flaws but are still exposed to this one) and CVE added to `cve_references`; regression test `test_betterauth_1612_fires_for_67333`. The 1.7.0-beta.0–beta.3 pre-release gap (fixed 1.7.0-beta.4) is outside the stable version-tuple pin's scope. (#524) | 2026-08-02 |
+| CVE-2026-67336 (`better-auth` < 1.6.11 — insecure cryptographic defaults in the `oidcProvider` and `mcp` plugins advertise the `none` algorithm and accept plain PKCE by default; CRITICAL CVSS 4.0 9.4 / HIGH 8.7) | [NVD](https://nvd.nist.gov/vuln/detail/CVE-2026-67336) | **Class-covered** by the existing `AAK-MCP-BETTERAUTH-CVE-2026-53512-001` pin — fixed 1.6.11, already ⊆ the raised 1.6.13 floor; CVE added to the rule's `cve_references`. No separate rule. (#525) | 2026-08-02 |
+
 ## 2026-08-01 (v0.3.65)
 
 One `cve-response` issue adjudicated for the v0.3.65 cut — filed by the NVD watcher

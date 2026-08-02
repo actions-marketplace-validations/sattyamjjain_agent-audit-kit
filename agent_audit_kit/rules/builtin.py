@@ -5967,23 +5967,29 @@ _r(
 
 _r(
     "AAK-MCP-BETTERAUTH-CVE-2026-53512-001",
-    "Better Auth OAuth/MCP token-endpoint auth bypass + code replay (< 1.6.11)",
-    "Better Auth before 1.6.11 ships two token-endpoint flaws reachable through "
-    "the `mcp` and legacy `oidcProvider` plugins (and `@better-auth/oauth-provider` "
-    "from 1.6.0): the `refresh_token` grant authenticates only possession of the "
+    "Better Auth OAuth/MCP plugin flaw cluster — token bypass, code replay, weak crypto, open redirect (< 1.6.13)",
+    "Better Auth before 1.6.13 ships a cluster of OAuth flaws reachable through the "
+    "`mcp` and legacy `oidcProvider` plugins (and `@better-auth/oauth-provider` from "
+    "1.6.0): the `refresh_token` grant authenticates only possession of the "
     "refreshToken row + matching `client_id` and never verifies the confidential "
     "client's `client_secret`, letting an attacker with a refresh token mint "
-    "access/refresh tokens (CVE-2026-53512); and the `authorization_code` grant "
-    "redeems a single-use code via a non-atomic find-then-delete, so two concurrent "
-    "requests both mint tokens (code replay, CVE-2026-53518). Treat < 1.6.11 (and "
+    "access/refresh tokens (CVE-2026-53512); the `authorization_code` grant redeems a "
+    "single-use code via a non-atomic find-then-delete, so two concurrent requests "
+    "both mint tokens (code replay, CVE-2026-53518); insecure cryptographic defaults "
+    "advertise the `none` algorithm and accept plain PKCE by default (CVE-2026-67336, "
+    "fixed 1.6.11); and registered `redirect_uris` are not scheme-validated, so a "
+    "`javascript:` redirect URI executes in the authorization-server origin → session "
+    "theft / account takeover (CVE-2026-67333, fixed 1.6.13). Treat < 1.6.13 (and "
     "unpinned) as exposed.",
     Severity.HIGH,
     Category.SUPPLY_CHAIN,
-    "Upgrade `better-auth` / `@better-auth/oauth-provider` to >= 1.6.11 and pin it. "
-    "Verify `client_secret` on confidential-client refresh grants and redeem "
-    "authorization codes atomically (single-use, delete-on-read under a lock).",
+    "Upgrade `better-auth` / `@better-auth/oauth-provider` to >= 1.6.13 and pin it. "
+    "Verify `client_secret` on confidential-client refresh grants, redeem "
+    "authorization codes atomically (single-use, delete-on-read under a lock), reject "
+    "non-http(s) `redirect_uri` schemes, and disable the `none` algorithm / plain "
+    "PKCE in the OIDC/MCP provider config.",
     sarif_name="BetterAuthOauthTokenEndpointBypass",
-    cve_references=["CVE-2026-53512", "CVE-2026-53518"],
+    cve_references=["CVE-2026-53512", "CVE-2026-53518", "CVE-2026-67333", "CVE-2026-67336"],
     owasp_mcp_references=["MCP01:2025"],
     owasp_agentic_references=["ASI03"],
     adversa_references=["ADV-AUTH-01"],

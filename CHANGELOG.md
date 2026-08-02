@@ -7,6 +7,31 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed — corpus refresh `--target` reconciled so the documented command reproduces the published N
+
+- **The State-of-MCP report's one network step quoted three different targets.**
+  `PREVALENCE.md` and `REPORT.md` documented `fetch_registry.py --target 5000`, but the
+  `Makefile` `corpus` target and the argparse default both said `--target 700`. Since
+  `fetch()` stops at `len(records) >= target or not cursor`, anyone running the
+  documented `make corpus` collected ~700 of the registry's 1,641 distinct latest
+  servers and reproduced a different headline N — in a report whose entire pitch is
+  reproducibility. Reconciled all four surfaces to the canonical **`--target 5000`**
+  (large enough to walk the whole registry to cursor-exhaustion; the published run
+  collected **1,641 distinct latest servers on 2026-07-26**). Added
+  `tests/test_corpus_target_consistency.py` — asserts the Makefile, the argparse
+  default, and both docs agree, and that the target exceeds the committed manifest's
+  `distinct_latest_servers` so it can't stop early — and a dated provenance sentence in
+  both docs so a reader who reruns and gets a larger N knows it's registry growth, not
+  a broken command.
+
+### Changed — cve-response queue adjudicated (#523, #524, #525)
+
+- #523 (CVE-2026-15988, AI-Engine-for-WordPress CSRF) dispositioned **out of scope** —
+  a WordPress/PHP plugin the pin detector doesn't read. #524 (CVE-2026-67333,
+  `redirect_uri` scheme not validated) and #525 (CVE-2026-67336, weak crypto defaults)
+  **folded into the existing `better-auth` pin**, whose floor is raised 1.6.11 → 1.6.13.
+  No new rule (count stays 274); full rows in `CHANGELOG.cves.md`.
+
 ## [0.3.65] - 2026-08-01
 
 ### Fixed — EU AI Act Article 15 application date corrected for the AI Omnibus

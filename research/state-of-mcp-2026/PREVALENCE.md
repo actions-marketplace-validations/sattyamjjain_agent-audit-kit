@@ -143,6 +143,12 @@ make report          # refreshes results.json from the committed manifest, offli
 python research/state-of-mcp-2026/fetch_registry.py --target 5000
 ```
 
+At the published run the registry walk collected **1,641 distinct latest-version
+servers** (`corpus/registry-manifest.json` → `distinct_latest_servers`, `fetched_at`
+**2026-07-26**). `--target 5000` is deliberately larger than that so the walk runs to
+cursor-exhaustion rather than stopping early; the MCP Registry grows over time, so a
+later rerun that returns a larger N is registry growth, not a broken command.
+
 Scan your own in 30s, fully offline: `pip install agent-audit-kit && agent-audit-kit scan .`
 
 ---

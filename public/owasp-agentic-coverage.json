@@ -1,8 +1,8 @@
 {
   "schema_version": "1",
-  "last_updated": "2026-07-31T10:06:29Z",
-  "aak_version": "0.3.64",
-  "rule_count": 273,
+  "last_updated": "2026-08-02T09:40:05Z",
+  "aak_version": "0.3.66",
+  "rule_count": 274,
   "coverage": [
     {
       "asi_id": "ASI01",
@@ -748,7 +748,9 @@
           "severity": "high",
           "cve_references": [
             "CVE-2026-53512",
-            "CVE-2026-53518"
+            "CVE-2026-53518",
+            "CVE-2026-67333",
+            "CVE-2026-67336"
           ],
           "aicm_references": [
             "IAM-01",
@@ -2336,7 +2338,7 @@
     {
       "asi_id": "ASI09",
       "title": "Resource Abuse",
-      "rule_density": 17,
+      "rule_density": 18,
       "rules": [
         {
           "id": "AAK-CREWAI-CHAIN-2026-04-001",
@@ -2428,6 +2430,17 @@
           "aicm_references": [
             "AIS-07",
             "DSP-17",
+            "STA-08"
+          ]
+        },
+        {
+          "id": "AAK-MCP-GEMINIBRIDGE-CVE-2026-54785-001",
+          "severity": "medium",
+          "cve_references": [
+            "CVE-2026-54785"
+          ],
+          "aicm_references": [
+            "AIS-07",
             "STA-08"
           ]
         },

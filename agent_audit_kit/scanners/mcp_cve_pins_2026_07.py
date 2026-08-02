@@ -23,7 +23,7 @@ available) before shipping:
   - @penpot/mcp                    >= 2.15.0  (CVE-2026-45805)
   - openclaw                       >= 2026.6.6 (CVE-2026-62195; NVD 2026.5.20..<2026.6.6)
   - repomix                        >= 1.14.1  (CVE-2026-49988)
-  - better-auth / @better-auth/oauth-provider >= 1.6.11 (CVE-2026-53512, CVE-2026-53518)
+  - better-auth / @better-auth/oauth-provider >= 1.6.13 (CVE-2026-53512, CVE-2026-53518, CVE-2026-67333, CVE-2026-67336)
   - mcp (MCP Python SDK)            >= 1.28.1  (CVE-2026-52869, CVE-2026-52870, CVE-2026-59950)
   - 9router                        >= 0.5.2   (CVE-2026-46339, CVE-2026-49353, CVE-2026-62312, CVE-2026-63732)
   - awslabs.aws-api-mcp-server     >= 1.3.47  (CVE-2026-16584; affected 0.2.13–1.3.46)
@@ -137,8 +137,11 @@ _PINS: tuple[_Pin, ...] = (
          introduced=(2026, 5, 20), fix_label="2026.6.6 (affected 2026.5.20–2026.6.5)"),
     _Pin("AAK-MCP-REPOMIX-CVE-2026-49988-001", "repomix", ("repomix",), (1, 14, 1),
          fix_label="1.14.1"),
+    # Floor raised 1.6.11 -> 1.6.13 for CVE-2026-67333 (redirect_uri scheme not
+    # validated; fixed 1.6.13), which 1.6.11/1.6.12 are still exposed to. Also cites
+    # CVE-2026-67336 (weak crypto defaults, fixed 1.6.11 — already ⊆ this floor).
     _Pin("AAK-MCP-BETTERAUTH-CVE-2026-53512-001", "better-auth",
-         ("better-auth", "@better-auth/oauth-provider"), (1, 6, 11), fix_label="1.6.11"),
+         ("better-auth", "@better-auth/oauth-provider"), (1, 6, 13), fix_label="1.6.13"),
     # --- 2026-07-15..17 wave ---
     _Pin("AAK-MCP-SDK-CVE-2026-52869-001", "mcp (MCP Python SDK)", ("mcp",), (1, 28, 1),
          fix_label="1.28.1", regexes=(_MCP_SDK_RE,)),
