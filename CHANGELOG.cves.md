@@ -16,6 +16,17 @@ open.
 > issue. The per-CVE latency figures in the tables are **measurements recorded at
 > the time**, kept as dated facts, not a standing promise.
 
+## 2026-08-03 (v0.3.67)
+
+Two `cve-response` issues adjudicated for the v0.3.67 cut — both the same upstream
+(ArcadeDB < 26.7.3, vendor ArcadeData), both out of scope. No new rule. Each was
+verified against the NVD record (not the issue title) before a verdict.
+
+| CVE | Reference | AAK rule / disposition | Triaged |
+|---|---|---|---|
+| CVE-2026-68578 (ArcadeDB < 26.7.3 — the MCP HTTP transport fails to bind the authenticated principal, so all engine permission checks silently pass as no-ops → authorization bypass; HIGH 7.5) | [NVD](https://nvd.nist.gov/vuln/detail/CVE-2026-68578) | **Out of scope** — ArcadeDB is a Java multi-model database distributed as a JAR / Docker image, not a PyPI/npm artifact the pin detector reads (no Maven/Gradle/`go.mod` in its candidate set), and the auth-principal-binding failure is a server-side runtime property with no config-detectable signature. Same basis as SiYuan CVE-2026-66012 (#499). Upgrade to ≥ 26.7.3; the reachable exposed / unauthenticated remote MCP endpoint posture is flagged by `AAK-MCP-001`. (#528) | 2026-08-03 |
+| CVE-2026-67357 (ArcadeDB < 26.7.3 — the MCP `get_server_settings` tool leaks `arcadedb.ha.clusterToken` in cleartext → information disclosure; HIGH 7.5) | [NVD](https://nvd.nist.gov/vuln/detail/CVE-2026-67357) | **Out of scope** — same Java/Docker ecosystem the pin detector does not read, and a server-side information disclosure through an MCP tool response, not a version pinned in a client config. Upgrade to ≥ 26.7.3. (#527) | 2026-08-03 |
+
 ## 2026-08-02 (v0.3.66)
 
 Three `cve-response` issues adjudicated for the v0.3.66 cut — one out of scope, and

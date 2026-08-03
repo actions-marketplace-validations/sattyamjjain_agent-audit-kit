@@ -7,6 +7,30 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- **The GitHub repo description said 271 rules while the code said 274.** The repo
+  description is the highest-traffic surface this project has, and it was the one
+  place the rule count was never guarded. It is now rendered from `RULE_COUNT`
+  through `.github/repo-metadata.yml` and `scripts/render_repo_metadata.py`, with
+  `tests/test_repo_metadata_matches_code.py` failing the build if the rendered string
+  ever carries a different number. GitHub's description is not writable from a CI
+  token, so the maintainer step is a paste into repo Settings, now written down in
+  CONTRIBUTING.md ("Release checklist") rather than remembered.
+- **The State-of-MCP corpus size was a hand-reconciled string in five places.**
+  `2,303` is now `CORPUS_N` in `agent_audit_kit/__init__.py`, measured from
+  `results.json`, with `tests/test_corpus_n_single_source.py` tying every published
+  occurrence back to it (dated/frozen artifacts excluded), so the next corpus growth
+  cannot leave a stale number behind.
+
+### Changed
+
+- Adjudicated CVE-2026-68578 and CVE-2026-67357 into the public CVE-to-rule ledger
+  (both ArcadeDB < 26.7.3, dispositioned out of scope: a Java/Docker database the pin
+  detector does not read; server-side MCP-server flaws). Closes #528 and #527.
+
+## [0.3.66] - 2026-08-02
+
 ### Fixed — corpus refresh `--target` reconciled so the documented command reproduces the published N
 
 - **The State-of-MCP report's one network step quoted three different targets.**
