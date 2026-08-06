@@ -1444,7 +1444,10 @@
       "adversa_references": [
         "ADV-RCE-04"
       ],
-      "aicm_references": [],
+      "aicm_references": [
+        "STA-08",
+        "IVS-04"
+      ],
       "auto_fixable": false,
       "category": "hook-injection",
       "cve_references": [],
@@ -1466,7 +1469,10 @@
       "adversa_references": [
         "ADV-RCE-05"
       ],
-      "aicm_references": [],
+      "aicm_references": [
+        "STA-08",
+        "IVS-04"
+      ],
       "auto_fixable": false,
       "category": "hook-injection",
       "cve_references": [],
@@ -1488,7 +1494,10 @@
       "adversa_references": [
         "ADV-RCE-06"
       ],
-      "aicm_references": [],
+      "aicm_references": [
+        "STA-08",
+        "IVS-04"
+      ],
       "auto_fixable": false,
       "category": "hook-injection",
       "cve_references": [],
@@ -1508,7 +1517,9 @@
     },
     {
       "adversa_references": [],
-      "aicm_references": [],
+      "aicm_references": [
+        "STA-08"
+      ],
       "auto_fixable": false,
       "category": "agent-config",
       "cve_references": [],
