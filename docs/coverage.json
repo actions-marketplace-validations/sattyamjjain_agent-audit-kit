@@ -1375,6 +1375,86 @@
       "title": "Hook trust check is bypassable by project-local config"
     },
     {
+      "category": "hook-injection",
+      "cve_references": [],
+      "eu_ai_act": [
+        "Art. 9 - Risk Management",
+        "Art. 15 - Robustness & Security"
+      ],
+      "nsa_mcp_csi": [
+        "Design for boundaries (p.10)",
+        "Validate parameters (p.11)",
+        "Constrain and sandbox tool execution (p.11)",
+        "Filter and monitor output pipelines and chained execution (p.12)"
+      ],
+      "owasp_agentic": [
+        "ASI05 Unexpected Code Execution"
+      ],
+      "owasp_mcp": [
+        "MCP04:2025 Command Injection"
+      ],
+      "rule_id": "AAK-IDE-TASK-001",
+      "severity": "high",
+      "title": "VS Code task auto-executes on folderOpen (pre-trust code execution)"
+    },
+    {
+      "category": "hook-injection",
+      "cve_references": [],
+      "eu_ai_act": [
+        "Art. 9 - Risk Management",
+        "Art. 15 - Robustness & Security"
+      ],
+      "nsa_mcp_csi": [
+        "Design for boundaries (p.10)",
+        "Validate parameters (p.11)",
+        "Constrain and sandbox tool execution (p.11)",
+        "Filter and monitor output pipelines and chained execution (p.12)"
+      ],
+      "owasp_agentic": [
+        "ASI05 Unexpected Code Execution"
+      ],
+      "owasp_mcp": [
+        "MCP04:2025 Command Injection"
+      ],
+      "rule_id": "AAK-IDE-TASK-002",
+      "severity": "high",
+      "title": "VS Code task command reaches a shell via pipe, repo-path interpreter, or interpolation"
+    },
+    {
+      "category": "hook-injection",
+      "cve_references": [],
+      "eu_ai_act": [
+        "Art. 9 - Risk Management",
+        "Art. 15 - Robustness & Security"
+      ],
+      "nsa_mcp_csi": [
+        "Design for boundaries (p.10)",
+        "Validate parameters (p.11)",
+        "Constrain and sandbox tool execution (p.11)",
+        "Filter and monitor output pipelines and chained execution (p.12)"
+      ],
+      "owasp_agentic": [
+        "ASI05 Unexpected Code Execution"
+      ],
+      "owasp_mcp": [
+        "MCP04:2025 Command Injection"
+      ],
+      "rule_id": "AAK-IDE-TASK-003",
+      "severity": "high",
+      "title": "VS Code launch.json preLaunchTask chains to a flagged auto-exec task"
+    },
+    {
+      "category": "agent-config",
+      "cve_references": [],
+      "eu_ai_act": [],
+      "nsa_mcp_csi": [],
+      "owasp_agentic": [],
+      "owasp_mcp": [],
+      "rule_id": "AAK-IDE-TASK-004",
+      "severity": "low",
+      "title": "VS Code task/launch config could not be parsed"
+    },
+    {
       "category": "secret-exposure",
       "cve_references": [],
       "eu_ai_act": [
@@ -2952,6 +3032,31 @@
       "title": "Use of deprecated `logging` capability (logging/setLevel)"
     },
     {
+      "category": "supply-chain",
+      "cve_references": [
+        "CVE-2026-18954"
+      ],
+      "eu_ai_act": [
+        "Art. 10 - Data Governance",
+        "Art. 15 - Robustness & Security"
+      ],
+      "nsa_mcp_csi": [
+        "Choose supported MCP projects when possible (p.10)",
+        "Sign and verify MCP messages (p.12)",
+        "Track and patch MCP related vulnerabilities (p.13)",
+        "Scan local network for open or vulnerable MCP servers (p.14)"
+      ],
+      "owasp_agentic": [
+        "ASI04 Supply Chain Vulnerabilities"
+      ],
+      "owasp_mcp": [
+        "MCP03:2025 Supply Chain Attacks"
+      ],
+      "rule_id": "AAK-MCP-DOCUMENTDB-CVE-2026-18954-001",
+      "severity": "medium",
+      "title": "AWS Labs DocumentDB MCP Server aggregation-pipeline authorization bypass (< 1.0.12)"
+    },
+    {
       "category": "secret-exposure",
       "cve_references": [
         "CVE-2026-32625"
@@ -3023,6 +3128,37 @@
       "rule_id": "AAK-MCP-FLYTO-CVE-2026-67425-001",
       "severity": "high",
       "title": "Flyto2 Core forwards provider API keys to a caller-controlled base_url (<2.26.6)"
+    },
+    {
+      "category": "supply-chain",
+      "cve_references": [
+        "CVE-2026-67531"
+      ],
+      "eu_ai_act": [
+        "Art. 9 - Risk Management",
+        "Art. 10 - Data Governance",
+        "Art. 15 - Robustness & Security"
+      ],
+      "nsa_mcp_csi": [
+        "Choose supported MCP projects when possible (p.10)",
+        "Design for boundaries (p.10)",
+        "Validate parameters (p.11)",
+        "Constrain and sandbox tool execution (p.11)",
+        "Sign and verify MCP messages (p.12)",
+        "Filter and monitor output pipelines and chained execution (p.12)",
+        "Track and patch MCP related vulnerabilities (p.13)",
+        "Scan local network for open or vulnerable MCP servers (p.14)"
+      ],
+      "owasp_agentic": [
+        "ASI04 Supply Chain Vulnerabilities",
+        "ASI05 Unexpected Code Execution"
+      ],
+      "owasp_mcp": [
+        "MCP03:2025 Supply Chain Attacks"
+      ],
+      "rule_id": "AAK-MCP-FRONTMCP-CVE-2026-67531-001",
+      "severity": "high",
+      "title": "FrontMCP sandbox escape via Zod schema proxy reaches RCE (< 1.5.7)"
     },
     {
       "category": "supply-chain",
@@ -3202,7 +3338,12 @@
     {
       "category": "supply-chain",
       "cve_references": [
-        "CVE-2026-12940"
+        "CVE-2026-12940",
+        "CVE-2026-17623",
+        "CVE-2026-17626",
+        "CVE-2026-7646",
+        "CVE-2026-8446",
+        "CVE-2026-9077"
       ],
       "eu_ai_act": [
         "Art. 10 - Data Governance",
@@ -3494,6 +3635,7 @@
       "category": "supply-chain",
       "cve_references": [
         "CVE-2026-47394",
+        "CVE-2026-48168",
         "CVE-2026-61427"
       ],
       "eu_ai_act": [
@@ -6144,42 +6286,42 @@
   "summary": {
     "by_category": {
       "a2a-protocol": 13,
-      "agent-config": 15,
-      "hook-injection": 12,
+      "agent-config": 16,
+      "hook-injection": 15,
       "legal-compliance": 12,
       "mcp-config": 62,
       "mcp-server-card": 4,
       "secret-exposure": 18,
-      "supply-chain": 74,
+      "supply-chain": 76,
       "taint-analysis": 13,
       "tool-poisoning": 29,
       "transport-security": 12,
       "trust-boundary": 12
     },
     "by_eu_ai_act": {
-      "Art. 10 - Data Governance": 90,
+      "Art. 10 - Data Governance": 92,
       "Art. 13 - Transparency": 30,
       "Art. 14 - Human Oversight": 38,
-      "Art. 15 - Robustness & Security": 161,
-      "Art. 9 - Risk Management": 86
+      "Art. 15 - Robustness & Security": 166,
+      "Art. 9 - Risk Management": 90
     },
     "by_nsa_mcp_csi": {
-      "Choose supported MCP projects when possible (p.10)": 63,
-      "Constrain and sandbox tool execution (p.11)": 74,
-      "Design for boundaries (p.10)": 143,
-      "Filter and monitor output pipelines and chained execution (p.12)": 56,
+      "Choose supported MCP projects when possible (p.10)": 65,
+      "Constrain and sandbox tool execution (p.11)": 78,
+      "Design for boundaries (p.10)": 147,
+      "Filter and monitor output pipelines and chained execution (p.12)": 60,
       "Instrument for logging and detection (p.13)": 33,
-      "Scan local network for open or vulnerable MCP servers (p.14)": 126,
-      "Sign and verify MCP messages (p.12)": 125,
-      "Track and patch MCP related vulnerabilities (p.13)": 74,
-      "Validate parameters (p.11)": 78
+      "Scan local network for open or vulnerable MCP servers (p.14)": 128,
+      "Sign and verify MCP messages (p.12)": 127,
+      "Track and patch MCP related vulnerabilities (p.13)": 76,
+      "Validate parameters (p.11)": 82
     },
     "by_owasp_agentic": {
       "ASI01": 13,
       "ASI02": 39,
       "ASI03": 65,
-      "ASI04": 57,
-      "ASI05": 35,
+      "ASI04": 59,
+      "ASI05": 39,
       "ASI06": 35,
       "ASI07": 9,
       "ASI08": 5,
@@ -6189,8 +6331,8 @@
     "by_owasp_mcp": {
       "MCP01:2025": 68,
       "MCP02:2025": 13,
-      "MCP03:2025": 28,
-      "MCP04:2025": 28,
+      "MCP03:2025": 30,
+      "MCP04:2025": 31,
       "MCP05:2025": 51,
       "MCP06:2025": 13,
       "MCP07:2025": 30,
@@ -6200,13 +6342,13 @@
     },
     "by_severity": {
       "critical": 65,
-      "high": 125,
+      "high": 129,
       "info": 5,
-      "low": 8,
-      "medium": 73
+      "low": 9,
+      "medium": 74
     },
-    "total_cves_covered": 122,
-    "total_rules": 276
+    "total_cves_covered": 130,
+    "total_rules": 282
   },
   "tool": "agent-audit-kit"
 }

@@ -56,6 +56,9 @@ PINS = {
     "AAK-MCP-AMAZONMQ-CVE-2026-18655-001": "medium",
     # 2026-08-05 wave
     "AAK-MCP-LANGGRAPH-MONGO-CVE-2026-48121-001": "medium",
+    # 2026-08-06 wave
+    "AAK-MCP-DOCUMENTDB-CVE-2026-18954-001": "medium",
+    "AAK-MCP-FRONTMCP-CVE-2026-67531-001": "high",
 }
 
 
@@ -583,3 +586,26 @@ def test_langgraph_mongo_below_floor_fires(tmp_path: Path) -> None:
 def test_langgraph_mongo_patched_passes(tmp_path: Path) -> None:
     content = '{"dependencies": {"@langchain/langgraph-checkpoint-mongodb": "1.3.1"}}'
     assert "AAK-MCP-LANGGRAPH-MONGO-CVE-2026-48121-001" not in _ids(tmp_path, "package.json", content)
+
+
+# --- 2026-08-06 wave — awslabs.documentdb-mcp-server / frontmcp -------------
+
+
+def test_documentdb_below_floor_fires(tmp_path: Path) -> None:
+    content = '{"mcpServers": {"docdb": {"command": "uvx", "args": ["awslabs.documentdb-mcp-server@1.0.11"]}}}'
+    assert "AAK-MCP-DOCUMENTDB-CVE-2026-18954-001" in _ids(tmp_path, ".mcp.json", content)
+
+
+def test_documentdb_patched_passes(tmp_path: Path) -> None:
+    content = '{"mcpServers": {"docdb": {"command": "uvx", "args": ["awslabs.documentdb-mcp-server@1.0.12"]}}}'
+    assert "AAK-MCP-DOCUMENTDB-CVE-2026-18954-001" not in _ids(tmp_path, ".mcp.json", content)
+
+
+def test_frontmcp_below_floor_fires(tmp_path: Path) -> None:
+    content = '{"dependencies": {"frontmcp": "1.5.6"}}'
+    assert "AAK-MCP-FRONTMCP-CVE-2026-67531-001" in _ids(tmp_path, "package.json", content)
+
+
+def test_frontmcp_patched_passes(tmp_path: Path) -> None:
+    content = '{"dependencies": {"frontmcp": "1.5.7"}}'
+    assert "AAK-MCP-FRONTMCP-CVE-2026-67531-001" not in _ids(tmp_path, "package.json", content)

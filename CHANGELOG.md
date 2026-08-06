@@ -7,6 +7,43 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- **VS Code IDE task/launch folder-open RCE coverage (`AAK-IDE-TASK-001..004`).** The
+  scanner read `.vscode/mcp.json` but not the task surface right next to it. A
+  `.vscode/tasks.json` task with `runOptions.runOn: folderOpen` runs the moment a
+  repository is opened, before any interaction and before the workspace-trust prompt.
+  That is the vector the keyv npm worm used to spread, and before today AAK did not read
+  this file at all. The new scanner flags folderOpen auto-run (high, and critical when
+  the command is a shell, an interpreter, or a network fetch), `command`/`args` that
+  reach a shell (pipe-to-shell, a repo-local interpreter path, or an interpolated
+  variable), and `launch.json` `preLaunchTask` chains into a flagged task.
+  `.vscode/tasks.json` and `.vscode/launch.json` are now also reported by `discover`.
+  JSONC comments and trailing commas are stripped before parsing, and a file that still
+  will not parse is reported (low) rather than skipped silently.
+- **`make repo-description`** prints the GitHub "About" description rendered from
+  `RULE_COUNT`, and the release workflow prints the same string at the end of a run with
+  a paste instruction, so the manual paste (the description is not writable from a CI
+  token) is impossible to forget instead of only detectable afterward by the liveness
+  check.
+
+### Changed
+
+- Adjudicated the eleven open cve-response issues into the public CVE-to-rule ledger.
+  Two new pins: `awslabs.documentdb-mcp-server` >= 1.0.12 (CVE-2026-18954, the fifth
+  `awslabs.*-mcp-server` pin) and `frontmcp` >= 1.5.7 (CVE-2026-67531, a Zod-proxy
+  sandbox escape to RCE). Six fold into existing pins: five Langflow CVEs
+  (CVE-2026-17623, 17626, 8446, 9077, 7646) into the `langflow` pin, whose 1.11.0 floor
+  already exceeds every affected version, and CVE-2026-48168 into the `praisonai` pin,
+  whose 4.6.78 floor already exceeds its 4.6.40 fix. Three are out of scope: an
+  ssh-mcp-server CVE with no pinnable version (rolling release, disputed, local-trust
+  model), and two MissionSquad mcp-api CVEs whose project is not distributed on npm/PyPI
+  under a resolvable name. With the two IDE-scanner rules that carry framework mappings
+  folded in, RULE_COUNT moves 276 to 282 and the scanner count moves 86 to 87.
+  Closes #537 through #547.
+
+## [0.3.68] - 2026-08-05
+
 ### Fixed
 
 - **The github.com repo description still says "271 rules" while the code says 275.**

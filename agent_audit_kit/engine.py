@@ -40,6 +40,7 @@ _OPTIONAL_SCANNERS: list[tuple[str, str, list[str]]] = [
     ("ssrf_patterns", "SSRF patterns", []),
     ("oauth_misconfig", "OAuth 2.1 misconfig", []),
     ("hook_rce", "Hook RCE", []),
+    ("ide_task_rce", "VS Code IDE task/launch folder-open RCE", []),
     ("langchain_vuln", "LangChain vulnerabilities", []),
     ("routines", "Claude Code routines", []),
     ("mcp_tasks", "MCP Tasks leakage", []),

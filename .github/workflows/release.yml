@@ -297,3 +297,27 @@ jobs:
             - `*.sigstore` — Sigstore keyless signatures (verify with `agent-audit-kit verify-bundle`)
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      # The repo `description` cannot be written from a CI token (needs repo-admin),
+      # so the paste is a manual step. Print it here, at the very end of the release
+      # run, so it is impossible to forget rather than merely detectable afterwards
+      # by the (non-gating) description-liveness job.
+      - name: Set up Python
+        uses: actions/setup-python@v7.0.0
+        with:
+          python-version: '3.11'
+
+      - name: Print repo description to paste (rendered from RULE_COUNT)
+        run: |
+          set -euo pipefail
+          desc="$(PYTHONPATH=. python scripts/render_repo_metadata.py)"
+          echo "::notice title=Paste repo description into Settings > About::$desc"
+          {
+            echo "### Repo description — paste into Settings > About"
+            echo ""
+            echo "GitHub's \`description\` is not writable from a CI token. Paste this line in by hand so the highest-traffic surface stops drifting from RULE_COUNT:"
+            echo ""
+            echo '```'
+            echo "$desc"
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"

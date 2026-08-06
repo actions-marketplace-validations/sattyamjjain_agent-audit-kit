@@ -34,6 +34,8 @@ available) before shipping:
   - awslabs.aws-healthomics-mcp-server >= 0.0.36 (CVE-2026-15415)
   - awslabs.amazon-mq-mcp-server    >= 2.0.24  (CVE-2026-18655)
   - @langchain/langgraph-checkpoint-mongodb >= 1.3.1 (CVE-2026-48121)
+  - awslabs.documentdb-mcp-server   >= 1.0.12  (CVE-2026-18954)
+  - frontmcp                        >= 1.5.7   (CVE-2026-67531)
   - whatsapp-mcp                   >= 0.2.1   (CVE-2026-46555)
   - @agenticmail/{claudecode,codex,core,openclaw} (CVE-2026-57495; fix floors
     0.2.39 / 0.1.33 / 0.9.43 / 0.5.71 respectively — one rule, four pins)
@@ -235,6 +237,18 @@ _PINS: tuple[_Pin, ...] = (
     _Pin("AAK-MCP-LANGGRAPH-MONGO-CVE-2026-48121-001",
          "@langchain/langgraph-checkpoint-mongodb",
          ("@langchain/langgraph-checkpoint-mongodb",), (1, 3, 1), fix_label="1.3.1"),
+    # --- 2026-08-06 wave ---
+    # awslabs.documentdb-mcp-server (PyPI) < 1.0.12: write-capable aggregation
+    # pipeline stages bypass read-only-mode enforcement → unauthorized writes
+    # (CVE-2026-18954). Fifth pin in the awslabs.*-mcp-server family. Fixed 1.0.12.
+    _Pin("AAK-MCP-DOCUMENTDB-CVE-2026-18954-001",
+         "awslabs.documentdb-mcp-server",
+         ("awslabs.documentdb-mcp-server",), (1, 0, 12), fix_label="1.0.12"),
+    # frontmcp (npm) < 1.5.7: the sandboxed codecall:execute tool reaches the host
+    # Zod schema's Function constructor and runs arbitrary code as the server user;
+    # default public auth mode serves it unauthenticated (CVE-2026-67531). Fixed 1.5.7.
+    _Pin("AAK-MCP-FRONTMCP-CVE-2026-67531-001",
+         "frontmcp", ("frontmcp",), (1, 5, 7), fix_label="1.5.7"),
 )
 
 _CANDIDATE_NAMES = (
