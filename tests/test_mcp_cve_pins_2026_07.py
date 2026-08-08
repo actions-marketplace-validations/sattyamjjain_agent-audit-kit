@@ -59,6 +59,9 @@ PINS = {
     # 2026-08-06 wave
     "AAK-MCP-DOCUMENTDB-CVE-2026-18954-001": "medium",
     "AAK-MCP-FRONTMCP-CVE-2026-67531-001": "high",
+    # 2026-08-08 wave
+    "AAK-MCP-LANGGRAPH-CHECKPOINT-CVE-2026-71433-001": "medium",
+    "AAK-METAADS-CVE-2026-48039-001": "critical",
 }
 
 
@@ -609,3 +612,36 @@ def test_frontmcp_below_floor_fires(tmp_path: Path) -> None:
 def test_frontmcp_patched_passes(tmp_path: Path) -> None:
     content = '{"dependencies": {"frontmcp": "1.5.7"}}'
     assert "AAK-MCP-FRONTMCP-CVE-2026-67531-001" not in _ids(tmp_path, "package.json", content)
+
+
+# --- 2026-08-08 wave — langgraph-checkpoint-postgres/sqlite / meta-ads-mcp ----
+
+
+def test_langgraph_checkpoint_postgres_below_floor_fires(tmp_path: Path) -> None:
+    assert "AAK-MCP-LANGGRAPH-CHECKPOINT-CVE-2026-71433-001" in _ids(
+        tmp_path, "requirements.txt", "langgraph-checkpoint-postgres==3.1.0\n"
+    )
+
+
+def test_langgraph_checkpoint_sqlite_below_floor_fires(tmp_path: Path) -> None:
+    assert "AAK-MCP-LANGGRAPH-CHECKPOINT-CVE-2026-71433-001" in _ids(
+        tmp_path, "requirements.txt", "langgraph-checkpoint-sqlite==3.1.0\n"
+    )
+
+
+def test_langgraph_checkpoint_patched_passes(tmp_path: Path) -> None:
+    assert "AAK-MCP-LANGGRAPH-CHECKPOINT-CVE-2026-71433-001" not in _ids(
+        tmp_path, "requirements.txt", "langgraph-checkpoint-postgres==3.1.1\n"
+    )
+
+
+def test_metaads_below_floor_fires(tmp_path: Path) -> None:
+    assert "AAK-METAADS-CVE-2026-48039-001" in _ids(
+        tmp_path, "requirements.txt", "meta-ads-mcp==1.0.108\n"
+    )
+
+
+def test_metaads_patched_passes(tmp_path: Path) -> None:
+    assert "AAK-METAADS-CVE-2026-48039-001" not in _ids(
+        tmp_path, "requirements.txt", "meta-ads-mcp==1.0.109\n"
+    )

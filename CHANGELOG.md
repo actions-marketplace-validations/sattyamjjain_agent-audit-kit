@@ -38,9 +38,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   whose 4.6.78 floor already exceeds its 4.6.40 fix. Three are out of scope: an
   ssh-mcp-server CVE with no pinnable version (rolling release, disputed, local-trust
   model), and two MissionSquad mcp-api CVEs whose project is not distributed on npm/PyPI
-  under a resolvable name. With the two IDE-scanner rules that carry framework mappings
-  folded in, RULE_COUNT moves 276 to 282 and the scanner count moves 86 to 87.
-  Closes #537 through #547.
+  under a resolvable name. Three more cve-response issues filed on 2026-08-07/08 were
+  drained in the same cut: two more pins (`meta-ads-mcp` >= 1.0.109 for the
+  unauthenticated tool-invocation + access-token leak CVE-2026-48039, and
+  `langgraph-checkpoint-postgres`/`-sqlite` >= 3.1.1 for the cross-tenant namespace leak
+  CVE-2026-71433, the Postgres/SQLite sibling of the mongo one), plus one out of scope
+  (HKUDS nanobot, whose GitHub project is not the unrelated PyPI `nanobot`). With the two
+  IDE-scanner rules that carry framework mappings folded in, RULE_COUNT moves 276 to 284
+  and the scanner count moves 86 to 87. Closes #537 through #550.
 
 ## [0.3.68] - 2026-08-05
 

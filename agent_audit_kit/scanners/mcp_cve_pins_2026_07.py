@@ -36,6 +36,8 @@ available) before shipping:
   - @langchain/langgraph-checkpoint-mongodb >= 1.3.1 (CVE-2026-48121)
   - awslabs.documentdb-mcp-server   >= 1.0.12  (CVE-2026-18954)
   - frontmcp                        >= 1.5.7   (CVE-2026-67531)
+  - langgraph-checkpoint-postgres/sqlite >= 3.1.1 (CVE-2026-71433)
+  - meta-ads-mcp                    >= 1.0.109 (CVE-2026-48039)
   - whatsapp-mcp                   >= 0.2.1   (CVE-2026-46555)
   - @agenticmail/{claudecode,codex,core,openclaw} (CVE-2026-57495; fix floors
     0.2.39 / 0.1.33 / 0.9.43 / 0.5.71 respectively — one rule, four pins)
@@ -249,6 +251,20 @@ _PINS: tuple[_Pin, ...] = (
     # default public auth mode serves it unauthenticated (CVE-2026-67531). Fixed 1.5.7.
     _Pin("AAK-MCP-FRONTMCP-CVE-2026-67531-001",
          "frontmcp", ("frontmcp",), (1, 5, 7), fix_label="1.5.7"),
+    # --- 2026-08-08 wave ---
+    # langgraph-checkpoint-postgres / -sqlite (PyPI) < 3.1.1: namespaces stored as a
+    # dot-joined string and read by simple prefix match → a scoped read spills into a
+    # sibling namespace, cross-tenant checkpoint leak (CVE-2026-71433). Fixed 3.1.1.
+    _Pin("AAK-MCP-LANGGRAPH-CHECKPOINT-CVE-2026-71433-001",
+         "langgraph-checkpoint-postgres/sqlite",
+         ("langgraph-checkpoint-postgres", "langgraph-checkpoint-sqlite"),
+         (3, 1, 1), fix_label="3.1.1"),
+    # meta-ads-mcp (PyPI) < 1.0.109: AuthInjectionMiddleware forwards unauthenticated
+    # requests without a 401, and a failed Graph API call serialises the request URL
+    # (with the access_token) into the response → unauth tool invocation + token leak
+    # (CVE-2026-48039, CVSS 9.1). Fixed 1.0.109.
+    _Pin("AAK-METAADS-CVE-2026-48039-001",
+         "meta-ads-mcp", ("meta-ads-mcp",), (1, 0, 109), fix_label="1.0.109"),
 )
 
 _CANDIDATE_NAMES = (

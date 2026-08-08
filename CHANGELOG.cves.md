@@ -16,6 +16,18 @@ open.
 > issue. The per-CVE latency figures in the tables are **measurements recorded at
 > the time**, kept as dated facts, not a standing promise.
 
+## 2026-08-08 (unreleased)
+
+Three `cve-response` issues filed after the 2026-08-06 batch, adjudicated for the same
+(still-unreleased) cut: two new PyPI pins and one out of scope. Each row quotes a
+verbatim excerpt of the NVD description; each was read from NVD, not the issue title.
+
+| CVE | Reference | AAK rule / disposition | Triaged |
+|---|---|---|---|
+| CVE-2026-48039 (`meta-ads-mcp` < 1.0.109 — `AuthInjectionMiddleware` forwards unauthenticated requests without a 401, and a failed Graph API call serialises the request URL, including the `access_token`, into the response → unauthenticated tool invocation + credential leak; CRITICAL CVSS 9.1) | [NVD](https://nvd.nist.gov/vuln/detail/CVE-2026-48039) | **Pinned** `AAK-METAADS-CVE-2026-48039-001` — fix floor 1.0.109. A pinnable PyPI artifact (latest 1.0.119) the pin scanner resolves from `requirements.txt`/`pyproject.toml`/`uv.lock`/`.mcp.json`. Tests `test_metaads_below_floor_fires` / `test_metaads_patched_passes`. NVD verbatim: *"AuthInjectionMiddleware.dispatch() at http_auth_integration.py:272 unconditionally forwards unauthenticated Streamable HTTP requests to downstream MCP tool handlers without issuing a 401 response ... when the downstream Meta Graph API call fails, api.py:263-269 serialises the raw httpx request URL—including the operator's access_token as a query parameter—into the JSON-RPC response body, delivering the credential to the unauthenticated caller."* (#549) | 2026-08-08 |
+| CVE-2026-71433 (`langgraph-checkpoint-postgres` / `langgraph-checkpoint-sqlite` < 3.1.1 — namespaces stored as a dot-joined string and read by simple prefix match, so a scoped read spills into a sibling namespace → cross-tenant checkpoint leak; MEDIUM CVSS 5.3) | [NVD](https://nvd.nist.gov/vuln/detail/CVE-2026-71433) | **Pinned** `AAK-MCP-LANGGRAPH-CHECKPOINT-CVE-2026-71433-001` — fix floor 3.1.1, matching either PyPI name; the Postgres/SQLite sibling of the langgraph-checkpoint-mongodb leak (CVE-2026-48121). Tests `test_langgraph_checkpoint_postgres_below_floor_fires` / `_sqlite_below_floor_fires` / `_patched_passes`. NVD verbatim: *"persisted hierarchical namespaces as a dot joined string and scoped reads by matching that string as a simple prefix pattern, so a read scoped to one namespace could also match a sibling namespace ... allowing an authenticated caller to retrieve stored items belonging to another tenant or user through an ordinary scoped search or list namespaces call, with no crafted input required."* (#548) | 2026-08-08 |
+| CVE-2026-19244 (HKUDS `nanobot` ≤ 0.2.1 — MCP resource/prompt wrappers registered outside the intended `enabledTools` scope → improper access control; MEDIUM CVSS 4.7) | [NVD](https://nvd.nist.gov/vuln/detail/CVE-2026-19244) | **Out of scope** — the affected project is HKUDS `nanobot` (a GitHub-hosted MCP agent framework; upgrade to 0.3.0), but the PyPI `nanobot` is an unrelated "minimalist robot navigation framework" with no 0.2.1/0.3.0 releases, so there is no distributable the version-pin scanner can match under a resolvable name. Same basis as the MissionSquad mcp-api dispositions. NVD verbatim: *"MCP resource and prompt wrappers could be registered outside the intended enabledTools scope. The registration boundary was corrected."* (#550) | 2026-08-08 |
+
 ## 2026-08-06 (unreleased)
 
 Eleven `cve-response` issues adjudicated: two new pins (`awslabs.documentdb-mcp-server`

@@ -170,6 +170,8 @@ _AICM_TAGS: dict[str, list[str]] = {
     "AAK-MCP-LANGGRAPH-MONGO-CVE-2026-48121-001": ["STA-08", "AIS-07", "DSP-04"],
     "AAK-MCP-DOCUMENTDB-CVE-2026-18954-001": ["STA-08", "IAM-01", "DSP-04"],
     "AAK-MCP-FRONTMCP-CVE-2026-67531-001": ["STA-08", "AIS-07", "IVS-04"],
+    "AAK-MCP-LANGGRAPH-CHECKPOINT-CVE-2026-71433-001": ["STA-08", "AIS-07", "DSP-04"],
+    "AAK-METAADS-CVE-2026-48039-001": ["DSP-17", "IAM-01", "STA-08"],
     "AAK-IDE-TASK-001": ["STA-08", "IVS-04"],
     "AAK-IDE-TASK-002": ["STA-08", "IVS-04"],
     "AAK-IDE-TASK-003": ["STA-08", "IVS-04"],
@@ -6509,6 +6511,59 @@ _r(
     owasp_mcp_references=["MCP03:2025"],
     owasp_agentic_references=["ASI05", "ASI04"],
     adversa_references=["ADV-RCE-01"],
+)
+
+
+_r(
+    "AAK-MCP-LANGGRAPH-CHECKPOINT-CVE-2026-71433-001",
+    "LangGraph Postgres/SQLite checkpoint saver cross-tenant namespace leak (< 3.1.1)",
+    "`langgraph-checkpoint-postgres` and `langgraph-checkpoint-sqlite` before 3.1.1 "
+    "persist hierarchical namespaces as a dot-joined string and scope reads by "
+    "matching that string as a simple prefix pattern. A read scoped to one namespace "
+    "can therefore also match a sibling namespace whose flattened form shares the "
+    "same leading characters, or a label containing unescaped pattern metacharacters, "
+    "so an authenticated caller retrieves another tenant's stored items through an "
+    "ordinary scoped search or `list namespaces` call, with no crafted input "
+    "(CVE-2026-71433, CVSS 5.3). Fixed in 3.1.1; the Postgres/SQLite sibling of the "
+    "langgraph-checkpoint-mongodb checkpoint leak. Treat < 3.1.1 (and unpinned) "
+    "as exposed.",
+    Severity.MEDIUM,
+    Category.SUPPLY_CHAIN,
+    "Upgrade `langgraph-checkpoint-postgres` / `langgraph-checkpoint-sqlite` to "
+    ">= 3.1.1 and pin them. Store and match namespaces as structured, escaped "
+    "segments (not a prefix over a flattened dot-joined string) so a scoped read "
+    "cannot spill into a sibling namespace.",
+    sarif_name="LangGraphCheckpointNamespaceLeak",
+    cve_references=["CVE-2026-71433"],
+    owasp_mcp_references=["MCP03:2025"],
+    owasp_agentic_references=["ASI04"],
+    adversa_references=["ADV-SUPPLY-01"],
+)
+
+
+_r(
+    "AAK-METAADS-CVE-2026-48039-001",
+    "Meta Ads MCP forwards unauthenticated requests and leaks the access token (< 1.0.109)",
+    "`meta-ads-mcp` before 1.0.109 has `AuthInjectionMiddleware.dispatch()` "
+    "unconditionally forward unauthenticated Streamable-HTTP requests to downstream "
+    "MCP tool handlers without a 401, so any network-reachable caller invokes tools "
+    "unauthenticated. With no per-request credential the handlers fall back to the "
+    "`META_ACCESS_TOKEN` env var, and when the downstream Meta Graph API call fails "
+    "the raw `httpx` request URL — including the operator's `access_token` query "
+    "parameter — is serialised into the JSON-RPC response, delivering the credential "
+    "to the unauthenticated caller (CVE-2026-48039, CVSS 9.1). Fixed in 1.0.109; "
+    "treat < 1.0.109 (and unpinned) as exposed.",
+    Severity.CRITICAL,
+    Category.SUPPLY_CHAIN,
+    "Upgrade `meta-ads-mcp` to >= 1.0.109 and pin it. Require per-request "
+    "authentication and return 401 when it is absent; never echo an outbound request "
+    "URL (which carries `access_token`) into a tool response, and scrub credentials "
+    "from error paths.",
+    sarif_name="MetaAdsMcpNoAuthTokenLeak",
+    cve_references=["CVE-2026-48039"],
+    owasp_mcp_references=["MCP01:2025"],
+    owasp_agentic_references=["ASI04"],
+    adversa_references=["ADV-AUTH-01"],
 )
 
 
