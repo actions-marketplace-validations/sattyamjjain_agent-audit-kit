@@ -16,6 +16,21 @@ open.
 > issue. The per-CVE latency figures in the tables are **measurements recorded at
 > the time**, kept as dated facts, not a standing promise.
 
+## 2026-08-08 (later batch, unreleased)
+
+Four more `cve-response` issues filed the same day, all adjudicated **out of scope**:
+each is a rolling-release or unpatched GitHub project with **no fixed version** to pin to
+(fix PRs unaccepted or maintainers unresponsive), and three of the four are local-only.
+A version pin needs a fix floor to tell users what to upgrade to; there is none here, so
+there is nothing for the pin scanner to key on. Each was read from NVD, not the title.
+
+| CVE | Reference | AAK rule / disposition | Triaged |
+|---|---|---|---|
+| CVE-2026-19263 (INQUIRELAB `mcp-bridge-api` — command injection via `command`/`args` in `mcp-bridge.js`; remote; HIGH CVSS 7.3) | [NVD](https://nvd.nist.gov/vuln/detail/CVE-2026-19263) | **Out of scope** — rolling release with no version details for affected or fixed releases, and the fix PR "awaits acceptance", so there is no fix floor to pin. Not distributed under a resolvable pinnable name. Same basis as the ssh-mcp-server / MissionSquad dispositions. (#551) | 2026-08-08 |
+| CVE-2026-19268 (abdullah1854 `MCPGateway` — command injection via the `since` arg in `claude-usage.ts`; remote, exploit public; MEDIUM CVSS 6.3) | [NVD](https://nvd.nist.gov/vuln/detail/CVE-2026-19268) | **Out of scope** — rolling release, "no version details of affected nor updated releases", maintainer unresponsive; a GitHub project with no fixed version to pin. (#552) | 2026-08-08 |
+| CVE-2026-19270 (Hulupeep `mcp-ui-probe` ≤ 0.2.0 — path traversal via `journeyId`/`filename` in `JourneyStorage.ts`; local; MEDIUM CVSS 5.3) | [NVD](https://nvd.nist.gov/vuln/detail/CVE-2026-19270) | **Out of scope** — the project was informed but has not responded and has shipped no fix, so there is no fix floor to upgrade to; local-only attack. (#553) | 2026-08-08 |
+| CVE-2026-19279 (MIMICLab `mcp-pdf-vision` 1.1.0 — command injection via `pdfPath`/`sessionId` in `src/index.ts`; local; MEDIUM CVSS 5.3) | [NVD](https://nvd.nist.gov/vuln/detail/CVE-2026-19279) | **Out of scope** — informed but unpatched (no fixed version to pin), and the attack is local-only. (#554) | 2026-08-08 |
+
 ## 2026-08-08 (unreleased)
 
 Three `cve-response` issues filed after the 2026-08-06 batch, adjudicated for the same
