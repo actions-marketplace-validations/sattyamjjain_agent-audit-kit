@@ -38,7 +38,7 @@ jobs:
         with:
           args: >-
             --no-progress
-            --exclude-mail
+            --exclude 'mailto:|agentauditkit\.io'
             --max-retries 3
             --retry-wait-time 5
             'README.md'
