@@ -152,7 +152,7 @@ python benchmarks/crawler.py --server-cards --limit 200
 
 Claude Code, Cursor, VS Code Copilot, Windsurf, Amazon Q, Gemini CLI, Goose, Continue, Roo Code, Kiro + user-level global configs.
 
-`agent-audit-kit discover` now also reports the VS Code task-execution surface — `.vscode/tasks.json` and `.vscode/launch.json` — alongside `.vscode/mcp.json`, so a folder-open auto-run task shows up in discovery, not just in a scan.
+The **VS Code Copilot** config set now includes `.vscode/tasks.json` and `.vscode/launch.json` alongside `.vscode/mcp.json`, so the folder-open task-execution surface is covered: `agent-audit-kit scan` flags a `runOn: folderOpen` auto-run task (`AAK-IDE-TASK-001..004`), and project-level discovery lists these files. (`agent-audit-kit discover` reports machine/user-level agent installs; project configs like these surface in a `scan`.)
 
 ### Language Support
 
