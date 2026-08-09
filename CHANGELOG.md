@@ -7,17 +7,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-### Changed
-
-- Adjudicated the three cve-response issues filed on 2026-08-09 (all MEDIUM CVSS 5.3) on
-  their merits against the npm registry. One new pin: `@adenot/mcp-google-search` <= 0.3.1
-  for the `read_webpage` SSRF (CVE-2026-19337), the same shape as the astrbot
-  MCP-test-endpoint pin. No patched release exists yet, so the pin is presence-only and
-  fires on any installed version, with remediation to remove or replace the server until a
-  fix ships. Two are out of scope as unpinnable: codex_mcp (CVE-2026-19329) and MCP4EDA
-  (CVE-2026-19332) are GitHub-only projects with no versioned registry artifact, so a
-  version pin has nothing to resolve. RULE_COUNT moves 284 to 285. Closes #556 and #557;
-  #558 stays open until this pin ships.
+## [0.3.71] - 2026-08-09
 
 ### Added
 
@@ -34,6 +24,35 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   CLI ran the shell commands hidden in benign-looking skill files in 95.5-96.1% of runs,
   with explicit safety recognition in 1.99% of 5,629 runs); it does not claim validation
   against that paper's unpublished 2,826-skill benchmark. Ships with fixtures.
+
+### Changed
+
+- Adjudicated the three cve-response issues filed on 2026-08-09 (all MEDIUM CVSS 5.3) on
+  their merits against the npm registry. One new pin: `@adenot/mcp-google-search` <= 0.3.1
+  for the `read_webpage` SSRF (CVE-2026-19337), the same shape as the astrbot
+  MCP-test-endpoint pin. No patched release exists yet, so the pin is presence-only and
+  fires on any installed version, with remediation to remove or replace the server until a
+  fix ships. Two are out of scope as unpinnable: codex_mcp (CVE-2026-19329) and MCP4EDA
+  (CVE-2026-19332) are GitHub-only projects with no versioned registry artifact, so a
+  version pin has nothing to resolve. RULE_COUNT moves 284 to 285. Closes #556, #557, and #558.
+- Archived pre-0.3.60 changelog history. CHANGELOG.md (205 KB) and CHANGELOG.cves.md (86 KB)
+  had grown unreviewable in a PR diff at a two-day tag cadence, so 0.3.58 and earlier
+  moved to `docs/changelog/archive/` with a pointer in each live file; the last ~10
+  releases stay live. The archive is exempted from the prose-count fence and the docs
+  link-check.
+
+### Removed
+
+- Dropped the orphan `findings.sarif` from the repo root. It was referenced by nothing and
+  held eight findings from an old scan, drifting from `rules.json` on every rule change.
+  Root-level SARIF is now gitignored; scan output is generated on demand (`aak scan
+  --format sarif`) and uploaded to Code Scanning by the Action. The example SARIF under
+  `examples/case-studies/` is untouched.
+
+## [0.3.70] - 2026-08-08
+
+### Added
+
 - **A machine-readable scanner manifest (`scanners.json`, generated from the engine
   registry) so the scanner count is countable the way the rule count is, not asserted.**
   `agent-audit-kit scanners --json` prints it, the README marker renders from it, and a

@@ -16,7 +16,7 @@ open.
 > issue. The per-CVE latency figures in the tables are **measurements recorded at
 > the time**, kept as dated facts, not a standing promise.
 
-## 2026-08-09 (unreleased)
+## 2026-08-09 (v0.3.71)
 
 Three `cve-response` issues filed the same day (all MEDIUM CVSS 5.3), adjudicated on
 their merits against the npm registry rather than by repeating the prior batch's
