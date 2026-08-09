@@ -68,6 +68,10 @@ def _iter_docs() -> list[Path]:
         for path in DOCS_DIR.rglob("*.md"):
             if _HISTORY_STEM_RE.search(path.stem):
                 continue
+            # Frozen changelog archive: historical entries pin the version they
+            # documented, same rationale as the release-notes exclusion above.
+            if "changelog/archive/" in path.as_posix():
+                continue
             out.append(path)
     return out
 

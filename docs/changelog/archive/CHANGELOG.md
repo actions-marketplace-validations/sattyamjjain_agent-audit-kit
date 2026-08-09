@@ -2626,7 +2626,7 @@ same time so `--ignore-paths` finally works the way the docs claim.
 - **Critical: Docker container ran as `USER scanner`** (UID 999) but
   `/github/workspace` is mounted from the runner's checkout owned by
   the runner UID; the container could not write the SARIF output.
-  Every consumer of `sattyamjjain/agent-audit-kit@v0.3.71` (and
+  Every consumer of `sattyamjjain/agent-audit-kit@v0.3.70` (and
   earlier) saw `Permission denied: 'agent-audit-results.sarif'`.
   Surfaced via the new dogfood self-scan workflow (PR #71) — the
   loop validates that what we publish actually runs end-to-end.
@@ -2648,7 +2648,7 @@ same time so `--ignore-paths` finally works the way the docs claim.
 
 ### Upgrade impact
 
-- **Anyone using `sattyamjjain/agent-audit-kit@v0.3.71`** should bump
+- **Anyone using `sattyamjjain/agent-audit-kit@v0.3.70`** should bump
   to `@v0.3.7` immediately. v0.3.6 silently failed to produce SARIF
   output. Workflow YAML is otherwise compatible — no input/output
   changes.
