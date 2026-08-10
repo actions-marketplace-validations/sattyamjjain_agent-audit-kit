@@ -8,6 +8,9 @@
   <a href="https://pypi.org/project/agent-audit-kit/"><img src="https://img.shields.io/pypi/v/agent-audit-kit.svg" alt="PyPI"></a>
   <a href="https://www.python.org/downloads/"><img src="https://img.shields.io/badge/python-3.9+-blue.svg" alt="Python 3.9+"></a>
   <a href="https://opensource.org/licenses/MIT"><img src="https://img.shields.io/badge/License-MIT-yellow.svg" alt="License: MIT"></a>
+  <a href="benchmarks/determinism/RESULTS.md"><img src="https://img.shields.io/badge/determinism-0%25%20variance%20(20%2F20)-brightgreen.svg" alt="Determinism: 0% variance across 20/20 runs"></a>
+  <a href="benchmarks/false_positive/RESULTS.md"><img src="https://img.shields.io/badge/benign--slice%20HIGH%2FCRIT%20FP-0%2F1%20(n%3D1)-blue.svg" alt="Benign-slice HIGH/CRITICAL false-positive rate: 0/1, n=1"></a>
+  <a href="docs/benchmarks/third-party-grading.md"><img src="https://img.shields.io/badge/third--party%20grade-see%20notes-lightgrey.svg" alt="Third-party grading notes"></a>
   <a href="#what-it-scans"><img src="https://img.shields.io/badge/rules-289-blue.svg" alt="Rules: 289"></a>
   <a href="#frameworks--standards"><img src="https://img.shields.io/badge/OWASP_Agentic-10%2F10-green.svg" alt="OWASP Agentic: 10/10"></a>
   <a href="#frameworks--standards"><img src="https://img.shields.io/badge/OWASP_MCP-10%2F10-green.svg" alt="OWASP MCP: 10/10"></a>
@@ -68,7 +71,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - uses: sattyamjjain/agent-audit-kit@v0.3.71
+      - uses: sattyamjjain/agent-audit-kit@v0.3.72
         id: scan
         with:
           fail-on: high
@@ -95,7 +98,7 @@ agent-audit-kit scan .
 # .pre-commit-config.yaml
 repos:
   - repo: https://github.com/sattyamjjain/agent-audit-kit
-    rev: v0.3.71
+    rev: v0.3.72
     hooks:
       - id: agent-audit-kit
 ```
@@ -282,7 +285,7 @@ permissions:
 
 steps:
   - uses: actions/checkout@v4
-  - uses: sattyamjjain/agent-audit-kit@v0.3.71
+  - uses: sattyamjjain/agent-audit-kit@v0.3.72
     id: scan
     with:
       fail-on: high

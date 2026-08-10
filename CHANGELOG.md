@@ -7,6 +7,30 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.3.72] - 2026-08-10
+
+### Fixed
+
+- Rule and scanner counts were stale in several launch, research, and analysis files that
+  nothing guarded. Bumped the current-state claims (owasp-outreach,
+  awesome-opensource-security, the Black Hat Arsenal skeleton, CLAUDE_PROMPT) to the live
+  counts, and left the dated measurements (blog-50, DEEP_ANALYSIS, ROADMAP, the v0.3.41 and
+  v0.3.56 reports) as the versions they describe, adding an in-file dated note where one was
+  missing. The count guard now scans every tracked markdown except the changelogs and those
+  dated artifacts (`scripts/check_counts.py`); the test and `make count-check` share it, and
+  the release job fails on a mismatch with the offending file and line.
+- The scanner-count assertion in `tests/test_scanner_manifest.py` no longer hardcodes a
+  number in its docstring, so it cannot go stale when a scanner is added.
+
+### Added
+
+- `docs/benchmarks/third-party-grading.md`. Went to grade AAK against the OASB benchmark.
+  Recorded honestly that its submission API returns 404 and that it withdrew its comparative
+  metrics on 2026-08-09 because the benign class was self-labelled by the scanner under test,
+  so there is no measured grade to publish. Published the two numbers we do stand behind
+  instead: the determinism digest (20/20 runs, one SHA-256, 0% variance) and the benign-slice
+  HIGH/CRITICAL false-positive rate with its Wilson interval. Linked from the README badges.
+
 ## [0.3.71] - 2026-08-09
 
 ### Added

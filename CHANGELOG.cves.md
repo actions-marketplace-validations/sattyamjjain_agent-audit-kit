@@ -16,6 +16,14 @@ open.
 > issue. The per-CVE latency figures in the tables are **measurements recorded at
 > the time**, kept as dated facts, not a standing promise.
 
+## 2026-08-10 (v0.3.72)
+
+One `cve-response` issue, adjudicated out of scope after a registry check.
+
+| CVE | Reference | AAK rule / disposition | Triaged |
+|---|---|---|---|
+| CVE-2026-19338 (automateyournetwork `MCPyATS` <= 0.1.4, path traversal via `folder`/`name` in `mcp_servers/mermaid/index.ts`; local) | [NVD](https://nvd.nist.gov/vuln/detail/CVE-2026-19338) | **Out of scope, unpinnable.** `mcpyats`, `@automateyournetwork/mcpyats`, and `pyats-mcp` all 404 on npm, and `mcpyats` 404 on PyPI. A GitHub-only project with no versioned registry artifact to pin. (#565) | 2026-08-10 |
+
 ## 2026-08-09 (v0.3.71)
 
 Three `cve-response` issues filed the same day (all MEDIUM CVSS 5.3), adjudicated on
