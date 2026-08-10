@@ -114,12 +114,16 @@ jobs:
         with:
           python-version: '3.11'
 
+      - name: Install the package (check_counts imports agent_audit_kit)
+        run: pip install -e .
+
       - name: No stale rule/scanner count in any tracked markdown
         run: |
           set -euo pipefail
-          # PYTHONPATH=. so check_counts can import agent_audit_kit from the checkout
-          # (the package is not installed in this job).
-          PYTHONPATH=. python scripts/check_counts.py
+          # check_counts computes the canonical counts by importing agent_audit_kit
+          # (cli needs click, etc.), so the package + its runtime deps must be
+          # installed first — PYTHONPATH alone is not enough.
+          python scripts/check_counts.py
 
   # --------------------------------------------------------------------------
   # 1. Publish to PyPI using trusted publishing (OIDC)
