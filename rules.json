@@ -3736,7 +3736,8 @@
       "auto_fixable": false,
       "category": "supply-chain",
       "cve_references": [
-        "CVE-2026-19516"
+        "CVE-2026-19516",
+        "CVE-2026-15583"
       ],
       "description": "`mcp-grafana` before 1.1.0 lets a caller-supplied `X-Grafana-URL` request header control the destination of the server's outbound requests, and the `grafana_api_request` tool lets the caller also choose the HTTP method, path, and body. Because the destination is not restricted to the configured Grafana instance, a caller can point requests at internal, loopback, and link-local services (including cloud metadata endpoints) and read the responses: server-side request forgery (CVE-2026-19516, CVSS 9.1). This is the incomplete-fix follow-up to CVE-2026-15583, whose fix stopped the configured service-account token from being sent to unintended destinations but did not restrict the destinations themselves, so the correct control is destination restriction, not token handling. mcp-grafana is a Go server but ships a resolvable PyPI wrapper (`uvx mcp-grafana`), so the pin scanner resolves it from `.mcp.json` / `requirements.txt` / `pyproject.toml` / `uv.lock`; the archived ledger note that it was unpinnable is now superseded. Fixed in 1.1.0, which restricts the destination to the configured instance.",
       "incident_references": [],
