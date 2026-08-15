@@ -14,6 +14,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Added
 
 - `AAK-MCP-LETTA-CVE-2025-51482-001` (SUPPLY_CHAIN, HIGH) — Letta (formerly MemGPT) carried four disclosed CVEs across its 0.4–0.16 line that AAK covered none of, including remote code execution through `/v1/tools/run` (CVE-2025-51482) and an incomplete-fix follow-up (CVE-2026-4965). Floor `letta >= 0.16.5` — an inference from release ordering, since no vendor fix is named in any of the four and all four GHSA records are unreviewed. Closes the pin arm of #161; the transport-flip arm stays blocked with no CVE assigned.
+- `agent-audit-kit suggest --apply-trivial` now applies fixes instead of printing that it is unimplemented. The flag shipped in v0.3.8 saying "scaffolded but not yet implemented (queued for v0.3.9)" and was still saying it at v0.3.78 — seventy releases later — while `agent-audit-kit fix` had been applying exactly these fixes the whole time. It now delegates to the same `run_fixes` engine, so there is one fixer with two entry points. Adds `--project` (where to apply; the SARIF argument says what was found) and `--dry-run`.
 
 ## [0.3.78] - 2026-08-15
 
