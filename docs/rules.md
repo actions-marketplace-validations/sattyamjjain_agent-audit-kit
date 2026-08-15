@@ -12,13 +12,13 @@
 | Agent Config | 18 |
 | Secret Exposure | 18 |
 | Hook Injection | 17 |
-| Trust Boundaries | 14 |
+| Trust Boundaries | 15 |
 | A2A Protocol | 13 |
 | Taint Analysis | 13 |
 | Legal Compliance | 12 |
 | Transport Security | 12 |
 | MCP Server Card | 4 |
-| **Total** | **299** |
+| **Total** | **300** |
 
 <!-- END rules-summary -->
 
