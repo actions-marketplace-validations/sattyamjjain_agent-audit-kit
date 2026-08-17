@@ -1,6 +1,11 @@
 # The State of MCP Security, 2026
 
-**Scan date:** 2026-07-26 · **Corpus:** 2,303 distinct public MCP server configs · **Tool:** AgentAuditKit (offline, deterministic)
+**Report version 1.0** · **Published 2026-08-17** · **Scan date 2026-07-26** · **Corpus:** 2,303 distinct public MCP server configs · **Tool:** AgentAuditKit (offline, deterministic) · **Licence:** MIT (same as the tool)
+
+> **Stable identity.** Cite this document as *The State of MCP Security, 2026*,
+> version 1.0. The version changes only when a number in it changes; re-running the
+> pipeline on the same committed corpus reproduces this exact file, so version 1.0
+> always refers to these numbers. See [How to cite this report](#how-to-cite-this-report).
 
 We statically scanned **2,303 distinct public Model Context Protocol server
 configurations** — the largest snapshot we know of — and measured what fraction
@@ -8,6 +13,19 @@ fail each security rule family. The headline: **more than half of public MCP
 servers declare a remote endpoint with no authentication.** Every number below
 carries its numerator, denominator, and — where a metric is not computable for
 the whole corpus — its coverage.
+
+**Methods in one paragraph.** The corpus was collected **2026-07-26** from two
+provenance-tracked sources — 664 GitHub-crawled `.mcp.json` files
+(`benchmarks/data/`) and 1,639 latest-version servers from the official MCP Registry
+(`registry.modelcontextprotocol.io`) — deduplicated by SHA-256 of the normalised
+JSON. Each config was scanned in isolation with AgentAuditKit's engine and graded on
+the same penalty-based A–F scale as `aak score`. The scan makes **zero network
+calls** and is **deterministic**: the same corpus yields a byte-identical
+`results.json` across runs and Python hash seeds. Reproduce the published numbers
+with `make report` (offline); refreshing the corpus itself is a separate, explicitly
+network step (`python research/state-of-mcp-2026/fetch_registry.py --target 5000`).
+Full detail, including what a config-only corpus cannot measure, is in
+[Method](#method) and [Limitations](#limitations).
 
 ## Headline findings
 
@@ -172,3 +190,40 @@ notification.
 - **"Benign" is not claimed.** This measures declared posture, not exploitability;
   see the [benign-slice false-positive rate](../../benchmarks/false_positive/RESULTS.md)
   for how precise the high-severity findings are.
+
+## How to cite this report
+
+Cite the report, not the repository, when you are citing a number from it — the
+repository moves and the report does not. Version 1.0 refers to the 2026-07-26 scan
+of 2,303 configs described above.
+
+**Plain text**
+
+> Jain, S. (2026). *The State of MCP Security, 2026* (Version 1.0). AgentAuditKit.
+> https://github.com/sattyamjjain/agent-audit-kit/blob/main/research/state-of-mcp-2026/REPORT.md
+
+**BibTeX**
+
+```bibtex
+@techreport{jain2026mcpsecurity,
+  author      = {Jain, Sattyam},
+  title       = {The State of MCP Security, 2026},
+  institution = {AgentAuditKit},
+  year        = {2026},
+  month       = {8},
+  type        = {Technical Report},
+  number      = {Version 1.0},
+  url         = {https://github.com/sattyamjjain/agent-audit-kit/blob/main/research/state-of-mcp-2026/REPORT.md},
+  note        = {Corpus: 2,303 distinct public MCP server configurations, collected 2026-07-26. Offline, deterministic scan; reproducible with \texttt{make report}.}
+}
+```
+
+Repository-level metadata is in [`CITATION.cff`](../../CITATION.cff) at the repo
+root, which GitHub renders as a "Cite this repository" widget. It points at this same
+identity, so the two cannot disagree about the report version.
+
+**Citing a specific number.** Every figure above carries its numerator and
+denominator; quote both. For example: "0 of 2,303 public MCP configs served RFC 9728
+Protected Resource Metadata discovery (Jain 2026, v1.0)." If you need the raw data,
+`results.json` beside this file is the machine-readable output, and
+`corpus/registry-manifest.json` records per-server provenance.

@@ -6539,7 +6539,7 @@
       "aicm_references": [
         "DSP-17"
       ],
-      "auto_fixable": false,
+      "auto_fixable": true,
       "category": "secret-exposure",
       "cve_references": [],
       "description": "Hardcoded secret values found in mcpServers env blocks in non-.mcp.json files.",
@@ -6551,7 +6551,7 @@
       "owasp_mcp_references": [
         "MCP01:2025"
       ],
-      "remediation": "Use environment variable references.",
+      "remediation": "Replace the literal with a host-resolved environment reference of the same name \u2014 the `env` value becomes `\"GITHUB_TOKEN\": \"${GITHUB_TOKEN}\"` \u2014 then export the variable from your shell or secrets manager before starting the server. That form is what MCP hosts already resolve: 158 env values across the 748 public configs in this project's corpus use it. Rotate the exposed value as well: it was readable in a config file, so treat it as compromised regardless of what the file now says. `agent-audit-kit fix` performs the substitution (the variable name is already the JSON key, so the edit has one correct form); it is deliberately excluded from `suggest --auto-pr`, because the server will not start until the variable is exported and AAK cannot see whether that is safe in your deployment.",
       "rule_id": "AAK-SECRET-007",
       "sarif_name": "SecretInMcpEnvBlock",
       "severity": "medium",

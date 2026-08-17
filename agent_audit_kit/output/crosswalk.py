@@ -90,6 +90,13 @@ def render_markdown() -> str:
         f"({src['doc_id']}, {src['publisher']}, {src['published']}).",
         "- **OWASP Agentic Top-10 (2026)** — ASI01–ASI10.",
         "",
+        "**Evidence** — for how often these controls actually fail in the wild, see "
+        "*The State of MCP Security, 2026* (v1.0): a scan of 2,303 distinct public "
+        "MCP configs. "
+        "[Report](https://github.com/sattyamjjain/agent-audit-kit/blob/main/research/state-of-mcp-2026/REPORT.md)"
+        " · this crosswalk says what the controls are; the report says how often they "
+        "are met.",
+        "",
         "| AAK rule | Severity | Category | NSA MCP CSI control(s) | OWASP Agentic Top-10 (2026) |",
         "|----------|----------|----------|------------------------|------------------------------|",
     ]

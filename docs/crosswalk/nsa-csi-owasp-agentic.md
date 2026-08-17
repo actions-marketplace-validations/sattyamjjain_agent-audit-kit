@@ -7,6 +7,8 @@ Every AgentAuditKit rule (308 total; 281 mapped) against two agentic-security st
 - **NSA MCP Security CSI** — Model Context Protocol (MCP): Security Design Considerations for AI-Driven Automation (U/OO/6030316-26 | PP-26-1834, NSA Artificial Intelligence Security Center (AISC), May 2026 Ver. 1.0).
 - **OWASP Agentic Top-10 (2026)** — ASI01–ASI10.
 
+**Evidence** — for how often these controls actually fail in the wild, see *The State of MCP Security, 2026* (v1.0): a scan of 2,303 distinct public MCP configs, of which **0 serve RFC 9728 discovery** and **52.3% (1,205) declare a remote server with no authentication**. [Report](../../research/state-of-mcp-2026/REPORT.md) · [how to cite](../../research/state-of-mcp-2026/REPORT.md#how-to-cite-this-report). This crosswalk says what the controls are; the report says how often they are met.
+
 | AAK rule | Severity | Category | NSA MCP CSI control(s) | OWASP Agentic Top-10 (2026) |
 |----------|----------|----------|------------------------|------------------------------|
 | `AAK-A2A-001` | high | a2a-protocol | Design for boundaries | ASI07 Insecure Inter-Agent Communication |

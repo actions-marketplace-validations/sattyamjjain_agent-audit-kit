@@ -12,7 +12,8 @@ MANIFEST := $(RESEARCH)/corpus/registry-manifest.json
 RESULTS  := $(RESEARCH)/results.json
 
 .PHONY: report corpus report-check count-check test lint typecheck repo-description \
-        cve-latency cve-latency-check cve-latency-refresh
+        cve-latency cve-latency-check cve-latency-refresh \
+        remediation-corpus remediation-corpus-check
 
 ## report: regenerate results.json from the corpus + manifest (offline, deterministic)
 report:
@@ -46,6 +47,16 @@ cve-latency-check:
 ## cve-latency-refresh: top up docs/data/cve-published.json from NVD (the one network step)
 cve-latency-refresh:
 	python scripts/cve_latency.py --refresh
+
+## remediation-corpus: regenerate remediation-key-corpus.json from benchmarks/data (offline, deterministic)
+remediation-corpus:
+	python scripts/gen_remediation_key_corpus.py
+
+## remediation-corpus-check: fail if remediation-key-corpus.json is stale vs benchmarks/data.
+## Also asserted by tests/test_remediation_keys_are_real.py, so CI covers it via pytest;
+## this target is for regenerating locally without running the suite.
+remediation-corpus-check:
+	@python scripts/gen_remediation_key_corpus.py --check
 
 ## test: run the test suite
 test:

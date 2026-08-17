@@ -60,6 +60,18 @@ _INIT_CONSTANT_RE = re.compile(
     re.MULTILINE,
 )
 
+# Fix-recipe coverage (issue #607). Driven from the registry for the same reason the
+# rule total is: it is a published capability number, so a hand-edited value rots.
+# Asserted by tests/test_fix_recipe_coverage.py::test_fix_recipe_coverage_is_canonical.
+_README_FIX_COUNT_RE = re.compile(
+    r"(<!--\s*fix-recipe-coverage:count\s*-->)(.*?)(<!--\s*/fix-recipe-coverage\s*-->)",
+    re.DOTALL,
+)
+_README_FIX_PCT_RE = re.compile(
+    r"(<!--\s*fix-recipe-coverage:pct\s*-->)(.*?)(<!--\s*/fix-recipe-coverage\s*-->)",
+    re.DOTALL,
+)
+
 # Docs that carry a `<!-- rule-count:total -->N<!-- /rule-count -->` anchor —
 # same mechanism as the README total-anchor, so the number can never drift
 # from len(RULES). Added v0.3.49: docs/rules.md and the comparison pages used
@@ -107,6 +119,18 @@ def _category_counts() -> dict[str, int]:
     return {cat.name: n for cat, n in Counter(r.category for r in RULES.values()).items()}
 
 
+def _fix_recipe_count() -> int:
+    """Rules carrying a mechanical fix recipe (issue #607).
+
+    Reads the registry's ``auto_fixable`` flag. That flag is only trustworthy because
+    ``tests/test_fix_recipe_coverage.py`` asserts every flagged rule has a recipe
+    reachable from ``fix._apply_fix`` — before that, three of them did not.
+    """
+    from agent_audit_kit.rules.builtin import RULES
+
+    return sum(1 for r in RULES.values() if r.auto_fixable)
+
+
 def _load_rule_count(bundle: pathlib.Path, regenerate: bool) -> int:
     """Read rule count from the bundle (or regenerate then read)."""
     if regenerate or not bundle.is_file():
@@ -152,6 +176,17 @@ def _update_readme(count: int, *, check: bool) -> bool:
         return f"{match.group(1)}{cat_counts[cat_name]}{match.group(4)}"
 
     text = _README_CATEGORY_ANCHOR_RE.sub(_sub_category_anchor, text)
+
+    # Fix-recipe coverage — computed from the registry's auto_fixable flag, which
+    # tests/test_fix_recipe_coverage.py holds to "has a recipe that actually runs".
+    fix_count = _fix_recipe_count()
+    text = _README_FIX_COUNT_RE.sub(
+        lambda m: f"{m.group(1)}{fix_count}{m.group(3)}", text
+    )
+    text = _README_FIX_PCT_RE.sub(
+        lambda m: f"{m.group(1)}{fix_count / count * 100:.1f}{m.group(3)}", text
+    )
+
     if text == original:
         return False
     if check:

@@ -55,8 +55,13 @@ EXCLUDE_PREFIX: tuple[str, ...] = (
 )
 
 # Headline-total phrasings only, so per-category tables ("**12 rules**"), per-language
-# counts ("2 scanners"), and quoted historical numbers never trip. Mirror of the set in
-# tests/test_rule_count_sync.py; kept here because this module is the single source.
+# counts ("2 scanners"), and quoted historical numbers never trip. This tuple is the
+# single source: tests/test_rule_count_sync.py imports find_stale_counts() instead of
+# keeping a second copy, so there is no mirror to update alongside it.
+#
+# The guard matches PHRASES, not numbers: a count written in a phrasing absent from this
+# tuple is never looked at, and rots silently while `make count-check` reports clean.
+# When prose needs a new count phrasing, reuse one below or add it here.
 PATTERNS: tuple[tuple[re.Pattern[str], str], ...] = (
     (re.compile(r"\*\*(\d+)\s+(?:deterministic |detection )?rules?\*\*\s+across", re.I), "rules"),
     (re.compile(r"\ball (\d+) rules\b", re.I), "rules"),
@@ -70,6 +75,12 @@ PATTERNS: tuple[tuple[re.Pattern[str], str], ...] = (
     # drifted to 289 two rules after the v0.3.72 sweep, because no pattern matched it.
     (re.compile(r"\b(\d+)\s+existing rules?\b", re.I), "rules"),
     (re.compile(r"\b(\d+)\s+scanner modules?\b", re.I), "scanners"),
+    # "N registered scanners" (CLAUDE.md architecture block) — sat at 89 while the
+    # registry moved to 92, because "scanner modules" was the only scanner phrasing
+    # covered. Same failure as the "N existing rules" drift above: guard clean, count
+    # wrong. Deliberately requires the "registered" qualifier, so the per-language
+    # "2 scanners" counts in README stay out of scope.
+    (re.compile(r"\b(\d+)\s+registered scanners?\b", re.I), "scanners"),
     (re.compile(r"\b(\d+)\s+CLI commands?\b", re.I), "commands"),
     (re.compile(r"entry point\s*\((\d+)\s+commands?\)", re.I), "commands"),
     (re.compile(r"\*\*(\d+)\s+frameworks\*\*", re.I), "frameworks"),
