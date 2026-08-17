@@ -10,6 +10,8 @@ from __future__ import annotations
 import re
 from pathlib import Path
 
+import pytest
+
 from agent_audit_kit.rules.builtin import RULES
 from agent_audit_kit.scanners.mcp_cve_pins_2026_07 import scan
 
@@ -1145,3 +1147,50 @@ def test_florence2_remediation_does_not_promise_an_upgrade() -> None:
     assert "will not ship in the package" in text, (
         "remediation must state plainly that an upgrade does not resolve this"
     )
+
+
+# --- CVE-2026-59723 (cline): the pin must not match "cline" inside English words ---
+#
+# `_mk_re` anchors on neither side, so the unbounded pattern matched the substring in
+# "declined", "inclined" and "recline". Any prose file containing one of those reported
+# a CVE pin for a package the project does not depend on. Found while writing the
+# mcp-florence2 fixtures, whose comment used the word "declined". Fixed with `_CLINE_RE`,
+# the same bounded shape as `_LETTA_RE` / `_N8N_RE`.
+
+_CLINE_RULE = "AAK-MCP-CLINE-CVE-2026-59723-001"
+
+
+@pytest.mark.parametrize("word", ["declined", "declines", "inclined", "recline", "disinclined"])
+def test_cline_does_not_match_english_words(tmp_path: Path, word: str) -> None:
+    assert _CLINE_RULE not in _ids(
+        tmp_path, "requirements.txt", f"# the vendor {word} to patch this\nrequests==2.0\n"
+    )
+
+
+def test_cline_does_not_match_a_different_package(tmp_path: Path) -> None:
+    """`cline-utils` is not `cline`; the right boundary excludes the hyphen."""
+    content = '{"dependencies": {"cline-utils": "1.0.0"}}'
+    assert _CLINE_RULE not in _ids(tmp_path, "package.json", content)
+
+
+def test_cline_pip_pin_below_floor_still_fires(tmp_path: Path) -> None:
+    """The bound must not cost a true positive."""
+    assert _CLINE_RULE in _ids(tmp_path, "requirements.txt", "cline==3.0.20\n")
+
+
+def test_cline_unpinned_mcp_config_still_fires(tmp_path: Path) -> None:
+    content = '{"mcpServers": {"c": {"command": "npx", "args": ["cline"]}}}'
+    assert _CLINE_RULE in _ids(tmp_path, ".mcp.json", content)
+
+
+def test_cline_pin_uses_a_bounded_regex() -> None:
+    """Assert the mechanism, not just the behaviour.
+
+    A future edit that drops back to the default `_mk_re` would reintroduce the
+    substring match, and the prose cases above are the only thing that would catch
+    it — so pin the explicit-regex decision here too.
+    """
+    from agent_audit_kit.scanners.mcp_cve_pins_2026_07 import _PINS
+
+    pin = next(p for p in _PINS if p.rule_id == _CLINE_RULE)
+    assert pin.regexes, "the cline pin must carry an explicit bounded regex"

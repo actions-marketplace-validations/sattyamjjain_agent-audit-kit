@@ -118,6 +118,12 @@ _N8N_MCP_RE = re.compile(r"(?<![\w./-])n8n-mcp(?![\w])" + _VER_OPT, re.IGNORECAS
 # hyphen so this stays off `letta-client`, a separate client SDK on its own
 # version line; the lookbehind keeps it off `pyletta`.
 _LETTA_RE = re.compile(r"(?<![\w./-])letta(?![\w-])" + _VER_OPT, re.IGNORECASE)
+# `cline` needs the same treatment, and for a blunter reason: unbounded, `_mk_re`
+# matches the substring in ordinary English. "declined", "inclined", "recline" and
+# "declines" all fired, so any prose file that happened to contain one reported a
+# CVE pin for a package the project does not depend on. Found while writing the
+# mcp-florence2 fixtures, whose comment used the word "declined".
+_CLINE_RE = re.compile(r"(?<![\w./-])cline(?![\w-])" + _VER_OPT, re.IGNORECASE)
 # `n8n` fixed to exclude the distinct `n8n-mcp` package (right boundary).
 _N8N_RE = re.compile(r"(?<![\w./-])n8n(?![\w-])" + _VER_OPT, re.IGNORECASE)
 
@@ -139,8 +145,10 @@ class _Pin:
 _PINS: tuple[_Pin, ...] = (
     _Pin("AAK-MCP-LITELLM-CVE-2026-59822-001", "litellm", ("litellm",), (1, 84, 0),
          fix_label="1.84.0"),
+    # Bounded regex, not the default `_mk_re`: see `_CLINE_RE` above — unbounded,
+    # this matched "cline" inside ordinary words like "declined".
     _Pin("AAK-MCP-CLINE-CVE-2026-59723-001", "cline", ("cline",), (3, 0, 30),
-         fix_label="3.0.30"),
+         fix_label="3.0.30", regexes=(_CLINE_RE,)),
     _Pin("AAK-MCP-TEXTEDITOR-CVE-2026-15138-001", "mcp-text-editor", ("mcp-text-editor",),
          (1, 0, 3), fix_label="1.0.3 (affected up to 1.0.2)"),
     _Pin("AAK-MCP-N8N-CVE-2026-59207-001", "n8n", ("n8n",), (2, 27, 4),

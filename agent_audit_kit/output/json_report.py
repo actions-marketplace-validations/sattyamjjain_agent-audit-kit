@@ -28,6 +28,21 @@ def _finding_to_dict(finding: Finding) -> dict:
 
 
 def format_results(result: ScanResult, min_severity: Severity = Severity.LOW) -> str:
+    """Render a scan result as JSON.
+
+    On the two counts in ``summary``: the severity histogram and ``total`` describe
+    everything the scan found, while ``findings`` contains only what cleared
+    ``min_severity`` (default LOW, so INFO findings are counted but not listed).
+    Those numbers therefore disagree by design, and previously nothing in the
+    document said so — a consumer reading ``summary.total`` and then counting
+    ``findings`` saw a silent off-by-N, and a histogram claiming ``info: 1`` beside
+    an array holding no INFO finding.
+
+    ``reported`` and ``minSeverity`` make the document explain itself:
+    ``reported == len(findings)`` always, and ``minSeverity`` names the threshold
+    that produced the gap. Existing fields keep their meaning, so consumers reading
+    ``total`` are unaffected.
+    """
     filtered = result.findings_at_or_above(min_severity)
     report: dict = {
         "tool": "AgentAuditKit",
@@ -38,7 +53,11 @@ def format_results(result: ScanResult, min_severity: Severity = Severity.LOW) ->
             "medium": result.medium_count,
             "low": result.low_count,
             "info": result.info_count,
+            # Everything found, at any severity.
             "total": len(result.findings),
+            # What `findings` below actually contains, after the threshold.
+            "reported": len(filtered),
+            "minSeverity": min_severity.value,
             "filesScanned": result.files_scanned,
             "rulesEvaluated": result.rules_evaluated,
             "scanDurationMs": round(result.scan_duration_ms, 1),
