@@ -179,6 +179,7 @@ _AICM_TAGS: dict[str, list[str]] = {
     "AAK-MCP-LANGGRAPH-CHECKPOINT-CVE-2026-71433-001": ["STA-08", "AIS-07", "DSP-04"],
     "AAK-METAADS-CVE-2026-48039-001": ["DSP-17", "IAM-01", "STA-08"],
     "AAK-MCP-GOOGLESEARCH-CVE-2026-19337-001": ["IVS-04", "STA-08"],
+    "AAK-MCP-FLORENCE2-CVE-2026-19984-001": ["IVS-04", "STA-08"],
     "AAK-MCP-GRAFANA-CVE-2026-19516-001": ["IVS-04", "STA-08"],
     "AAK-MCP-N8N-CVE-2026-72768-001": ["IVS-04", "STA-08"],
     "AAK-MCP-CCTEMPLATES-CVE-2026-73222-001": ["IAM-01", "STA-08"],
@@ -7501,6 +7502,41 @@ _r(
 # ---------------------------------------------------------------------------
 # Internal / meta rules (surfaced when the scanner itself has a problem)
 # ---------------------------------------------------------------------------
+
+_r(
+    "AAK-MCP-FLORENCE2-CVE-2026-19984-001",
+    "mcp-florence2 SSRF via the get_images src argument (<= 0.3.13, no code fix planned)",
+    "`mcp-florence2` up to and including 0.3.13 has server-side request forgery in "
+    "`get_images` (`src/mcp_florence2/__init__.py`): the `src` argument is fetched "
+    "without validating the host or scheme, so a caller — or an indirect prompt "
+    "injection reaching this tool — can steer the server at attacker-chosen internal "
+    "endpoints (cloud metadata, loopback admin ports, RFC-1918 hosts) "
+    "(CVE-2026-19984, CVSS 3.1 6.3). A public exploit exists. This is a "
+    "**presence-only** pin, and for a different reason than the other no-fix pins: "
+    "the vendor has ruled out a source change, stating that deployments needing SSRF "
+    "protection should route HTTP(S) through an SSRF-safe proxy \"without requiring "
+    "changes to the mcp-florence2 source code\". So there is no fixed version to wait "
+    "for, and a future release does not clear this finding — the mitigation is "
+    "deployment-side. Same SSRF-via-tool-argument shape as the "
+    "`@adenot/mcp-google-search` `read_webpage` pin.",
+    Severity.MEDIUM,
+    Category.SUPPLY_CHAIN,
+    "Put the server's egress behind a proxy or allow-list that refuses loopback, "
+    "link-local, cloud-metadata and RFC-1918 destinations — that is the vendor's own "
+    "stated mitigation and the only one that addresses this. Do not wait for a version "
+    "bump: the vendor has said the fix will not be in the package, so upgrading "
+    "`mcp-florence2` does not resolve it. If you control the deployment, validate the "
+    "`src` scheme and host before the fetch, or drop the `get_images` tool from the "
+    "exposed tool set if callers do not need remote image input. Upstream has stated "
+    "the fix will not ship in the package, so treat this as a standing deployment "
+    "control rather than a pending upgrade.",
+    sarif_name="McpFlorence2GetImagesSsrf",
+    cve_references=["CVE-2026-19984"],
+    owasp_mcp_references=["MCP09:2025"],
+    owasp_agentic_references=["ASI06"],
+    adversa_references=["ADV-SSRF-01"],
+)
+
 
 _r(
     "AAK-INTERNAL-SCANNER-FAIL",

@@ -3374,6 +3374,25 @@
     {
       "category": "supply-chain",
       "cve_references": [
+        "CVE-2026-19984"
+      ],
+      "eu_ai_act": [
+        "Art. 10 - Data Governance"
+      ],
+      "nsa_mcp_csi": [],
+      "owasp_agentic": [
+        "ASI06 Memory & Context Poisoning"
+      ],
+      "owasp_mcp": [
+        "MCP09:2025 SSRF / Network Boundary"
+      ],
+      "rule_id": "AAK-MCP-FLORENCE2-CVE-2026-19984-001",
+      "severity": "medium",
+      "title": "mcp-florence2 SSRF via the get_images src argument (<= 0.3.13, no code fix planned)"
+    },
+    {
+      "category": "supply-chain",
+      "cve_references": [
         "CVE-2026-67425"
       ],
       "eu_ai_act": [
@@ -6888,14 +6907,14 @@
       "mcp-config": 65,
       "mcp-server-card": 4,
       "secret-exposure": 18,
-      "supply-chain": 90,
+      "supply-chain": 91,
       "taint-analysis": 14,
       "tool-poisoning": 29,
       "transport-security": 13,
       "trust-boundary": 15
     },
     "by_eu_ai_act": {
-      "Art. 10 - Data Governance": 106,
+      "Art. 10 - Data Governance": 107,
       "Art. 13 - Transparency": 30,
       "Art. 14 - Human Oversight": 39,
       "Art. 15 - Robustness & Security": 178,
@@ -6918,7 +6937,7 @@
       "ASI03": 68,
       "ASI04": 64,
       "ASI05": 44,
-      "ASI06": 44,
+      "ASI06": 45,
       "ASI07": 9,
       "ASI08": 5,
       "ASI09": 18,
@@ -6933,7 +6952,7 @@
       "MCP06:2025": 14,
       "MCP07:2025": 33,
       "MCP08:2025": 5,
-      "MCP09:2025": 26,
+      "MCP09:2025": 27,
       "MCP10:2025": 11
     },
     "by_severity": {
@@ -6941,10 +6960,10 @@
       "high": 143,
       "info": 5,
       "low": 9,
-      "medium": 81
+      "medium": 82
     },
-    "total_cves_covered": 156,
-    "total_rules": 308
+    "total_cves_covered": 157,
+    "total_rules": 309
   },
   "tool": "agent-audit-kit"
 }

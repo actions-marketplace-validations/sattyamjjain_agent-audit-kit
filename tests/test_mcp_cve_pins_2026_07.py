@@ -80,6 +80,8 @@ PINS = {
     # 2026-08-11..12 wave
     "AAK-MCP-N8N-CVE-2026-72768-001": "medium",
     "AAK-MCP-CCTEMPLATES-CVE-2026-73222-001": "high",
+    # 2026-08-17 wave
+    "AAK-MCP-FLORENCE2-CVE-2026-19984-001": "medium",
 }
 
 
@@ -1086,3 +1088,60 @@ def test_letta_fixtures_positive_and_negative() -> None:
     base = Path(__file__).resolve().parent / "fixtures" / "cves" / "cve-2025-51482-letta"
     assert _LETTA in {f.rule_id for f in scan(base / "vulnerable")[0]}
     assert _LETTA not in {f.rule_id for f in scan(base / "negative")[0]}
+
+
+# --- CVE-2026-19984: mcp-florence2 get_images SSRF (presence-only, no fix planned) ---
+
+_FLORENCE2_RULE = "AAK-MCP-FLORENCE2-CVE-2026-19984-001"
+_FLORENCE2_FIXTURES = (
+    Path(__file__).resolve().parent / "fixtures" / "cves" / "cve-2026-19984-mcp-florence2"
+)
+
+
+def test_florence2_latest_published_version_fires(tmp_path: Path) -> None:
+    """0.3.13 is the newest release, not a safe one — upstream ships no code fix."""
+    assert _FLORENCE2_RULE in _ids(tmp_path, "requirements.txt", "mcp-florence2==0.3.13\n")
+
+
+def test_florence2_unpinned_uvx_config_fires(tmp_path: Path) -> None:
+    content = '{"mcpServers": {"f2": {"command": "uvx", "args": ["mcp-florence2"]}}}'
+    assert _FLORENCE2_RULE in _ids(tmp_path, ".mcp.json", content)
+
+
+def test_florence2_hypothetical_newer_version_still_fires(tmp_path: Path) -> None:
+    """The pin must not be silently satisfied by an upgrade.
+
+    The vendor's stated mitigation is an SSRF-safe egress proxy, explicitly "without
+    requiring changes to the mcp-florence2 source code". A version floor would tell
+    users an upgrade clears this, which it does not — so presence-only is the
+    permanent shape here, and a future release must still fire.
+    """
+    assert _FLORENCE2_RULE in _ids(tmp_path, "requirements.txt", "mcp-florence2==9.9.9\n")
+
+
+def test_florence2_bare_florence2_does_not_fire(tmp_path: Path) -> None:
+    """`florence2` is an unrelated model package; the pin escapes the full name."""
+    assert _FLORENCE2_RULE not in _ids(tmp_path, "requirements.txt", "florence2==1.0.0\n")
+
+
+def test_florence2_positive_fixture_fires() -> None:
+    ids = {f.rule_id for f in scan(_FLORENCE2_FIXTURES / "vulnerable")[0]}
+    assert _FLORENCE2_RULE in ids
+
+
+def test_florence2_negative_fixture_is_quiet() -> None:
+    ids = {f.rule_id for f in scan(_FLORENCE2_FIXTURES / "negative")[0]}
+    assert _FLORENCE2_RULE not in ids
+
+
+def test_florence2_remediation_does_not_promise_an_upgrade() -> None:
+    """Guard the honest-remediation property this release is about.
+
+    There is no fixed version. Advice to "upgrade to X" would be advice that does
+    nothing — the same defect class as the v0.3.78 transport-flip keys.
+    """
+    text = RULES[_FLORENCE2_RULE].remediation
+    assert "egress" in text.lower(), "remediation must name the mitigation that works"
+    assert "will not ship in the package" in text, (
+        "remediation must state plainly that an upgrade does not resolve this"
+    )

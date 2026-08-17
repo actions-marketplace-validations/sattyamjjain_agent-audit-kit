@@ -3774,6 +3774,34 @@
     },
     {
       "adversa_references": [
+        "ADV-SSRF-01"
+      ],
+      "aicm_references": [
+        "IVS-04",
+        "STA-08"
+      ],
+      "auto_fixable": false,
+      "category": "supply-chain",
+      "cve_references": [
+        "CVE-2026-19984"
+      ],
+      "description": "`mcp-florence2` up to and including 0.3.13 has server-side request forgery in `get_images` (`src/mcp_florence2/__init__.py`): the `src` argument is fetched without validating the host or scheme, so a caller \u2014 or an indirect prompt injection reaching this tool \u2014 can steer the server at attacker-chosen internal endpoints (cloud metadata, loopback admin ports, RFC-1918 hosts) (CVE-2026-19984, CVSS 3.1 6.3). A public exploit exists. This is a **presence-only** pin, and for a different reason than the other no-fix pins: the vendor has ruled out a source change, stating that deployments needing SSRF protection should route HTTP(S) through an SSRF-safe proxy \"without requiring changes to the mcp-florence2 source code\". So there is no fixed version to wait for, and a future release does not clear this finding \u2014 the mitigation is deployment-side. Same SSRF-via-tool-argument shape as `AAK-MCP-GOOGLESEARCH-CVE-2026-19337-001`.",
+      "incident_references": [],
+      "limitations": "",
+      "owasp_agentic_references": [
+        "ASI06"
+      ],
+      "owasp_mcp_references": [
+        "MCP09:2025"
+      ],
+      "remediation": "Put the server's egress behind a proxy or allow-list that refuses loopback, link-local, cloud-metadata and RFC-1918 destinations \u2014 that is the vendor's own stated mitigation and the only one that addresses this. Do not wait for a version bump: the vendor has said the fix will not be in the package, so upgrading `mcp-florence2` does not resolve it. If you control the deployment, validate the `src` scheme and host before the fetch, or drop the `get_images` tool from the exposed tool set if callers do not need remote image input. Upstream has stated the fix will not ship in the package, so treat this as a standing deployment control rather than a pending upgrade.",
+      "rule_id": "AAK-MCP-FLORENCE2-CVE-2026-19984-001",
+      "sarif_name": "McpFlorence2GetImagesSsrf",
+      "severity": "medium",
+      "title": "mcp-florence2 SSRF via the get_images src argument (<= 0.3.13, no code fix planned)"
+    },
+    {
+      "adversa_references": [
         "ADV-AUTH-01"
       ],
       "aicm_references": [

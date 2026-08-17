@@ -45,6 +45,9 @@ available) before shipping:
     the PyPI name is `stata-mcp`; the GHSA title "MCP-for-Stata" is the project
     name, and `mcp-for-stata` does not exist on PyPI)
   - @adenot/mcp-google-search      <= 0.3.1   (CVE-2026-19337; SSRF, no fixed release yet)
+  - mcp-florence2                  <= 0.3.13  (CVE-2026-19984; get_images SSRF — upstream
+    ships no code fix and points at an SSRF-safe egress proxy, so there is no fix
+    floor to wait for and presence-only is the permanent state, not a placeholder)
   - mcp-grafana                    >= 1.1.0   (CVE-2026-19516; SSRF via X-Grafana-URL destination)
   - n8n (MCP Client node)          >= 2.32.1  (CVE-2026-72768; SSRF-protection bypass)
   - claude-code-templates          >= 1.29.4  (CVE-2026-73222; --studio unauth 0.0.0.0 RCE)
@@ -409,6 +412,23 @@ _PINS: tuple[_Pin, ...] = (
          ("letta",), (0, 16, 5),
          fix_label="0.16.5 (first release past every affected version)",
          regexes=(_LETTA_RE,)),
+    # --- 2026-08-17 wave ---
+    # mcp-florence2 (PyPI, jkawamoto) <= 0.3.13: `get_images`
+    # (`src/mcp_florence2/__init__.py`) fetches the caller-supplied `src` argument
+    # with no host or scheme validation → SSRF to internal endpoints
+    # (CVE-2026-19984, CVSS 3.1 6.3, public exploit).
+    #
+    # floor=None (presence-only) — and unlike the @adenot pin above, this is not a
+    # placeholder awaiting a release. The vendor has ruled out a source change and
+    # states the mitigation is routing HTTP(S) through an SSRF-safe proxy "without
+    # requiring changes to the mcp-florence2 source code". So there is no fix version
+    # to re-pin to later, and a newer release must still fire: the remediation is
+    # deployment-side egress control, not an upgrade. Do NOT convert this to a version
+    # floor unless upstream actually ships a validating fix.
+    _Pin("AAK-MCP-FLORENCE2-CVE-2026-19984-001", "mcp-florence2",
+         ("mcp-florence2",), None,
+         fix_label="no fixed release, by vendor decision — mitigate with an "
+                   "SSRF-safe egress proxy / allow-list rather than an upgrade"),
 )
 
 _CANDIDATE_NAMES = (

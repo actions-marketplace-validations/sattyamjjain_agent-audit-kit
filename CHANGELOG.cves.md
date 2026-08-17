@@ -16,6 +16,18 @@ open.
 > issue. The per-CVE latency figures in the tables are **measurements recorded at
 > the time**, kept as dated facts, not a standing promise.
 
+## 2026-08-17 — one pin with no fix to pin to, one repeat of a settled disposition
+
+Both of the day's advisories are decided by packaging rather than by severity. The
+lower-scoring one is in scope because it ships as a PyPI artifact a config can name;
+the higher-scoring one is out of scope for the third time on the same basis, because a
+static config scan cannot see a desktop app's kernel version.
+
+| CVE | Reference | AAK rule / disposition | Triaged |
+|---|---|---|---|
+| CVE-2026-19984 (`mcp-florence2` <= 0.3.13, CWE-918, CVSS 3.1 6.3 — `get_images` in `src/mcp_florence2/__init__.py` fetches the caller-supplied `src` with no host or scheme validation → SSRF to loopback, link-local, cloud-metadata and RFC-1918 targets; a public exploit exists) | [NVD](https://nvd.nist.gov/vuln/detail/CVE-2026-19984) | **In scope, pinned** `AAK-MCP-FLORENCE2-CVE-2026-19984-001` (SUPPLY_CHAIN, MEDIUM). Presence-only (`floor=None`), and unlike the `@adenot/mcp-google-search` pin this is not a placeholder awaiting a release: upstream has ruled out a source change, stating that deployments needing SSRF protection should route HTTP(S) through an SSRF-safe proxy "without requiring changes to the mcp-florence2 source code". So there is no fix floor to re-pin to, a newer release must still fire, and the remediation names egress control rather than an upgrade — advice to upgrade would be advice that does nothing. `test_florence2_hypothetical_newer_version_still_fires` and `test_florence2_remediation_does_not_promise_an_upgrade` hold both properties. | 2026-08-17 |
+| CVE-2026-74798 (SiYuan kernel < v3.7.4, CWE-22, CVSS 8.7 — the `database_clean` MCP tool passes `id` to `RemoveUnusedAttributeView` with only an empty-string check, so `filepath.Join` builds an attacker-chosen path → arbitrary file read into the history directory, then deletion of the original. The HTTP API handler was hardened in GHSA-7hm9-v7vf-7g4w; this MCP caller was not) | [NVD](https://nvd.nist.gov/vuln/detail/CVE-2026-74798) | **Out of scope** — same basis as SiYuan CVE-2026-66012 (#499) and ArcadeDB CVE-2026-68578 (#528): SiYuan is a desktop app referenced by URL, not a pinned `npx`/`uvx` artifact, so its kernel version is not visible to a static config scan and there is nothing to pin. The traversal itself is a server-side runtime property with no config-detectable signature. Upgrade to >= 3.7.4; the reachable posture (a remote MCP endpoint with no authentication) is flagged by `AAK-MCP-001`, and the authenticated-MCP-client precondition means the no-auth finding is the one that matters for exposure. Revisit if SiYuan ever ships a pinnable distribution. | 2026-08-17 |
+
 ## 2026-08-16 — the sidecar-dashboard wave
 
 Three of the week's advisories share one shape: an MCP server that also binds a local HTTP surface with no auth, reachable by DNS rebinding or a co-located SSRF even on loopback. Covered by pattern rules rather than pins, because AAK already carried four package-specific pins of this shape and the supply was not slowing down.
