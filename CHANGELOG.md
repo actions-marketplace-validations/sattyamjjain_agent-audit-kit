@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.3.83] - 2026-08-18
+
 ### Fixed
 
 - A git tag could ship without its changelog entry, and nothing checked. v0.3.82 was tagged, published to PyPI on 2026-08-17, and its notes stayed under `[Unreleased]`, so the public record said "unreleased" for a version anyone could already install. The release flow compares the pyproject version against `__init__`, the README pins and the newest tag, but never against `CHANGELOG.md`. This is the 0.3.81 rule-count failure one level up: that guard matches counts by phrase, so a count written in an uncovered phrasing was never looked at and rotted while `make count-check` reported clean. Here the uncovered surface was a whole document. `tests/test_changelog_tags_agree.py` now holds tag to dated heading for every semver tag, reading tags with `git tag --list 'v*'` so it needs no network. It also holds that version headings carry a date rather than just a version, that `[Unreleased]` exists and sits above the newest release, and that its own exemption list stays honest in both directions. Checking the tags surfaced more than 0.3.82: 41 of 61 semver tags had no dated heading in `CHANGELOG.md`, 30 of them recorded in `docs/changelog/archive`, which the guard also reads. The remaining 11 predate the guard, are listed in `KNOWN_UNRECORDED` so it fails closed on anything new, and are deliberately not backfilled, because those notes were never written and inventing them now would put unsourced content in the audit trail. v0.3.82 was not exempted: it failed, its three entries moved into a dated `## [0.3.82] - 2026-08-17` section, and it passes.
