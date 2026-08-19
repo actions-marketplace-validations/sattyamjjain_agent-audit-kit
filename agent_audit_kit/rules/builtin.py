@@ -180,6 +180,7 @@ _AICM_TAGS: dict[str, list[str]] = {
     "AAK-METAADS-CVE-2026-48039-001": ["DSP-17", "IAM-01", "STA-08"],
     "AAK-MCP-GOOGLESEARCH-CVE-2026-19337-001": ["IVS-04", "STA-08"],
     "AAK-MCP-FLORENCE2-CVE-2026-19984-001": ["IVS-04", "STA-08"],
+    "AAK-MCP-CODEWHALE-CVE-2026-75858-001": ["IVS-04", "STA-08"],
     "AAK-MCP-GRAFANA-CVE-2026-19516-001": ["IVS-04", "STA-08"],
     "AAK-MCP-N8N-CVE-2026-72768-001": ["IVS-04", "STA-08"],
     "AAK-MCP-CCTEMPLATES-CVE-2026-73222-001": ["IAM-01", "STA-08"],
@@ -6482,19 +6483,34 @@ _r(
 
 _r(
     "AAK-MCP-APIFY-CVE-2026-46341-001",
-    "Apify MCP docs-allowlist bypass SSRF (`@apify/actors-mcp-server` < 0.9.21)",
-    "The Apify MCP server (`@apify/actors-mcp-server`) before 0.9.21 validates the "
-    "`fetch-apify-docs` allowlisted documentation domains with `String.startsWith()` "
-    "instead of hostname comparison, so attacker URLs such as "
-    "`https://docs.apify.com.evil.com/` or `https://docs.apify.com@evil.com/` pass "
-    "the `ALLOWED_DOC_DOMAINS` check and return arbitrary fetched content to the LLM "
-    "(CVE-2026-46341, CVSS 6.1, SSRF). Treat < 0.9.21 (and unpinned) as exposed.",
-    Severity.MEDIUM,
+    "Apify MCP host-validation defects: docs-allowlist SSRF and Actor "
+    "path-authority token leak (`@apify/actors-mcp-server` < 0.10.11)",
+    "Two defects in the Apify MCP server (`@apify/actors-mcp-server`), both of them "
+    "a host check that trusts a string instead of a parsed origin. Before 0.9.21 the "
+    "`fetch-apify-docs` allowlist is validated with `String.startsWith()` rather than "
+    "hostname comparison, so attacker URLs such as `https://docs.apify.com.evil.com/` "
+    "or `https://docs.apify.com@evil.com/` pass the `ALLOWED_DOC_DOMAINS` check and "
+    "return arbitrary fetched content to the LLM (CVE-2026-46341, CVSS 6.1, SSRF). "
+    "Before 0.10.11 `getActorMCPServerURL` in `src/mcp/actors.ts` concatenates the "
+    "trusted Actor standby URL with the Actor-supplied `webServerMcpPath` without "
+    "re-checking the resulting origin, so a userinfo-style authority (`@evil.host`) "
+    "in a malicious Actor definition redirects `connectMCPClient` to a third-party "
+    "host — and the `call-actor`, `fetch-actor-details` and `actor-mcp` paths hand "
+    "that URL to transports in `src/mcp/client.ts` that attach the victim's "
+    "`Authorization` bearer token, disclosing the Apify API token and with it access "
+    "to Actors, stored datasets and billable compute (CVE-2026-50143, CVSS 8.1, "
+    "CWE-918). Exploiting the second requires only that the victim invoke or inspect "
+    "the attacker-published Actor. The floor is the later of the two: treat "
+    "< 0.10.11 (and unpinned) as exposed.",
+    Severity.HIGH,
     Category.SUPPLY_CHAIN,
-    "Upgrade `@apify/actors-mcp-server` to >= 0.9.21 and pin it. Allow-list by "
-    "parsed URL hostname (exact / suffix match), never `startsWith` on the raw URL.",
+    "Upgrade `@apify/actors-mcp-server` to >= 0.10.11 and pin it. Allow-list by "
+    "parsed URL hostname (exact / suffix match), never `startsWith` on the raw URL, "
+    "and re-parse any URL built from a partly-untrusted path before attaching "
+    "credentials to it — comparing the parsed origin against the expected one is what "
+    "catches a userinfo authority that string concatenation does not.",
     sarif_name="ApifyMcpDocsAllowlistSsrf",
-    cve_references=["CVE-2026-46341"],
+    cve_references=["CVE-2026-46341", "CVE-2026-50143"],
     owasp_mcp_references=["MCP09:2025"],
     owasp_agentic_references=["ASI06"],
     adversa_references=["ADV-SSRF-01"],
@@ -7535,6 +7551,168 @@ _r(
     owasp_mcp_references=["MCP09:2025"],
     owasp_agentic_references=["ASI06"],
     adversa_references=["ADV-SSRF-01"],
+)
+
+
+_r(
+    "AAK-MCP-CODEWHALE-CVE-2026-75858-001",
+    "CodeWhale auto-approved code execution: rlm_eval and exec_shell_interact "
+    "bypass the approval policy (`codewhale` >= 0.8.41, < 0.8.64)",
+    "CodeWhale between 0.8.41 and 0.8.64 ships two tools whose "
+    "`approval_requirement()` returns `ApprovalRequirement::Auto`, which the engine "
+    "treats as \"never prompt\". That silently overrides the user's configured "
+    "`--approval-policy` for the two tool classes it should never be overridden for. "
+    "`rlm_eval` runs model-supplied Python in a `python3` interpreter with no prompt "
+    "and no audit step (CVE-2026-75858, CVSS 7.8, CWE-94); `exec_shell_interact` "
+    "(alias `exec_interact`) writes LLM-controlled stdin into an already-approved "
+    "long-running interactive session — a `python3 -i` REPL, `mysql`, `ssh`, or "
+    "`sudo -i` — so commands run at that process's privilege level (CVE-2026-75857, "
+    "CVSS 7.0). Neither needs a malicious operator: prompt injection in any untrusted "
+    "content the agent reads (a fetched page, a repository file, an MCP tool result) "
+    "reaches both, and the companion `rlm_open` tool can stage exactly that content. "
+    "Both are fixed in 0.8.64. `deepseek-tui` is the same project before it was "
+    "renamed and is carried by both advisories; it is deprecated on npm in favour of "
+    "`codewhale`, so it has no fixed release of its own.",
+    Severity.HIGH,
+    Category.SUPPLY_CHAIN,
+    "Upgrade `codewhale` to >= 0.8.64 and pin it. If the manifest still names "
+    "`deepseek-tui`, that package is deprecated and its line ends before the fix: "
+    "migrate to `codewhale` >= 0.8.64 rather than upgrading in place. Until then, "
+    "treat any approval policy you have configured as not in force for `rlm_eval` or "
+    "`exec_shell_interact` and remove those tools from the exposed tool set, since a "
+    "policy the engine never consults offers no protection.",
+    sarif_name="CodeWhaleAutoApprovedExecution",
+    cve_references=["CVE-2026-75858", "CVE-2026-75857"],
+    owasp_mcp_references=["MCP01:2025"],
+    owasp_agentic_references=["ASI01"],
+    adversa_references=["ADV-INJECT-01"],
+)
+
+
+# ---------------------------------------------------------------------------
+# Composition — rules that hold over a graph of components rather than one
+# artifact. See scanners/composition.py for why these are distinct from
+# AAK-AGENT-COMPOSE-001, which is an unordered capability union over one
+# container of skills.
+# ---------------------------------------------------------------------------
+
+_r(
+    "AAK-COMPOSE-001",
+    "Untrusted input reaches network egress through a 2- or 3-component chain "
+    "that no single component would trip",
+    "An ordered path of two or three components carries untrusted input to "
+    "network egress, passing through one that reads secrets or local state, while "
+    "no single component on the path holds all three roles. Each component "
+    "therefore passes every rule that inspects it alone, and the exposure exists "
+    "only because they were composed. This is the CompoSkill result "
+    "(arXiv:2608.16246): a risk chain assembled from parts that each clear an "
+    "individual scanner. Paths are capped at three components, which is where that "
+    "paper\'s own attack-success numbers concentrate before longer chains degrade "
+    "them, and beyond which the search cost grows as the node count to the power "
+    "of the depth. Components are skills (`SKILL.md`) and MCP servers, and an edge "
+    "exists where one component\'s declared output is another\'s declared input, "
+    "or where both are registered together and the second accepts free-form text. "
+    "Distinct from `AAK-AGENT-COMPOSE-001`, which asks whether an unordered set of "
+    "skills spans a boundary: this asks whether a directed path carries data "
+    "across one.",
+    Severity.HIGH,
+    Category.COMPOSITION,
+    "Break one link rather than hardening every component. In order of "
+    "effectiveness: stop the first component\'s untrusted output from reaching the "
+    "next automatically (require a human step, or a schema that cannot carry "
+    "instructions); drop the egress component\'s reach to an allow-list of "
+    "destinations; or split the chain across contexts so the components are never "
+    "loaded together. Hardening the middle component alone does not help, because "
+    "the chain re-forms around any replacement with the same capability.",
+    sarif_name="CompositionChainToEgress",
+    owasp_mcp_references=["MCP08:2025"],
+    owasp_agentic_references=["ASI02"],
+    adversa_references=["ADV-INJECT-01"],
+    incident_references=["ARXIV-2608.16246", "ARXIV-2608.09732"],
+    limitations=(
+        "This is a static pass over declared configuration. It cannot resolve tool registration that happens at runtime, so a component added from a registry fetched at start-up is invisible to it, and a chain assembled at runtime from such components will not appear here. "
+        "Capability comes from what a component declares, so an under-declared "
+        "component makes its chains look narrower than they are - that gap is what "
+        "AAK-COMPOSE-003 reports. Where components declare no explicit input/output "
+        "wiring, edges come from co-registration, which over-approximates who can "
+        "hand data to whom. It reasons about capability reachability, not proof of "
+        "a data flow: it does not execute anything or evaluate a condition, so a "
+        "reported chain is a path that exists, not one that is guaranteed to be "
+        "taken. It stands down entirely when any component on the path is already "
+        "reported at or above its own severity, so a genuine chain can be hidden by "
+        "an unrelated finding of equal weight on one of its components. Above 200 "
+        "components in a scanned project the graph is not built at all and this rule "
+        "reports nothing, which is silence rather than a clean result."
+    ),
+)
+
+_r(
+    "AAK-COMPOSE-002",
+    "Two or more skills share an undeclared writable path",
+    "Two or more skills that load into the same context both reference the same "
+    "writable filesystem path, and none of them declares a write capability or "
+    "names that path as an output. An undeclared path both can reach is a channel "
+    "between them: one writes what the other reads, with no interface either "
+    "manifest describes and nothing in a per-skill review to notice. This is the "
+    "ColluSkill shape (arXiv:2608.09732), where the cooperation is what carries "
+    "the attack rather than any single skill\'s behaviour. A declared-capability "
+    "union cannot see this by construction, because the relevant capability is "
+    "precisely the one nobody declared.",
+    Severity.HIGH,
+    Category.COMPOSITION,
+    "Decide whether the shared path is an interface or an accident. If the skills "
+    "are meant to exchange data, declare it: name the path as an output of the "
+    "writer and an input of the reader, so a reviewer and this scanner both see "
+    "the coupling. If they are not, give each skill its own working directory. Do "
+    "not resolve it by adding a write capability to one manifest and leaving the "
+    "path shared - that documents the write without documenting the channel.",
+    sarif_name="CompositionSharedUndeclaredState",
+    owasp_mcp_references=["MCP08:2025"],
+    owasp_agentic_references=["ASI02"],
+    adversa_references=["ADV-INJECT-01"],
+    incident_references=["ARXIV-2608.09732"],
+    limitations=(
+        "This is a static pass over declared configuration. It cannot resolve tool registration that happens at runtime, so a component added from a registry fetched at start-up is invisible to it, and a chain assembled at runtime from such components will not appear here. "
+        "Paths are read literally out of skill bodies and adjacent scripts, so a "
+        "path built at runtime from a variable or an environment lookup is not "
+        "seen, and two skills sharing a channel under different spellings of the "
+        "same location will not be matched. It reports co-reference, not a proven "
+        "write followed by a read."
+    ),
+)
+
+_r(
+    "AAK-COMPOSE-003",
+    "A skill declares a narrower capability than its code exercises",
+    "A skill\'s manifest declares one set of capabilities while its body or an "
+    "adjacent script exercises a wider one - a network call, a shell block, a file "
+    "write or a credential read the frontmatter does not admit to. This matters "
+    "beyond the single skill: every composition rule builds its graph from "
+    "manifests, so an under-declared component makes each chain through it look "
+    "narrower than it is, and a chain that would otherwise be reported can be "
+    "missed. It is reported as its own finding rather than folded into the chain "
+    "rules because the fix is different - the manifest is wrong, whether or not "
+    "any chain currently runs through it.",
+    Severity.MEDIUM,
+    Category.COMPOSITION,
+    "Reconcile the manifest with the code. Either declare the capability the code "
+    "actually uses, so reviewers and capability-based tooling see the real surface, "
+    "or remove the code path if the narrower declaration was the intent. Prefer "
+    "narrowing the code: a manifest widened to match an incidental `curl` grants "
+    "that capability permanently.",
+    sarif_name="CompositionUnderdeclaredCapability",
+    owasp_mcp_references=["MCP03:2025"],
+    owasp_agentic_references=["ASI05"],
+    adversa_references=["ADV-SUPPLY-01"],
+    incident_references=["ARXIV-2608.16246"],
+    limitations=(
+        "This is a static pass over declared configuration. It cannot resolve tool registration that happens at runtime, so a component added from a registry fetched at start-up is invisible to it, and a chain assembled at runtime from such components will not appear here. "
+        "Body capability is detected by pattern, not by parsing, so it sees a "
+        "literal `curl` or `subprocess` call and not one reached through an "
+        "indirection or an imported helper. It reads only files inside the skill "
+        "directory. A skill that documents a capability in prose without using it "
+        "can be reported where the prose contains a matching literal."
+    ),
 )
 
 
