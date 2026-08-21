@@ -16,13 +16,18 @@ from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
 
-# Docs the sync script drives, mirrored here so the test fails if a surface is
-# dropped from the script (or a doc loses its anchor/markers) — v0.3.49.
-_DOC_TOTAL_ANCHOR_FILES = (
-    "docs/comparison.md",
-    "docs/comparison-gitlab-agentic-sast.md",
-    "docs/STATE-OF-MCP-SECURITY-2026.md",
-)
+# Docs the sync script drives. Imported rather than mirrored: the mirror existed
+# to catch a surface being dropped from the script, but it also meant every list
+# change needed two edits, and it broke the moment two comparison pages were
+# consolidated in v0.3.86. `test_every_doc_with_an_anchor_is_driven` covers the
+# original intent from the other direction and needs no maintenance.
+def _doc_total_anchor_files() -> tuple[str, ...]:
+    import sys
+
+    sys.path.insert(0, str(REPO_ROOT / "scripts"))
+    from sync_rule_count import _TOTAL_ANCHOR_DOCS
+
+    return tuple(_TOTAL_ANCHOR_DOCS)
 _DOCS_RULES_MD = "docs/rules.md"
 
 
@@ -132,7 +137,7 @@ def test_docs_comparison_anchors_match_registry() -> None:
     anchor_re = re.compile(
         r"<!--\s*rule-count:total\s*-->(\d+)<!--\s*/rule-count\s*-->"
     )
-    for rel in _DOC_TOTAL_ANCHOR_FILES:
+    for rel in _doc_total_anchor_files():
         text = (REPO_ROOT / rel).read_text(encoding="utf-8")
         anchors = anchor_re.findall(text)
         assert anchors, f"{rel} has no rule-count anchor — sync can't drive it"
@@ -275,7 +280,7 @@ def test_rule_count_is_canonical() -> None:
     rules_md = (REPO_ROOT / "docs/rules.md").read_text(encoding="utf-8")
     total_row = re.search(r"\|\s*\*\*Total\*\*\s*\|\s*\*\*(\d+)\*\*\s*\|", rules_md)
     assert total_row and int(total_row.group(1)) == count, "docs/rules.md Total != len(RULES)"
-    for rel in ("docs/comparison.md", "docs/comparison-gitlab-agentic-sast.md"):
+    for rel in _doc_total_anchor_files():
         text = (REPO_ROOT / rel).read_text(encoding="utf-8")
         anchors = anchor_re.findall(text)
         assert anchors and all(int(a) == count for a in anchors), f"{rel} rule-count anchor drift"
@@ -343,3 +348,45 @@ def test_scanner_manifest_arithmetic_reconciles_with_disk() -> None:
     assert "_comment" in data, "the manifest must explain its own arithmetic"
     assert sorted(data["unregistered_shims"]) == sorted(unregistered_shims())
     assert data["count"] + len(data["unregistered_shims"]) == len(scanner_module_files())
+
+
+def test_every_doc_with_an_anchor_is_driven_by_the_sync_script() -> None:
+    """Both directions, so neither list can rot.
+
+    Replaces a hand-mirrored copy of the script's doc list. A doc carrying a
+    `rule-count:total` anchor that the script does not drive would go stale
+    silently -- the exact failure the anchors exist to prevent -- and a doc in
+    the script's list with no anchor is a dead entry that looks like coverage.
+    """
+    import re
+
+    driven = set(_doc_total_anchor_files())
+    anchor_re = re.compile(r"<!--\s*rule-count:total\s*-->")
+
+    for rel in sorted(driven):
+        path = REPO_ROOT / rel
+        assert path.is_file(), f"{rel} is listed in _TOTAL_ANCHOR_DOCS but does not exist"
+        assert anchor_re.search(path.read_text(encoding="utf-8")), (
+            f"{rel} is driven by the sync script but carries no rule-count anchor"
+        )
+
+    # Frozen history is exempt through the same machinery check_counts uses, not
+    # a second list: docs/changelog/archive/ quotes the marker syntax in prose
+    # while describing a past fix, and rewriting a changelog entry to match
+    # today's count would falsify the record it exists to keep.
+    import sys
+
+    sys.path.insert(0, str(REPO_ROOT / "scripts"))
+    from check_counts import has_historical_banner, is_excluded
+
+    undriven = []
+    for path in sorted((REPO_ROOT / "docs").rglob("*.md")):
+        rel = path.relative_to(REPO_ROOT).as_posix()
+        if rel in driven or is_excluded(rel) or has_historical_banner(path):
+            continue
+        if anchor_re.search(path.read_text(encoding="utf-8")):
+            undriven.append(rel)
+    assert not undriven, (
+        f"{undriven} carry a rule-count anchor that no script updates; add them to "
+        "_TOTAL_ANCHOR_DOCS in scripts/sync_rule_count.py or remove the anchor."
+    )

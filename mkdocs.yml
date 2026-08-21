@@ -22,7 +22,7 @@ nav:
   - OWASP Mapping: owasp-mapping.md
   - CI/CD Integration: ci-cd.md
   - GitLab CI: gitlab-ci.md
-  - Comparison: comparison.md
+  - Comparison: comparisons.md
 
 markdown_extensions:
   - tables

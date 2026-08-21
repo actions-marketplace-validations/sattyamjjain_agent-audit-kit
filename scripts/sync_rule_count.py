@@ -118,8 +118,10 @@ _README_FIX_PCT_RE = re.compile(
 # from len(RULES). Added v0.3.49: docs/rules.md and the comparison pages used
 # to hard-code 221 while the registry was at 246.
 _TOTAL_ANCHOR_DOCS = (
-    "docs/comparison.md",
-    "docs/comparison-gitlab-agentic-sast.md",
+    # v0.3.86: docs/comparison.md and docs/comparison-gitlab-agentic-sast.md were
+    # consolidated into comparisons.md and are now stubs, so the anchors they
+    # carried moved with the content they annotated.
+    "docs/comparisons.md",
     "docs/STATE-OF-MCP-SECURITY-2026.md",
 )
 

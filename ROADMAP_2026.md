@@ -1,5 +1,20 @@
 # agent-audit-kit — Roadmap to Top 1% (April 2026)
 
+> **Historical snapshot — authored 2026-04-12, not updated.** This is the April
+> 2026 plan, kept because the reasoning is still useful and deleting it would be
+> the dishonest version. Read it as a record of what was intended, not as a
+> statement of where the project is.
+>
+> Its headline goal — "1,000+ GitHub stars and reference-implementation status
+> for the OWASP MCP Top 10 project within 90 days" — was not met. Four months on
+> the repo has 13 stars, and no such status was granted. The counts in the
+> opening line (v0.2.0, 77 rules, 11 categories, 13 scanner modules) are the
+> April figures and are deliberately left alone; for current state see
+> [`README.md`](README.md) and [`docs/rules.md`](docs/rules.md).
+>
+> Same treatment as [`DEEP_ANALYSIS.md`](DEEP_ANALYSIS.md), which carries the
+> equivalent banner for v0.2.0.
+
 **Starting point (Apr 2026):** v0.2.0 · 77 rules across 11 categories · 13 scanner modules · SARIF + OWASP + compliance output · GitHub Action ready · single-digit stars.
 **Goal:** 1,000+ GitHub stars and reference-implementation status for the OWASP MCP Top 10 project within 90 days.
 
