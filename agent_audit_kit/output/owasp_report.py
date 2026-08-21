@@ -17,6 +17,27 @@ OWASP_AGENTIC = {
     "ASI10": "Rogue Agents",
 }
 
+# OWASP Agentic Skills Top 10 (AST01-AST10), v1, OWASP incubator project
+# `www-project-agentic-skills-top-10`. Titles read from that repository's own
+# ast01.md..ast10.md, not paraphrased.
+#
+# AAK covers a deliberate subset: see `scanners/agentic_skills.py` and the
+# README's AST10 table for which categories are decidable from a static scan of a
+# skill bundle and which are not. A partial number stated honestly is worth more
+# than ten rules where seven guess.
+OWASP_AST = {
+    "AST01": "Malicious Skills",
+    "AST02": "Supply Chain Compromise",
+    "AST03": "Over-Privileged Skills",
+    "AST04": "Insecure Metadata",
+    "AST05": "Untrusted External Instructions",
+    "AST06": "Weak Isolation",
+    "AST07": "Update Drift",
+    "AST08": "Poor Scanning",
+    "AST09": "No Governance",
+    "AST10": "Cross-Platform Reuse",
+}
+
 # OWASP MCP Top 10
 OWASP_MCP = {
     "MCP01:2025": "Token & Credential Mismanagement",

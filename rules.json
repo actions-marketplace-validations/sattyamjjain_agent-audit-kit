@@ -16,6 +16,7 @@
       "owasp_agentic_references": [
         "ASI07"
       ],
+      "owasp_ast_references": [],
       "owasp_mcp_references": [
         "MCP02:2025"
       ],
@@ -41,6 +42,7 @@
       "owasp_agentic_references": [
         "ASI07"
       ],
+      "owasp_ast_references": [],
       "owasp_mcp_references": [
         "MCP07:2025"
       ],
@@ -67,6 +69,7 @@
         "ASI07",
         "ASI08"
       ],
+      "owasp_ast_references": [],
       "owasp_mcp_references": [
         "MCP04:2025"
       ],
@@ -92,6 +95,7 @@
       "owasp_agentic_references": [
         "ASI07"
       ],
+      "owasp_ast_references": [],
       "owasp_mcp_references": [
         "MCP07:2025"
       ],
@@ -117,6 +121,7 @@
       "owasp_agentic_references": [
         "ASI03"
       ],
+      "owasp_ast_references": [],
       "owasp_mcp_references": [
         "MCP01:2025"
       ],
@@ -142,6 +147,7 @@
       "owasp_agentic_references": [
         "ASI03"
       ],
+      "owasp_ast_references": [],
       "owasp_mcp_references": [
         "MCP07:2025"
       ],
@@ -167,6 +173,7 @@
       "owasp_agentic_references": [
         "ASI10"
       ],
+      "owasp_ast_references": [],
       "owasp_mcp_references": [
         "MCP07:2025"
       ],
@@ -192,6 +199,7 @@
       "owasp_agentic_references": [
         "ASI07"
       ],
+      "owasp_ast_references": [],
       "owasp_mcp_references": [
         "MCP01:2025"
       ],
@@ -217,6 +225,7 @@
       "owasp_agentic_references": [
         "ASI07"
       ],
+      "owasp_ast_references": [],
       "owasp_mcp_references": [
         "MCP02:2025"
       ],
@@ -242,6 +251,7 @@
       "owasp_agentic_references": [
         "ASI07"
       ],
+      "owasp_ast_references": [],
       "owasp_mcp_references": [
         "MCP02:2025"
       ],
@@ -268,6 +278,7 @@
         "ASI07",
         "ASI08"
       ],
+      "owasp_ast_references": [],
       "owasp_mcp_references": [
         "MCP01:2025"
       ],
@@ -294,6 +305,7 @@
         "ASI07",
         "ASI08"
       ],
+      "owasp_ast_references": [],
       "owasp_mcp_references": [
         "MCP04:2025"
       ],
@@ -319,6 +331,7 @@
       "owasp_agentic_references": [
         "ASI01"
       ],
+      "owasp_ast_references": [],
       "owasp_mcp_references": [
         "MCP04:2025"
       ],
@@ -344,6 +357,7 @@
       "owasp_agentic_references": [
         "ASI01"
       ],
+      "owasp_ast_references": [],
       "owasp_mcp_references": [
         "MCP04:2025"
       ],
@@ -367,6 +381,7 @@
       "owasp_agentic_references": [
         "ASI01"
       ],
+      "owasp_ast_references": [],
       "owasp_mcp_references": [
         "MCP05:2025"
       ],
@@ -390,6 +405,7 @@
       "owasp_agentic_references": [
         "ASI01"
       ],
+      "owasp_ast_references": [],
       "owasp_mcp_references": [
         "MCP01:2025"
       ],
@@ -413,6 +429,7 @@
       "owasp_agentic_references": [
         "ASI01"
       ],
+      "owasp_ast_references": [],
       "owasp_mcp_references": [
         "MCP05:2025"
       ],
@@ -440,6 +457,7 @@
       "owasp_agentic_references": [
         "ASI06"
       ],
+      "owasp_ast_references": [],
       "owasp_mcp_references": [
         "MCP05:2025"
       ],
@@ -470,6 +488,7 @@
         "ASI06",
         "ASI03"
       ],
+      "owasp_ast_references": [],
       "owasp_mcp_references": [
         "MCP05:2025"
       ],
@@ -497,6 +516,7 @@
         "ASI04",
         "ASI06"
       ],
+      "owasp_ast_references": [],
       "owasp_mcp_references": [],
       "remediation": "Guard every mutation against the shared symbol with a lock primitive (`threading.Lock` / `asyncio.Lock` / `multiprocessing.Lock`). If serialization is enforced by an external coordinator (database transaction, message queue), add a `# noqa: AAK-AGENT-HARNESS-SHARED-STATE-001` comment with the coordinator name to suppress.",
       "rule_id": "AAK-AGENT-HARNESS-SHARED-STATE-001",
@@ -519,6 +539,7 @@
         "ASI04",
         "ASI02"
       ],
+      "owasp_ast_references": [],
       "owasp_mcp_references": [
         "MCP06:2025"
       ],
@@ -546,6 +567,7 @@
       "owasp_agentic_references": [
         "ASI05"
       ],
+      "owasp_ast_references": [],
       "owasp_mcp_references": [
         "MCP04:2025"
       ],
@@ -574,6 +596,7 @@
         "ASI05",
         "ASI03"
       ],
+      "owasp_ast_references": [],
       "owasp_mcp_references": [
         "MCP04:2025"
       ],
@@ -600,6 +623,7 @@
       "owasp_agentic_references": [
         "ASI03"
       ],
+      "owasp_ast_references": [],
       "owasp_mcp_references": [
         "MCP06:2025"
       ],
@@ -626,6 +650,7 @@
       "owasp_agentic_references": [
         "ASI06"
       ],
+      "owasp_ast_references": [],
       "owasp_mcp_references": [
         "MCP05:2025"
       ],
@@ -655,6 +680,7 @@
         "ASI02",
         "ASI10"
       ],
+      "owasp_ast_references": [],
       "owasp_mcp_references": [
         "MCP01:2025"
       ],
@@ -684,6 +710,7 @@
         "ASI02",
         "ASI10"
       ],
+      "owasp_ast_references": [],
       "owasp_mcp_references": [
         "MCP01:2025"
       ],
@@ -692,6 +719,85 @@
       "sarif_name": "AnthropicSdkStdioSanitizer",
       "severity": "high",
       "title": "MCP server built on the upstream SDK without STDIO sanitizer"
+    },
+    {
+      "adversa_references": [
+        "ADV-SUPPLY-01"
+      ],
+      "aicm_references": [],
+      "auto_fixable": false,
+      "category": "agentic-skill",
+      "cve_references": [],
+      "description": "A skill bundle references an external resource with no content hash, commit SHA, integrity field or exact version anywhere in it: a git ref that moves (`main`, `master`, `HEAD`), a `releases/latest` redirect, a pipe-to-shell installer, or an unpinned package install. What the skill runs is then whatever that source serves at the moment it is used, and the skill itself never has to change for its behaviour to. This is OWASP AST02 Supply Chain Compromise together with the pinning half of AST07 Update Drift, whose own mitigation is stated as pinning to immutable content hashes rather than version ranges. The scale is why it is a rule rather than a lint: Air Security's *Circus of Skills* (2026-06-24) found 17,822 of 142,836 live skills, about 12.4% and 6.7M installs, resting on at least one untrusted external resource, and *SkillJacking* (2026-07-02) found 925 of them on sources that could be taken over outright \u2014 a deleted GitHub account re-registered, an expired domain \u2014 with no update event and no scanner alert.",
+      "incident_references": [],
+      "limitations": "Static, and scoped to what a skill bundle declares on disk. It cannot see a resource that is pinned at install time by tooling outside the bundle, and it does not fetch anything, so a pinned reference that now resolves elsewhere looks the same as one that does not. It reports a bundle only when *nothing* in it is pinned, so a bundle that pins its dependencies and floats one script is not reported \u2014 that keeps the rule quiet on ordinary projects at the cost of missing partial pinning. It reads the shapes listed above and will miss an unpinned resource fetched through an indirection it cannot follow.",
+      "owasp_agentic_references": [
+        "ASI04"
+      ],
+      "owasp_ast_references": [
+        "AST02",
+        "AST07"
+      ],
+      "owasp_mcp_references": [
+        "MCP03:2025"
+      ],
+      "remediation": "Pin every external resource the bundle reaches to something immutable: a commit SHA rather than a branch, a release asset with a recorded `sha256:` rather than `releases/latest`, an exact package version rather than a range. If the resource is a script fetched at run time, vendor it into the bundle so review and pinning apply to it. Pinning is what makes a later change reviewable; without it an upstream takeover reaches you on next use rather than on next upgrade.",
+      "rule_id": "AAK-AST02-001",
+      "sarif_name": "AgenticSkillUnpinnedExternalResource",
+      "severity": "high",
+      "title": "Skill bundle pulls an external resource that nothing pins"
+    },
+    {
+      "adversa_references": [
+        "ADV-INJECT-01"
+      ],
+      "aicm_references": [],
+      "auto_fixable": false,
+      "category": "agentic-skill",
+      "cve_references": [],
+      "description": "A skill's YAML frontmatter contains a language-specific deserialization tag \u2014 `!!python/object/apply`, `!ruby/object`, `!!java/...` and the like. A loader using its language's unsafe default constructs the named object *while parsing*, so the payload runs before any field of the skill is read and before the skill is ever invoked: installing or merely listing the skill is enough. This is the parsing layer of OWASP AST04 Insecure Metadata, which names the case directly. Distinct from `AAK-SKILL-005`, which reads frontmatter *values* for prompt-injection triggers: that rule assumes parsing already happened safely, and this one is about parsing being the vulnerability.",
+      "incident_references": [],
+      "limitations": "Static, and scoped to what a skill bundle declares on disk. It cannot see a resource that is pinned at install time by tooling outside the bundle, and it does not fetch anything, so a pinned reference that now resolves elsewhere looks the same as one that does not. It matches the tag syntax of the common unsafe loaders and will miss a loader with a bespoke tag vocabulary. It reports the tag's presence, not whether the loader in use is configured unsafely \u2014 a bundle parsed only by a safe loader carries the tag harmlessly, which is still worth removing because the next loader may not be.",
+      "owasp_agentic_references": [
+        "ASI05"
+      ],
+      "owasp_ast_references": [
+        "AST04"
+      ],
+      "owasp_mcp_references": [
+        "MCP05:2025"
+      ],
+      "remediation": "Remove the tag. There is no legitimate reason for skill metadata to construct a language object, so treat its presence as intent rather than as a mistake, and review what else the bundle ships. Load skill frontmatter with a safe loader \u2014 `yaml.safe_load` in Python, `safe_load` equivalents elsewhere \u2014 so a tag like this raises rather than executes; if you maintain a loader, that change protects every skill it will ever read.",
+      "rule_id": "AAK-AST04-001",
+      "sarif_name": "AgenticSkillFrontmatterDeserializationTag",
+      "severity": "critical",
+      "title": "Skill frontmatter carries a deserialization tag that executes on parse"
+    },
+    {
+      "adversa_references": [
+        "ADV-SUPPLY-01"
+      ],
+      "aicm_references": [],
+      "auto_fixable": false,
+      "category": "agentic-skill",
+      "cve_references": [],
+      "description": "A skill bundle carries more than one platform manifest \u2014 `SKILL.md` frontmatter, `skill.json`, `manifest.json`, `package.json` \u2014 and a security-relevant field declared in one is absent from another, or declares something weaker in one than the other: a risk tier that exists on one platform and not the next, a permission list replaced by a blanket `true`, a signature field that survives in one format only. Whichever platform loads the weaker manifest runs the skill without the control the other declares. This is OWASP AST10 Cross-Platform Reuse, whose first attack scenario is a `risk_tier: L3` skill ported to a platform that does not support `risk_tier` so the warning is silently dropped. Like the composition rules, this is a question no single artifact can answer: each manifest is internally consistent, and the defect exists only in the disagreement between them.",
+      "incident_references": [],
+      "limitations": "Static, and scoped to what a skill bundle declares on disk. It cannot see a resource that is pinned at install time by tooling outside the bundle, and it does not fetch anything, so a pinned reference that now resolves elsewhere looks the same as one that does not. It compares only fields whose loss is unambiguous, and only in the unambiguous direction: an allow-list replaced by a blanket `true`, or a declaration replaced by nothing. Two differing permission lists are left alone, because deciding which is weaker needs a judgement this rule cannot make without guessing. A bundle shipping one manifest is out of scope by construction, and so is a manifest that does not parse \u2014 which matters here, because frontmatter carrying a deserialization tag is rejected by safe parsing and therefore drops out of this comparison entirely. In that case `AAK-AST04-001` is the finding that applies.",
+      "owasp_agentic_references": [
+        "ASI04"
+      ],
+      "owasp_ast_references": [
+        "AST10"
+      ],
+      "owasp_mcp_references": [
+        "MCP02:2025"
+      ],
+      "remediation": "Normalise the security fields across every manifest the bundle ships, which is AST10's own mitigation: `risk_tier`, permissions, egress and signature should say the same thing in each format or the bundle should ship one format. Where a platform has no equivalent for a field, do not drop it silently \u2014 record the gap in the bundle so a reviewer sees that the control is unenforced there rather than absent by design. Re-validate the metadata whenever a skill is ported; equivalence between formats is the assumption this risk is named after.",
+      "rule_id": "AAK-AST10-001",
+      "sarif_name": "AgenticSkillCrossPlatformMetadataLoss",
+      "severity": "medium",
+      "title": "Skill ships platform manifests whose security metadata disagrees"
     },
     {
       "adversa_references": [],
@@ -715,6 +821,7 @@
         "ASI02",
         "ASI10"
       ],
+      "owasp_ast_references": [],
       "owasp_mcp_references": [
         "MCP01:2025"
       ],
@@ -745,6 +852,7 @@
       "owasp_agentic_references": [
         "ASI04"
       ],
+      "owasp_ast_references": [],
       "owasp_mcp_references": [
         "MCP02:2025"
       ],
@@ -775,6 +883,7 @@
       "owasp_agentic_references": [
         "ASI04"
       ],
+      "owasp_ast_references": [],
       "owasp_mcp_references": [
         "MCP02:2025"
       ],
@@ -805,6 +914,7 @@
         "ASI02",
         "ASI10"
       ],
+      "owasp_ast_references": [],
       "owasp_mcp_references": [
         "MCP01:2025"
       ],
@@ -832,6 +942,7 @@
       "owasp_agentic_references": [
         "ASI06"
       ],
+      "owasp_ast_references": [],
       "owasp_mcp_references": [
         "MCP03:2025"
       ],
@@ -862,6 +973,7 @@
         "ASI03",
         "ASI10"
       ],
+      "owasp_ast_references": [],
       "owasp_mcp_references": [],
       "remediation": "Bump `@anthropic-ai/claude-code` to >=2.1.83 in any npm manifest pinning Claude Code. The rule fires only on the pin shape; runtime detection of crafted commondir attacks against an unpinned global install is out of scope (vendor's prompt fix is the right fix once 2.1.83+ is installed).",
       "rule_id": "AAK-CLAUDECODE-CVE-2026-40068-PIN-001",
@@ -886,6 +998,7 @@
       "owasp_agentic_references": [
         "ASI02"
       ],
+      "owasp_ast_references": [],
       "owasp_mcp_references": [
         "MCP08:2025"
       ],
@@ -911,6 +1024,7 @@
       "owasp_agentic_references": [
         "ASI02"
       ],
+      "owasp_ast_references": [],
       "owasp_mcp_references": [
         "MCP08:2025"
       ],
@@ -936,6 +1050,7 @@
       "owasp_agentic_references": [
         "ASI05"
       ],
+      "owasp_ast_references": [],
       "owasp_mcp_references": [
         "MCP03:2025"
       ],
@@ -969,6 +1084,7 @@
         "ASI05",
         "ASI09"
       ],
+      "owasp_ast_references": [],
       "owasp_mcp_references": [],
       "remediation": "Apply each child-rule's remediation. The single hardest gate is CVE-2026-2275 (CodeInterpreterTool unsafe_mode); fixing that one breaks the chain. The runtime helpers in `agent_audit_kit.sanitizers.crewai` collectively suppress all four sub-rules.",
       "rule_id": "AAK-CREWAI-CHAIN-2026-04-001",
@@ -997,6 +1113,7 @@
       "owasp_agentic_references": [
         "ASI05"
       ],
+      "owasp_ast_references": [],
       "owasp_mcp_references": [],
       "remediation": "Set `unsafe_mode=False` on every CodeInterpreterTool invocation. If you must run untrusted code, wrap with a real container sandbox and call `agent_audit_kit.sanitizers.crewai.assert_codeinterp_safe_mode(False)` in the same function to suppress this rule.",
       "rule_id": "AAK-CREWAI-CVE-2026-2275-001",
@@ -1022,6 +1139,7 @@
       "owasp_agentic_references": [
         "ASI02"
       ],
+      "owasp_ast_references": [],
       "owasp_mcp_references": [],
       "remediation": "Anchor every JSON-loader path with `agent_audit_kit.sanitizers.crewai.validate_jsonloader_path(path, root=...)` before passing into the tool. Calling the validator in the same function suppresses this rule.",
       "rule_id": "AAK-CREWAI-CVE-2026-2285-001",
@@ -1047,6 +1165,7 @@
       "owasp_agentic_references": [
         "ASI04"
       ],
+      "owasp_ast_references": [],
       "owasp_mcp_references": [
         "MCP09:2025"
       ],
@@ -1075,6 +1194,7 @@
       "owasp_agentic_references": [
         "ASI09"
       ],
+      "owasp_ast_references": [],
       "owasp_mcp_references": [],
       "remediation": "Either set `docker_required=True` on CodeInterpreterTool or call `agent_audit_kit.sanitizers.crewai.require_docker_liveness(client)` in the same function \u2014 the helper raises before the tool ever sees the host fallback.",
       "rule_id": "AAK-CREWAI-CVE-2026-2287-001",
@@ -1096,6 +1216,7 @@
       "owasp_agentic_references": [
         "ASI01"
       ],
+      "owasp_ast_references": [],
       "owasp_mcp_references": [],
       "remediation": "Pipe untrusted tool descriptions through `agent_audit_kit.sanitizers.deepseek.sanitize_tool_description` before assembling the `tools=` payload. The sanitiser strips ANSI / control characters and routing-poison tokens ([ROUTE: ...], <|route_id|>, __route__=, etc.) and truncates to a max length. Calling it in the same function suppresses this rule.",
       "rule_id": "AAK-DEEPSEEK-V4-MOE-TOOL-INJ-001",
@@ -1127,6 +1248,7 @@
       "owasp_agentic_references": [
         "ASI04"
       ],
+      "owasp_ast_references": [],
       "owasp_mcp_references": [
         "MCP02:2025",
         "MCP07:2025"
@@ -1161,6 +1283,7 @@
       "owasp_agentic_references": [
         "ASI10"
       ],
+      "owasp_ast_references": [],
       "owasp_mcp_references": [
         "MCP05:2025",
         "MCP07:2025"
@@ -1193,6 +1316,7 @@
         "ASI02",
         "ASI10"
       ],
+      "owasp_ast_references": [],
       "owasp_mcp_references": [
         "MCP01:2025",
         "MCP05:2025"
@@ -1223,6 +1347,7 @@
       "owasp_agentic_references": [
         "ASI02"
       ],
+      "owasp_ast_references": [],
       "owasp_mcp_references": [
         "MCP04:2025"
       ],
@@ -1242,6 +1367,7 @@
       "incident_references": [],
       "limitations": "",
       "owasp_agentic_references": [],
+      "owasp_ast_references": [],
       "owasp_mcp_references": [],
       "remediation": "Add per-locale eval fixtures matching the declared locale set (one scenario file per language, or a parametrized eval matrix), or narrow the agent config's declared locales to the set you can evidence. The EU AI Act Article 15 evidence pack must show robustness testing across each user-facing language.",
       "rule_id": "AAK-EU-AI-ACT-ART15-LOCALE-001",
@@ -1269,6 +1395,7 @@
         "ASI02",
         "ASI04"
       ],
+      "owasp_ast_references": [],
       "owasp_mcp_references": [
         "MCP02:2025",
         "MCP09:2025"
@@ -1303,6 +1430,7 @@
       "owasp_agentic_references": [
         "ASI02"
       ],
+      "owasp_ast_references": [],
       "owasp_mcp_references": [
         "MCP01:2025"
       ],
@@ -1331,6 +1459,7 @@
       "owasp_agentic_references": [
         "ASI10"
       ],
+      "owasp_ast_references": [],
       "owasp_mcp_references": [
         "MCP05:2025"
       ],
@@ -1362,6 +1491,7 @@
         "ASI02",
         "ASI10"
       ],
+      "owasp_ast_references": [],
       "owasp_mcp_references": [
         "MCP01:2025",
         "MCP05:2025"
@@ -1384,6 +1514,7 @@
       "owasp_agentic_references": [
         "ASI05"
       ],
+      "owasp_ast_references": [],
       "owasp_mcp_references": [
         "MCP10:2025"
       ],
@@ -1405,6 +1536,7 @@
       "owasp_agentic_references": [
         "ASI05"
       ],
+      "owasp_ast_references": [],
       "owasp_mcp_references": [],
       "remediation": "Route every prior-auth / medical-necessity output through a licensed-physician review step; expose that review in the audit log.",
       "rule_id": "AAK-HEALTHCARE-AI-002",
@@ -1424,6 +1556,7 @@
       "owasp_agentic_references": [
         "ASI05"
       ],
+      "owasp_ast_references": [],
       "owasp_mcp_references": [],
       "remediation": "Require human sign-off on coverage decisions; disclose AI involvement to the consumer.",
       "rule_id": "AAK-HEALTHCARE-AI-003",
@@ -1443,6 +1576,7 @@
       "owasp_agentic_references": [
         "ASI05"
       ],
+      "owasp_ast_references": [],
       "owasp_mcp_references": [],
       "remediation": "Add a visible 'You are talking to an AI; this is not medical advice and is not a substitute for licensed care' disclosure.",
       "rule_id": "AAK-HEALTHCARE-AI-004",
@@ -1462,6 +1596,7 @@
       "owasp_agentic_references": [
         "ASI05"
       ],
+      "owasp_ast_references": [],
       "owasp_mcp_references": [],
       "remediation": "Add explicit crisis-line escalation instructions in the prompt / system message; test for the most common suicide / self-harm phrases and escalate before generating any other reply.",
       "rule_id": "AAK-HEALTHCARE-AI-005",
@@ -1487,6 +1622,7 @@
       "owasp_agentic_references": [
         "ASI05"
       ],
+      "owasp_ast_references": [],
       "owasp_mcp_references": [
         "MCP04:2025"
       ],
@@ -1512,6 +1648,7 @@
       "owasp_agentic_references": [
         "ASI03"
       ],
+      "owasp_ast_references": [],
       "owasp_mcp_references": [
         "MCP01:2025"
       ],
@@ -1537,6 +1674,7 @@
       "owasp_agentic_references": [
         "ASI05"
       ],
+      "owasp_ast_references": [],
       "owasp_mcp_references": [
         "MCP06:2025"
       ],
@@ -1562,6 +1700,7 @@
       "owasp_agentic_references": [
         "ASI05"
       ],
+      "owasp_ast_references": [],
       "owasp_mcp_references": [
         "MCP05:2025"
       ],
@@ -1587,6 +1726,7 @@
       "owasp_agentic_references": [
         "ASI05"
       ],
+      "owasp_ast_references": [],
       "owasp_mcp_references": [
         "MCP04:2025"
       ],
@@ -1612,6 +1752,7 @@
       "owasp_agentic_references": [
         "ASI03"
       ],
+      "owasp_ast_references": [],
       "owasp_mcp_references": [
         "MCP06:2025"
       ],
@@ -1637,6 +1778,7 @@
       "owasp_agentic_references": [
         "ASI02"
       ],
+      "owasp_ast_references": [],
       "owasp_mcp_references": [
         "MCP02:2025",
         "MCP08:2025"
@@ -1661,6 +1803,7 @@
       "owasp_agentic_references": [
         "ASI05"
       ],
+      "owasp_ast_references": [],
       "owasp_mcp_references": [
         "MCP04:2025"
       ],
@@ -1684,6 +1827,7 @@
       "owasp_agentic_references": [
         "ASI05"
       ],
+      "owasp_ast_references": [],
       "owasp_mcp_references": [
         "MCP04:2025"
       ],
@@ -1709,6 +1853,7 @@
       "owasp_agentic_references": [
         "ASI09"
       ],
+      "owasp_ast_references": [],
       "owasp_mcp_references": [
         "MCP10:2025"
       ],
@@ -1734,6 +1879,7 @@
       "owasp_agentic_references": [
         "ASI09"
       ],
+      "owasp_ast_references": [],
       "owasp_mcp_references": [
         "MCP10:2025"
       ],
@@ -1759,6 +1905,7 @@
       "owasp_agentic_references": [
         "ASI09"
       ],
+      "owasp_ast_references": [],
       "owasp_mcp_references": [
         "MCP10:2025"
       ],
@@ -1785,6 +1932,7 @@
       "owasp_agentic_references": [
         "ASI05"
       ],
+      "owasp_ast_references": [],
       "owasp_mcp_references": [
         "MCP04:2025"
       ],
@@ -1811,6 +1959,7 @@
       "owasp_agentic_references": [
         "ASI05"
       ],
+      "owasp_ast_references": [],
       "owasp_mcp_references": [
         "MCP04:2025"
       ],
@@ -1837,6 +1986,7 @@
       "owasp_agentic_references": [
         "ASI05"
       ],
+      "owasp_ast_references": [],
       "owasp_mcp_references": [
         "MCP04:2025"
       ],
@@ -1858,6 +2008,7 @@
       "incident_references": [],
       "limitations": "",
       "owasp_agentic_references": [],
+      "owasp_ast_references": [],
       "owasp_mcp_references": [],
       "remediation": "Fix the JSON/JSONC syntax so the file can be audited. If it is intentionally not a VS Code task/launch config, move it out of `.vscode/`.",
       "rule_id": "AAK-IDE-TASK-004",
@@ -1877,6 +2028,7 @@
       "owasp_agentic_references": [
         "ASI03"
       ],
+      "owasp_ast_references": [],
       "owasp_mcp_references": [
         "MCP03:2025"
       ],
@@ -1898,6 +2050,7 @@
       "owasp_agentic_references": [
         "ASI03"
       ],
+      "owasp_ast_references": [],
       "owasp_mcp_references": [
         "MCP03:2025"
       ],
@@ -1919,6 +2072,7 @@
       "owasp_agentic_references": [
         "ASI03"
       ],
+      "owasp_ast_references": [],
       "owasp_mcp_references": [
         "MCP03:2025"
       ],
@@ -1940,6 +2094,7 @@
       "owasp_agentic_references": [
         "ASI03"
       ],
+      "owasp_ast_references": [],
       "owasp_mcp_references": [
         "MCP03:2025"
       ],
@@ -1961,6 +2116,7 @@
       "owasp_agentic_references": [
         "ASI03"
       ],
+      "owasp_ast_references": [],
       "owasp_mcp_references": [
         "MCP03:2025"
       ],
@@ -1982,6 +2138,7 @@
       "owasp_agentic_references": [
         "ASI03"
       ],
+      "owasp_ast_references": [],
       "owasp_mcp_references": [
         "MCP03:2025"
       ],
@@ -2001,6 +2158,7 @@
       "incident_references": [],
       "limitations": "",
       "owasp_agentic_references": [],
+      "owasp_ast_references": [],
       "owasp_mcp_references": [],
       "remediation": "File an issue at https://github.com/sattyamjjain/agent-audit-kit/issues with the scanner name, exception class, and (if safe) the project shape.",
       "rule_id": "AAK-INTERNAL-SCANNER-FAIL",
@@ -2027,6 +2185,7 @@
       "owasp_agentic_references": [
         "ASI03"
       ],
+      "owasp_ast_references": [],
       "owasp_mcp_references": [
         "MCP01:2025"
       ],
@@ -2052,6 +2211,7 @@
       "owasp_agentic_references": [
         "ASI06"
       ],
+      "owasp_ast_references": [],
       "owasp_mcp_references": [
         "MCP09:2025"
       ],
@@ -2077,6 +2237,7 @@
       "owasp_agentic_references": [
         "ASI06"
       ],
+      "owasp_ast_references": [],
       "owasp_mcp_references": [
         "MCP09:2025"
       ],
@@ -2102,6 +2263,7 @@
       "owasp_agentic_references": [
         "ASI04"
       ],
+      "owasp_ast_references": [],
       "owasp_mcp_references": [
         "MCP03:2025"
       ],
@@ -2129,6 +2291,7 @@
       "owasp_agentic_references": [
         "ASI02"
       ],
+      "owasp_ast_references": [],
       "owasp_mcp_references": [],
       "remediation": "Validate every prompt path with `agent_audit_kit.checks.path_under_root(path, root)` before calling load_prompt. For S3 / HTTP backed prompt stores, prefer the explicit `langchain_community.storage.*` adapters; AAK exempts those via pattern-not-inside. Bump `langchain-core` to >= 0.3.74.",
       "rule_id": "AAK-LANGCHAIN-PROMPT-LOADER-PATH-001",
@@ -2158,6 +2321,7 @@
         "ASI04",
         "ASI09"
       ],
+      "owasp_ast_references": [],
       "owasp_mcp_references": [
         "MCP05:2025"
       ],
@@ -2181,6 +2345,7 @@
       "owasp_agentic_references": [
         "ASI09"
       ],
+      "owasp_ast_references": [],
       "owasp_mcp_references": [],
       "remediation": "Switch every `ToolNode([t1, t2, ...])` to `ToolNode(tools=[t1, t2, ...])`. The codemod at `agent_audit_kit/autofix/langgraph_toolnode.py` rewrites the trivial shape; `aak suggest --apply-trivial --rule AAK-LANGGRAPH-TOOLNODE-LIST-REGRESSION-001` will run it (queued for v0.4.0).",
       "rule_id": "AAK-LANGGRAPH-TOOLNODE-LIST-REGRESSION-001",
@@ -2200,6 +2365,7 @@
       "owasp_agentic_references": [
         "ASI04"
       ],
+      "owasp_ast_references": [],
       "owasp_mcp_references": [
         "MCP03:2025"
       ],
@@ -2221,6 +2387,7 @@
       "owasp_agentic_references": [
         "ASI04"
       ],
+      "owasp_ast_references": [],
       "owasp_mcp_references": [
         "MCP03:2025"
       ],
@@ -2242,6 +2409,7 @@
       "owasp_agentic_references": [
         "ASI04"
       ],
+      "owasp_ast_references": [],
       "owasp_mcp_references": [
         "MCP03:2025"
       ],
@@ -2274,6 +2442,7 @@
         "ASI02",
         "ASI10"
       ],
+      "owasp_ast_references": [],
       "owasp_mcp_references": [
         "MCP01:2025",
         "MCP05:2025"
@@ -2301,6 +2470,7 @@
         "ASI02",
         "ASI05"
       ],
+      "owasp_ast_references": [],
       "owasp_mcp_references": [
         "MCP04:2025"
       ],
@@ -2332,6 +2502,7 @@
         "ASI04",
         "ASI09"
       ],
+      "owasp_ast_references": [],
       "owasp_mcp_references": [
         "MCP05:2025"
       ],
@@ -2359,6 +2530,7 @@
       "owasp_agentic_references": [
         "ASI05"
       ],
+      "owasp_ast_references": [],
       "owasp_mcp_references": [
         "MCP04:2025"
       ],
@@ -2384,6 +2556,7 @@
       "owasp_agentic_references": [
         "ASI04"
       ],
+      "owasp_ast_references": [],
       "owasp_mcp_references": [
         "MCP03:2025"
       ],
@@ -2409,6 +2582,7 @@
       "owasp_agentic_references": [
         "ASI04"
       ],
+      "owasp_ast_references": [],
       "owasp_mcp_references": [
         "MCP03:2025"
       ],
@@ -2434,6 +2608,7 @@
       "owasp_agentic_references": [
         "ASI04"
       ],
+      "owasp_ast_references": [],
       "owasp_mcp_references": [
         "MCP03:2025"
       ],
@@ -2459,6 +2634,7 @@
       "owasp_agentic_references": [
         "ASI04"
       ],
+      "owasp_ast_references": [],
       "owasp_mcp_references": [
         "MCP03:2025"
       ],
@@ -2482,6 +2658,7 @@
       "owasp_agentic_references": [
         "ASI03"
       ],
+      "owasp_ast_references": [],
       "owasp_mcp_references": [
         "MCP07:2025"
       ],
@@ -2505,6 +2682,7 @@
       "owasp_agentic_references": [
         "ASI05"
       ],
+      "owasp_ast_references": [],
       "owasp_mcp_references": [
         "MCP04:2025"
       ],
@@ -2528,6 +2706,7 @@
       "owasp_agentic_references": [
         "ASI03"
       ],
+      "owasp_ast_references": [],
       "owasp_mcp_references": [
         "MCP01:2025"
       ],
@@ -2553,6 +2732,7 @@
       "owasp_agentic_references": [
         "ASI02"
       ],
+      "owasp_ast_references": [],
       "owasp_mcp_references": [
         "MCP02:2025"
       ],
@@ -2576,6 +2756,7 @@
       "owasp_agentic_references": [
         "ASI04"
       ],
+      "owasp_ast_references": [],
       "owasp_mcp_references": [
         "MCP03:2025",
         "MCP10:2025"
@@ -2600,6 +2781,7 @@
       "owasp_agentic_references": [
         "ASI05"
       ],
+      "owasp_ast_references": [],
       "owasp_mcp_references": [
         "MCP04:2025"
       ],
@@ -2623,6 +2805,7 @@
       "owasp_agentic_references": [
         "ASI04"
       ],
+      "owasp_ast_references": [],
       "owasp_mcp_references": [
         "MCP03:2025"
       ],
@@ -2646,6 +2829,7 @@
       "owasp_agentic_references": [
         "ASI05"
       ],
+      "owasp_ast_references": [],
       "owasp_mcp_references": [
         "MCP04:2025"
       ],
@@ -2669,6 +2853,7 @@
       "owasp_agentic_references": [
         "ASI02"
       ],
+      "owasp_ast_references": [],
       "owasp_mcp_references": [
         "MCP09:2025"
       ],
@@ -2692,6 +2877,7 @@
       "owasp_agentic_references": [
         "ASI02"
       ],
+      "owasp_ast_references": [],
       "owasp_mcp_references": [
         "MCP06:2025"
       ],
@@ -2717,6 +2903,7 @@
       "owasp_agentic_references": [
         "ASI03"
       ],
+      "owasp_ast_references": [],
       "owasp_mcp_references": [
         "MCP01:2025",
         "MCP07:2025"
@@ -2743,6 +2930,7 @@
       "owasp_agentic_references": [
         "ASI03"
       ],
+      "owasp_ast_references": [],
       "owasp_mcp_references": [
         "MCP01:2025"
       ],
@@ -2766,6 +2954,7 @@
       "owasp_agentic_references": [
         "ASI03"
       ],
+      "owasp_ast_references": [],
       "owasp_mcp_references": [
         "MCP08:2025"
       ],
@@ -2789,6 +2978,7 @@
       "owasp_agentic_references": [
         "ASI03"
       ],
+      "owasp_ast_references": [],
       "owasp_mcp_references": [
         "MCP01:2025"
       ],
@@ -2812,6 +3002,7 @@
       "owasp_agentic_references": [
         "ASI06"
       ],
+      "owasp_ast_references": [],
       "owasp_mcp_references": [
         "MCP09:2025"
       ],
@@ -2835,6 +3026,7 @@
       "owasp_agentic_references": [
         "ASI05"
       ],
+      "owasp_ast_references": [],
       "owasp_mcp_references": [
         "MCP06:2025"
       ],
@@ -2860,6 +3052,7 @@
       "owasp_agentic_references": [
         "ASI03"
       ],
+      "owasp_ast_references": [],
       "owasp_mcp_references": [
         "MCP07:2025"
       ],
@@ -2883,6 +3076,7 @@
       "owasp_agentic_references": [
         "ASI05"
       ],
+      "owasp_ast_references": [],
       "owasp_mcp_references": [
         "MCP06:2025"
       ],
@@ -2906,6 +3100,7 @@
       "owasp_agentic_references": [
         "ASI03"
       ],
+      "owasp_ast_references": [],
       "owasp_mcp_references": [
         "MCP01:2025"
       ],
@@ -2931,6 +3126,7 @@
       "owasp_agentic_references": [
         "ASI03"
       ],
+      "owasp_ast_references": [],
       "owasp_mcp_references": [
         "MCP01:2025"
       ],
@@ -2963,6 +3159,7 @@
       "owasp_agentic_references": [
         "ASI04"
       ],
+      "owasp_ast_references": [],
       "owasp_mcp_references": [
         "MCP04:2025"
       ],
@@ -2991,6 +3188,7 @@
       "owasp_agentic_references": [
         "ASI04"
       ],
+      "owasp_ast_references": [],
       "owasp_mcp_references": [
         "MCP04:2025"
       ],
@@ -3020,6 +3218,7 @@
       "owasp_agentic_references": [
         "ASI03"
       ],
+      "owasp_ast_references": [],
       "owasp_mcp_references": [
         "MCP01:2025"
       ],
@@ -3049,6 +3248,7 @@
       "owasp_agentic_references": [
         "ASI04"
       ],
+      "owasp_ast_references": [],
       "owasp_mcp_references": [
         "MCP01:2025"
       ],
@@ -3078,6 +3278,7 @@
       "owasp_agentic_references": [
         "ASI06"
       ],
+      "owasp_ast_references": [],
       "owasp_mcp_references": [
         "MCP09:2025"
       ],
@@ -3106,6 +3307,7 @@
       "owasp_agentic_references": [
         "ASI04"
       ],
+      "owasp_ast_references": [],
       "owasp_mcp_references": [
         "MCP05:2025"
       ],
@@ -3132,6 +3334,7 @@
       "owasp_agentic_references": [
         "ASI05"
       ],
+      "owasp_ast_references": [],
       "owasp_mcp_references": [
         "MCP05:2025"
       ],
@@ -3158,6 +3361,7 @@
       "owasp_agentic_references": [
         "ASI05"
       ],
+      "owasp_ast_references": [],
       "owasp_mcp_references": [
         "MCP05:2025"
       ],
@@ -3183,6 +3387,7 @@
       "owasp_agentic_references": [
         "ASI02"
       ],
+      "owasp_ast_references": [],
       "owasp_mcp_references": [
         "MCP05:2025"
       ],
@@ -3211,6 +3416,7 @@
       "owasp_agentic_references": [
         "ASI06"
       ],
+      "owasp_ast_references": [],
       "owasp_mcp_references": [
         "MCP09:2025"
       ],
@@ -3241,6 +3447,7 @@
       "owasp_agentic_references": [
         "ASI02"
       ],
+      "owasp_ast_references": [],
       "owasp_mcp_references": [
         "MCP01:2025"
       ],
@@ -3272,6 +3479,7 @@
       "owasp_agentic_references": [
         "ASI02"
       ],
+      "owasp_ast_references": [],
       "owasp_mcp_references": [
         "MCP01:2025"
       ],
@@ -3297,6 +3505,7 @@
       "owasp_agentic_references": [
         "ASI05"
       ],
+      "owasp_ast_references": [],
       "owasp_mcp_references": [
         "MCP04:2025"
       ],
@@ -3321,6 +3530,7 @@
         "ASI03",
         "ASI04"
       ],
+      "owasp_ast_references": [],
       "owasp_mcp_references": [
         "MCP07:2025"
       ],
@@ -3349,6 +3559,7 @@
       "owasp_agentic_references": [
         "ASI03"
       ],
+      "owasp_ast_references": [],
       "owasp_mcp_references": [
         "MCP07:2025"
       ],
@@ -3374,6 +3585,7 @@
       "owasp_agentic_references": [
         "ASI06"
       ],
+      "owasp_ast_references": [],
       "owasp_mcp_references": [
         "MCP09:2025"
       ],
@@ -3403,6 +3615,7 @@
       "owasp_agentic_references": [
         "ASI04"
       ],
+      "owasp_ast_references": [],
       "owasp_mcp_references": [
         "MCP01:2025"
       ],
@@ -3435,6 +3648,7 @@
       "owasp_agentic_references": [
         "ASI03"
       ],
+      "owasp_ast_references": [],
       "owasp_mcp_references": [
         "MCP01:2025"
       ],
@@ -3458,6 +3672,7 @@
       "owasp_agentic_references": [
         "ASI06"
       ],
+      "owasp_ast_references": [],
       "owasp_mcp_references": [
         "MCP05:2025"
       ],
@@ -3481,6 +3696,7 @@
       "owasp_agentic_references": [
         "ASI03"
       ],
+      "owasp_ast_references": [],
       "owasp_mcp_references": [
         "MCP07:2025"
       ],
@@ -3504,6 +3720,7 @@
       "owasp_agentic_references": [
         "ASI06"
       ],
+      "owasp_ast_references": [],
       "owasp_mcp_references": [
         "MCP03:2025"
       ],
@@ -3527,6 +3744,7 @@
       "owasp_agentic_references": [
         "ASI04"
       ],
+      "owasp_ast_references": [],
       "owasp_mcp_references": [
         "MCP07:2025"
       ],
@@ -3555,6 +3773,7 @@
       "owasp_agentic_references": [
         "ASI04"
       ],
+      "owasp_ast_references": [],
       "owasp_mcp_references": [
         "MCP01:2025"
       ],
@@ -3582,6 +3801,7 @@
       "owasp_agentic_references": [
         "ASI06"
       ],
+      "owasp_ast_references": [],
       "owasp_mcp_references": [
         "MCP09:2025"
       ],
@@ -3610,6 +3830,7 @@
       "owasp_agentic_references": [
         "ASI04"
       ],
+      "owasp_ast_references": [],
       "owasp_mcp_references": [
         "MCP01:2025"
       ],
@@ -3639,6 +3860,7 @@
       "owasp_agentic_references": [
         "ASI01"
       ],
+      "owasp_ast_references": [],
       "owasp_mcp_references": [
         "MCP01:2025"
       ],
@@ -3664,6 +3886,7 @@
       "owasp_agentic_references": [
         "ASI02"
       ],
+      "owasp_ast_references": [],
       "owasp_mcp_references": [
         "MCP01:2025"
       ],
@@ -3695,6 +3918,7 @@
       "owasp_agentic_references": [
         "ASI09"
       ],
+      "owasp_ast_references": [],
       "owasp_mcp_references": [
         "MCP04:2025"
       ],
@@ -3724,6 +3948,7 @@
       "owasp_agentic_references": [
         "ASI04"
       ],
+      "owasp_ast_references": [],
       "owasp_mcp_references": [
         "MCP01:2025"
       ],
@@ -3745,6 +3970,7 @@
       "incident_references": [],
       "limitations": "",
       "owasp_agentic_references": [],
+      "owasp_ast_references": [],
       "owasp_mcp_references": [
         "MCP07:2025"
       ],
@@ -3767,6 +3993,7 @@
       "incident_references": [],
       "limitations": "",
       "owasp_agentic_references": [],
+      "owasp_ast_references": [],
       "owasp_mcp_references": [
         "MCP07:2025"
       ],
@@ -3789,6 +4016,7 @@
       "incident_references": [],
       "limitations": "",
       "owasp_agentic_references": [],
+      "owasp_ast_references": [],
       "owasp_mcp_references": [
         "MCP07:2025"
       ],
@@ -3818,6 +4046,7 @@
       "owasp_agentic_references": [
         "ASI04"
       ],
+      "owasp_ast_references": [],
       "owasp_mcp_references": [
         "MCP03:2025"
       ],
@@ -3841,6 +4070,7 @@
       "owasp_agentic_references": [
         "ASI03"
       ],
+      "owasp_ast_references": [],
       "owasp_mcp_references": [
         "MCP01:2025"
       ],
@@ -3869,6 +4099,7 @@
       "owasp_agentic_references": [
         "ASI04"
       ],
+      "owasp_ast_references": [],
       "owasp_mcp_references": [
         "MCP06:2025"
       ],
@@ -3897,6 +4128,7 @@
       "owasp_agentic_references": [
         "ASI06"
       ],
+      "owasp_ast_references": [],
       "owasp_mcp_references": [
         "MCP09:2025"
       ],
@@ -3926,6 +4158,7 @@
       "owasp_agentic_references": [
         "ASI04"
       ],
+      "owasp_ast_references": [],
       "owasp_mcp_references": [
         "MCP01:2025"
       ],
@@ -3956,6 +4189,7 @@
         "ASI05",
         "ASI04"
       ],
+      "owasp_ast_references": [],
       "owasp_mcp_references": [
         "MCP03:2025"
       ],
@@ -3984,6 +4218,7 @@
       "owasp_agentic_references": [
         "ASI02"
       ],
+      "owasp_ast_references": [],
       "owasp_mcp_references": [
         "MCP04:2025"
       ],
@@ -4012,6 +4247,7 @@
       "owasp_agentic_references": [
         "ASI09"
       ],
+      "owasp_ast_references": [],
       "owasp_mcp_references": [
         "MCP04:2025"
       ],
@@ -4040,6 +4276,7 @@
       "owasp_agentic_references": [
         "ASI06"
       ],
+      "owasp_ast_references": [],
       "owasp_mcp_references": [
         "MCP09:2025"
       ],
@@ -4069,6 +4306,7 @@
       "owasp_agentic_references": [
         "ASI06"
       ],
+      "owasp_ast_references": [],
       "owasp_mcp_references": [
         "MCP09:2025"
       ],
@@ -4097,6 +4335,7 @@
       "owasp_agentic_references": [
         "ASI06"
       ],
+      "owasp_ast_references": [],
       "owasp_mcp_references": [
         "MCP09:2025"
       ],
@@ -4125,6 +4364,7 @@
       "owasp_agentic_references": [
         "ASI09"
       ],
+      "owasp_ast_references": [],
       "owasp_mcp_references": [
         "MCP04:2025"
       ],
@@ -4153,6 +4393,7 @@
       "owasp_agentic_references": [
         "ASI03"
       ],
+      "owasp_ast_references": [],
       "owasp_mcp_references": [
         "MCP07:2025"
       ],
@@ -4183,6 +4424,7 @@
       "owasp_agentic_references": [
         "ASI10"
       ],
+      "owasp_ast_references": [],
       "owasp_mcp_references": [
         "MCP05:2025"
       ],
@@ -4208,6 +4450,7 @@
       "owasp_agentic_references": [
         "ASI06"
       ],
+      "owasp_ast_references": [],
       "owasp_mcp_references": [
         "MCP09:2025"
       ],
@@ -4237,6 +4480,7 @@
       "owasp_agentic_references": [
         "ASI01"
       ],
+      "owasp_ast_references": [],
       "owasp_mcp_references": [
         "MCP05:2025"
       ],
@@ -4265,6 +4509,7 @@
       "owasp_agentic_references": [
         "ASI01"
       ],
+      "owasp_ast_references": [],
       "owasp_mcp_references": [
         "MCP05:2025"
       ],
@@ -4293,6 +4538,7 @@
       "owasp_agentic_references": [
         "ASI03"
       ],
+      "owasp_ast_references": [],
       "owasp_mcp_references": [
         "MCP06:2025"
       ],
@@ -4327,6 +4573,7 @@
       "owasp_agentic_references": [
         "ASI04"
       ],
+      "owasp_ast_references": [],
       "owasp_mcp_references": [
         "MCP10:2025"
       ],
@@ -4356,6 +4603,7 @@
       "owasp_agentic_references": [
         "ASI04"
       ],
+      "owasp_ast_references": [],
       "owasp_mcp_references": [
         "MCP03:2025"
       ],
@@ -4385,6 +4633,7 @@
       "owasp_agentic_references": [
         "ASI04"
       ],
+      "owasp_ast_references": [],
       "owasp_mcp_references": [
         "MCP03:2025"
       ],
@@ -4415,6 +4664,7 @@
       "owasp_agentic_references": [
         "ASI02"
       ],
+      "owasp_ast_references": [],
       "owasp_mcp_references": [
         "MCP01:2025"
       ],
@@ -4439,6 +4689,7 @@
       ],
       "limitations": "",
       "owasp_agentic_references": [],
+      "owasp_ast_references": [],
       "owasp_mcp_references": [],
       "remediation": "No action required for the rule fire itself \u2014 this is a lineage data point. For SBOM / supply-chain attestation, record the Stainless lineage alongside the package's own version metadata. If you'd prefer to suppress the rule in your project, add the rule ID to your `aak ignore` config \u2014 `INFO` rules are silent by default in `aak scan` unless `--severity info` is passed.",
       "rule_id": "AAK-MCP-LINEAGE-STAINLESS-001",
@@ -4466,6 +4717,7 @@
       "owasp_agentic_references": [
         "ASI04"
       ],
+      "owasp_ast_references": [],
       "owasp_mcp_references": [
         "MCP01:2025"
       ],
@@ -4494,6 +4746,7 @@
       "owasp_agentic_references": [
         "ASI05"
       ],
+      "owasp_ast_references": [],
       "owasp_mcp_references": [
         "MCP04:2025"
       ],
@@ -4523,6 +4776,7 @@
       "owasp_agentic_references": [
         "ASI10"
       ],
+      "owasp_ast_references": [],
       "owasp_mcp_references": [
         "MCP05:2025",
         "MCP09:2025"
@@ -4549,6 +4803,7 @@
       "owasp_agentic_references": [
         "ASI04"
       ],
+      "owasp_ast_references": [],
       "owasp_mcp_references": [
         "MCP07:2025"
       ],
@@ -4577,6 +4832,7 @@
       "owasp_agentic_references": [
         "ASI06"
       ],
+      "owasp_ast_references": [],
       "owasp_mcp_references": [
         "MCP09:2025"
       ],
@@ -4606,6 +4862,7 @@
       "owasp_agentic_references": [
         "ASI03"
       ],
+      "owasp_ast_references": [],
       "owasp_mcp_references": [
         "MCP07:2025"
       ],
@@ -4637,6 +4894,7 @@
         "ASI06",
         "ASI05"
       ],
+      "owasp_ast_references": [],
       "owasp_mcp_references": [
         "MCP09:2025",
         "MCP04:2025"
@@ -4668,6 +4926,7 @@
       "owasp_agentic_references": [
         "ASI04"
       ],
+      "owasp_ast_references": [],
       "owasp_mcp_references": [
         "MCP01:2025"
       ],
@@ -4696,6 +4955,7 @@
       "owasp_agentic_references": [
         "ASI05"
       ],
+      "owasp_ast_references": [],
       "owasp_mcp_references": [
         "MCP04:2025"
       ],
@@ -4722,6 +4982,7 @@
       "owasp_agentic_references": [
         "ASI03"
       ],
+      "owasp_ast_references": [],
       "owasp_mcp_references": [
         "MCP07:2025"
       ],
@@ -4745,6 +5006,7 @@
       ],
       "limitations": "",
       "owasp_agentic_references": [],
+      "owasp_ast_references": [],
       "owasp_mcp_references": [],
       "remediation": "Decompose the operation into smaller MCP tools, each owning <=12 parameters, OR split the request body into nested sub-operations. If the breadth is required, expose a structured-output schema that the agent can consult before the call.",
       "rule_id": "AAK-MCP-OPENAPI-BLOATED-PARAMS-001",
@@ -4766,6 +5028,7 @@
       ],
       "limitations": "",
       "owasp_agentic_references": [],
+      "owasp_ast_references": [],
       "owasp_mcp_references": [],
       "remediation": "Author a >=40-character description that names the operation's purpose, expected input shape, and side-effecting class. Agent tool-selection accuracy improves materially when descriptions disambiguate similar-looking operations.",
       "rule_id": "AAK-MCP-OPENAPI-LAZY-DESCRIPTION-001",
@@ -4787,6 +5050,7 @@
       ],
       "limitations": "",
       "owasp_agentic_references": [],
+      "owasp_ast_references": [],
       "owasp_mcp_references": [],
       "remediation": "Split the tangled path into >=2 disjoint paths, each owning <=4 methods with method-name and path-segment in semantic agreement. Reserve verbs (`/get/...`, `/create/...`) for their corresponding HTTP methods only.",
       "rule_id": "AAK-MCP-OPENAPI-TANGLED-METHODS-001",
@@ -4814,6 +5078,7 @@
       "owasp_agentic_references": [
         "ASI03"
       ],
+      "owasp_ast_references": [],
       "owasp_mcp_references": [
         "MCP01:2025"
       ],
@@ -4843,6 +5108,7 @@
       "owasp_agentic_references": [
         "ASI04"
       ],
+      "owasp_ast_references": [],
       "owasp_mcp_references": [
         "MCP01:2025"
       ],
@@ -4873,6 +5139,7 @@
       "owasp_agentic_references": [
         "ASI04"
       ],
+      "owasp_ast_references": [],
       "owasp_mcp_references": [
         "MCP01:2025"
       ],
@@ -4901,6 +5168,7 @@
       "owasp_agentic_references": [
         "ASI04"
       ],
+      "owasp_ast_references": [],
       "owasp_mcp_references": [
         "MCP01:2025"
       ],
@@ -4927,6 +5195,7 @@
       "owasp_agentic_references": [
         "ASI03"
       ],
+      "owasp_ast_references": [],
       "owasp_mcp_references": [
         "MCP07:2025"
       ],
@@ -4955,6 +5224,7 @@
       "owasp_agentic_references": [
         "ASI04"
       ],
+      "owasp_ast_references": [],
       "owasp_mcp_references": [
         "MCP01:2025"
       ],
@@ -4981,6 +5251,7 @@
       "owasp_agentic_references": [
         "ASI03"
       ],
+      "owasp_ast_references": [],
       "owasp_mcp_references": [
         "MCP07:2025",
         "MCP02:2025"
@@ -5006,6 +5277,7 @@
         "ASI06",
         "ASI04"
       ],
+      "owasp_ast_references": [],
       "owasp_mcp_references": [
         "MCP06:2025"
       ],
@@ -5036,6 +5308,7 @@
       "owasp_agentic_references": [
         "ASI03"
       ],
+      "owasp_ast_references": [],
       "owasp_mcp_references": [
         "MCP01:2025"
       ],
@@ -5064,6 +5337,7 @@
       "owasp_agentic_references": [
         "ASI04"
       ],
+      "owasp_ast_references": [],
       "owasp_mcp_references": [
         "MCP02:2025"
       ],
@@ -5094,6 +5368,7 @@
       "owasp_agentic_references": [
         "ASI05"
       ],
+      "owasp_ast_references": [],
       "owasp_mcp_references": [
         "MCP07:2025"
       ],
@@ -5122,6 +5397,7 @@
       "owasp_agentic_references": [
         "ASI05"
       ],
+      "owasp_ast_references": [],
       "owasp_mcp_references": [
         "MCP07:2025"
       ],
@@ -5150,6 +5426,7 @@
       "owasp_agentic_references": [
         "ASI06"
       ],
+      "owasp_ast_references": [],
       "owasp_mcp_references": [
         "MCP09:2025"
       ],
@@ -5183,6 +5460,7 @@
       "owasp_agentic_references": [
         "ASI04"
       ],
+      "owasp_ast_references": [],
       "owasp_mcp_references": [
         "MCP01:2025"
       ],
@@ -5207,6 +5485,7 @@
       "owasp_agentic_references": [
         "ASI03"
       ],
+      "owasp_ast_references": [],
       "owasp_mcp_references": [
         "MCP07:2025"
       ],
@@ -5229,6 +5508,7 @@
       "incident_references": [],
       "limitations": "",
       "owasp_agentic_references": [],
+      "owasp_ast_references": [],
       "owasp_mcp_references": [
         "MCP07:2025"
       ],
@@ -5251,6 +5531,7 @@
       "incident_references": [],
       "limitations": "",
       "owasp_agentic_references": [],
+      "owasp_ast_references": [],
       "owasp_mcp_references": [
         "MCP07:2025"
       ],
@@ -5272,6 +5553,7 @@
       "incident_references": [],
       "limitations": "",
       "owasp_agentic_references": [],
+      "owasp_ast_references": [],
       "owasp_mcp_references": [
         "MCP07:2025"
       ],
@@ -5310,6 +5592,7 @@
         "ASI02",
         "ASI10"
       ],
+      "owasp_ast_references": [],
       "owasp_mcp_references": [
         "MCP01:2025",
         "MCP05:2025"
@@ -5349,6 +5632,7 @@
         "ASI02",
         "ASI10"
       ],
+      "owasp_ast_references": [],
       "owasp_mcp_references": [
         "MCP01:2025",
         "MCP05:2025"
@@ -5388,6 +5672,7 @@
         "ASI02",
         "ASI10"
       ],
+      "owasp_ast_references": [],
       "owasp_mcp_references": [
         "MCP01:2025",
         "MCP05:2025"
@@ -5427,6 +5712,7 @@
         "ASI02",
         "ASI10"
       ],
+      "owasp_ast_references": [],
       "owasp_mcp_references": [
         "MCP01:2025",
         "MCP05:2025"
@@ -5454,6 +5740,7 @@
         "ASI05",
         "ASI02"
       ],
+      "owasp_ast_references": [],
       "owasp_mcp_references": [
         "MCP04:2025"
       ],
@@ -5482,6 +5769,7 @@
       "owasp_agentic_references": [
         "ASI09"
       ],
+      "owasp_ast_references": [],
       "owasp_mcp_references": [
         "MCP04:2025"
       ],
@@ -5511,6 +5799,7 @@
         "ASI02",
         "ASI05"
       ],
+      "owasp_ast_references": [],
       "owasp_mcp_references": [
         "MCP01:2025",
         "MCP05:2025"
@@ -5536,6 +5825,7 @@
         "ASI04",
         "ASI02"
       ],
+      "owasp_ast_references": [],
       "owasp_mcp_references": [
         "MCP06:2025"
       ],
@@ -5561,6 +5851,7 @@
         "ASI02",
         "ASI05"
       ],
+      "owasp_ast_references": [],
       "owasp_mcp_references": [
         "MCP04:2025",
         "MCP06:2025"
@@ -5586,6 +5877,7 @@
       "owasp_agentic_references": [
         "ASI03"
       ],
+      "owasp_ast_references": [],
       "owasp_mcp_references": [
         "MCP07:2025"
       ],
@@ -5612,6 +5904,7 @@
         "ASI03",
         "ASI06"
       ],
+      "owasp_ast_references": [],
       "owasp_mcp_references": [
         "MCP02:2025",
         "MCP07:2025"
@@ -5638,6 +5931,7 @@
       "owasp_agentic_references": [
         "ASI04"
       ],
+      "owasp_ast_references": [],
       "owasp_mcp_references": [
         "MCP01:2025"
       ],
@@ -5667,6 +5961,7 @@
       "owasp_agentic_references": [
         "ASI04"
       ],
+      "owasp_ast_references": [],
       "owasp_mcp_references": [
         "MCP01:2025"
       ],
@@ -5697,6 +5992,7 @@
         "ASI02",
         "ASI05"
       ],
+      "owasp_ast_references": [],
       "owasp_mcp_references": [
         "MCP01:2025",
         "MCP05:2025"
@@ -5725,6 +6021,7 @@
       "owasp_agentic_references": [
         "ASI09"
       ],
+      "owasp_ast_references": [],
       "owasp_mcp_references": [
         "MCP09:2025"
       ],
@@ -5756,6 +6053,7 @@
         "ASI01",
         "ASI02"
       ],
+      "owasp_ast_references": [],
       "owasp_mcp_references": [
         "MCP02:2025"
       ],
@@ -5785,6 +6083,7 @@
       "owasp_agentic_references": [
         "ASI04"
       ],
+      "owasp_ast_references": [],
       "owasp_mcp_references": [
         "MCP01:2025"
       ],
@@ -5812,6 +6111,7 @@
         "ASI01",
         "ASI02"
       ],
+      "owasp_ast_references": [],
       "owasp_mcp_references": [],
       "remediation": "Wrap the refusal value in a policy-mediated transformation before re-use: discretize into a fixed enum (e.g., `RefusalKind.POLICY` / `RefusalKind.SAFETY`), rate-limit retries, strip free-text content. Never echo a verbatim refusal sentence into the next prompt \u2014 that is the closed-loop reasoning gradient Metis exploits.",
       "rule_id": "AAK-METIS-REFUSAL-REFEED-001",
@@ -5837,6 +6137,7 @@
         "ASI01",
         "ASI02"
       ],
+      "owasp_ast_references": [],
       "owasp_mcp_references": [],
       "remediation": "Discretize scoring signals into an opaque bucket (e.g., PASS / FAIL / PARTIAL) before re-injecting. If a numeric score must be exposed, cap it (e.g., 0-3 ordinal) and avoid free-text critiques. Per Metis: any verbose feedback string is fuel for the metacognitive policy refinement the paper demonstrates.",
       "rule_id": "AAK-METIS-SCORING-SINK-001",
@@ -5862,6 +6163,7 @@
       "owasp_agentic_references": [
         "ASI04"
       ],
+      "owasp_ast_references": [],
       "owasp_mcp_references": [
         "MCP03:2025",
         "MCP01:2025"
@@ -5890,6 +6192,7 @@
       "owasp_agentic_references": [
         "ASI09"
       ],
+      "owasp_ast_references": [],
       "owasp_mcp_references": [
         "MCP09:2025"
       ],
@@ -5916,6 +6219,7 @@
       "owasp_agentic_references": [
         "ASI03"
       ],
+      "owasp_ast_references": [],
       "owasp_mcp_references": [
         "MCP01:2025"
       ],
@@ -5941,6 +6245,7 @@
       "owasp_agentic_references": [
         "ASI03"
       ],
+      "owasp_ast_references": [],
       "owasp_mcp_references": [
         "MCP01:2025"
       ],
@@ -5966,6 +6271,7 @@
       "owasp_agentic_references": [
         "ASI03"
       ],
+      "owasp_ast_references": [],
       "owasp_mcp_references": [
         "MCP01:2025"
       ],
@@ -5991,6 +6297,7 @@
       "owasp_agentic_references": [
         "ASI03"
       ],
+      "owasp_ast_references": [],
       "owasp_mcp_references": [
         "MCP01:2025"
       ],
@@ -6016,6 +6323,7 @@
       "owasp_agentic_references": [
         "ASI03"
       ],
+      "owasp_ast_references": [],
       "owasp_mcp_references": [
         "MCP01:2025"
       ],
@@ -6042,6 +6350,7 @@
       "owasp_agentic_references": [
         "ASI03"
       ],
+      "owasp_ast_references": [],
       "owasp_mcp_references": [
         "MCP01:2025"
       ],
@@ -6068,6 +6377,7 @@
       "owasp_agentic_references": [
         "ASI03"
       ],
+      "owasp_ast_references": [],
       "owasp_mcp_references": [
         "MCP01:2025"
       ],
@@ -6094,6 +6404,7 @@
       "owasp_agentic_references": [
         "ASI03"
       ],
+      "owasp_ast_references": [],
       "owasp_mcp_references": [
         "MCP01:2025"
       ],
@@ -6119,6 +6430,7 @@
       "owasp_agentic_references": [
         "ASI04"
       ],
+      "owasp_ast_references": [],
       "owasp_mcp_references": [
         "MCP05:2025"
       ],
@@ -6144,6 +6456,7 @@
       "owasp_agentic_references": [
         "ASI04"
       ],
+      "owasp_ast_references": [],
       "owasp_mcp_references": [
         "MCP05:2025"
       ],
@@ -6169,6 +6482,7 @@
       "owasp_agentic_references": [
         "ASI03"
       ],
+      "owasp_ast_references": [],
       "owasp_mcp_references": [],
       "remediation": "Always pass an explicit, allow-listed role to OpenClawAgent. Wrap the assignment with `aak.checks.openclaw.assert_role_allowlisted(role)`. Pin the OpenClaw version once the upstream patch ships; the AAK rule will auto-promote from `provisional` to `confirmed` when `scripts/refresh_openclaw_status.py` finds a CVE ID.",
       "rule_id": "AAK-OPENCLAW-PRIVESC-001",
@@ -6188,6 +6502,7 @@
       "incident_references": [],
       "limitations": "",
       "owasp_agentic_references": [],
+      "owasp_ast_references": [],
       "owasp_mcp_references": [],
       "remediation": "Run `aak coverage --source ox` to see which OX-disclosed CVEs are covered by AAK rules. The manifest is regenerated on every release and powers the `OX coverage` badge in README.",
       "rule_id": "AAK-OX-COVERAGE-MANIFEST-001",
@@ -6211,6 +6526,7 @@
       "owasp_agentic_references": [
         "ASI06"
       ],
+      "owasp_ast_references": [],
       "owasp_mcp_references": [
         "MCP05:2025"
       ],
@@ -6236,6 +6552,7 @@
       "owasp_agentic_references": [
         "ASI06"
       ],
+      "owasp_ast_references": [],
       "owasp_mcp_references": [
         "MCP05:2025"
       ],
@@ -6261,6 +6578,7 @@
       "owasp_agentic_references": [
         "ASI06"
       ],
+      "owasp_ast_references": [],
       "owasp_mcp_references": [
         "MCP05:2025"
       ],
@@ -6286,6 +6604,7 @@
       "owasp_agentic_references": [
         "ASI06"
       ],
+      "owasp_ast_references": [],
       "owasp_mcp_references": [
         "MCP05:2025"
       ],
@@ -6311,6 +6630,7 @@
       "owasp_agentic_references": [
         "ASI06"
       ],
+      "owasp_ast_references": [],
       "owasp_mcp_references": [
         "MCP05:2025"
       ],
@@ -6336,6 +6656,7 @@
       "owasp_agentic_references": [
         "ASI06"
       ],
+      "owasp_ast_references": [],
       "owasp_mcp_references": [
         "MCP05:2025"
       ],
@@ -6361,6 +6682,7 @@
       "owasp_agentic_references": [
         "ASI02"
       ],
+      "owasp_ast_references": [],
       "owasp_mcp_references": [
         "MCP01:2025"
       ],
@@ -6382,6 +6704,7 @@
       "incident_references": [],
       "limitations": "",
       "owasp_agentic_references": [],
+      "owasp_ast_references": [],
       "owasp_mcp_references": [],
       "remediation": "Run `aak coverage --source prisma-airs` to see how AAK's static ruleset maps onto Palo Alto's published Prisma AIRS attack catalog. The map is hand-curated; entries flagged `status: catalog-private` are not publicly disclosed and intentionally absent from AAK coverage.",
       "rule_id": "AAK-PRISMA-AIRS-COVERAGE-001",
@@ -6406,6 +6729,7 @@
       "owasp_agentic_references": [
         "ASI06"
       ],
+      "owasp_ast_references": [],
       "owasp_mcp_references": [],
       "remediation": "Wrap pricing functions with `@aak.parity.check(dimensions=['model'], metric='price', max_drift_pct=1.5)` and run `aak parity report` in CI. The decorator records every invocation's (model, price) tuple and raises `ParityDriftError` if any per-tier mean drifts more than the configured threshold from the overall mean.",
       "rule_id": "AAK-PROJECT-DEAL-DRIFT-001",
@@ -6432,6 +6756,7 @@
       "owasp_agentic_references": [
         "ASI03"
       ],
+      "owasp_ast_references": [],
       "owasp_mcp_references": [
         "MCP01:2025"
       ],
@@ -6457,6 +6782,7 @@
       "owasp_agentic_references": [
         "ASI05"
       ],
+      "owasp_ast_references": [],
       "owasp_mcp_references": [
         "MCP10:2025"
       ],
@@ -6480,6 +6806,7 @@
       "owasp_agentic_references": [
         "ASI05"
       ],
+      "owasp_ast_references": [],
       "owasp_mcp_references": [
         "MCP10:2025"
       ],
@@ -6503,6 +6830,7 @@
       "owasp_agentic_references": [
         "ASI05"
       ],
+      "owasp_ast_references": [],
       "owasp_mcp_references": [
         "MCP10:2025"
       ],
@@ -6526,6 +6854,7 @@
       "owasp_agentic_references": [
         "ASI06"
       ],
+      "owasp_ast_references": [],
       "owasp_mcp_references": [
         "MCP05:2025"
       ],
@@ -6549,6 +6878,7 @@
       "owasp_agentic_references": [
         "ASI06"
       ],
+      "owasp_ast_references": [],
       "owasp_mcp_references": [
         "MCP05:2025"
       ],
@@ -6572,6 +6902,7 @@
       "owasp_agentic_references": [
         "ASI06"
       ],
+      "owasp_ast_references": [],
       "owasp_mcp_references": [
         "MCP05:2025"
       ],
@@ -6595,6 +6926,7 @@
       "owasp_agentic_references": [
         "ASI04"
       ],
+      "owasp_ast_references": [],
       "owasp_mcp_references": [
         "MCP03:2025"
       ],
@@ -6620,6 +6952,7 @@
       "owasp_agentic_references": [
         "ASI03"
       ],
+      "owasp_ast_references": [],
       "owasp_mcp_references": [
         "MCP01:2025"
       ],
@@ -6645,6 +6978,7 @@
       "owasp_agentic_references": [
         "ASI03"
       ],
+      "owasp_ast_references": [],
       "owasp_mcp_references": [
         "MCP01:2025"
       ],
@@ -6670,6 +7004,7 @@
       "owasp_agentic_references": [
         "ASI03"
       ],
+      "owasp_ast_references": [],
       "owasp_mcp_references": [
         "MCP01:2025"
       ],
@@ -6695,6 +7030,7 @@
       "owasp_agentic_references": [
         "ASI03"
       ],
+      "owasp_ast_references": [],
       "owasp_mcp_references": [
         "MCP01:2025"
       ],
@@ -6720,6 +7056,7 @@
       "owasp_agentic_references": [
         "ASI03"
       ],
+      "owasp_ast_references": [],
       "owasp_mcp_references": [
         "MCP01:2025"
       ],
@@ -6745,6 +7082,7 @@
       "owasp_agentic_references": [
         "ASI03"
       ],
+      "owasp_ast_references": [],
       "owasp_mcp_references": [
         "MCP01:2025"
       ],
@@ -6770,6 +7108,7 @@
       "owasp_agentic_references": [
         "ASI03"
       ],
+      "owasp_ast_references": [],
       "owasp_mcp_references": [
         "MCP01:2025"
       ],
@@ -6795,6 +7134,7 @@
       "owasp_agentic_references": [
         "ASI03"
       ],
+      "owasp_ast_references": [],
       "owasp_mcp_references": [
         "MCP01:2025"
       ],
@@ -6820,6 +7160,7 @@
       "owasp_agentic_references": [
         "ASI03"
       ],
+      "owasp_ast_references": [],
       "owasp_mcp_references": [
         "MCP01:2025"
       ],
@@ -6849,6 +7190,7 @@
       "owasp_agentic_references": [
         "ASI02"
       ],
+      "owasp_ast_references": [],
       "owasp_mcp_references": [
         "MCP01:2025"
       ],
@@ -6878,6 +7220,7 @@
       "owasp_agentic_references": [
         "ASI02"
       ],
+      "owasp_ast_references": [],
       "owasp_mcp_references": [
         "MCP01:2025"
       ],
@@ -6909,6 +7252,7 @@
         "ASI05",
         "ASI10"
       ],
+      "owasp_ast_references": [],
       "owasp_mcp_references": [],
       "remediation": "Bump `semantic-kernel` to >= 1.39.4 in any Python manifest pinning Semantic Kernel. The rule fires only on the pin shape; a source detector for unsafe `InMemoryVectorStore(filter=...)` constructions is queued for v0.3.18 once the upstream filter API surface stabilises post-patch.",
       "rule_id": "AAK-SK-INMEMORY-VECTORSTORE-FILTER-CVE-2026-26030-PIN-001",
@@ -6932,6 +7276,7 @@
       "owasp_agentic_references": [
         "ASI06"
       ],
+      "owasp_ast_references": [],
       "owasp_mcp_references": [
         "MCP05:2025"
       ],
@@ -6957,6 +7302,7 @@
       "owasp_agentic_references": [
         "ASI06"
       ],
+      "owasp_ast_references": [],
       "owasp_mcp_references": [
         "MCP05:2025"
       ],
@@ -6982,6 +7328,7 @@
       "owasp_agentic_references": [
         "ASI06"
       ],
+      "owasp_ast_references": [],
       "owasp_mcp_references": [
         "MCP05:2025"
       ],
@@ -7007,6 +7354,7 @@
       "owasp_agentic_references": [
         "ASI06"
       ],
+      "owasp_ast_references": [],
       "owasp_mcp_references": [
         "MCP05:2025"
       ],
@@ -7032,6 +7380,7 @@
       "owasp_agentic_references": [
         "ASI01"
       ],
+      "owasp_ast_references": [],
       "owasp_mcp_references": [
         "MCP10:2025"
       ],
@@ -7059,6 +7408,7 @@
         "ASI04",
         "ASI09"
       ],
+      "owasp_ast_references": [],
       "owasp_mcp_references": [],
       "remediation": "Emit a structured outcome record at the end of the skill's execute function: e.g., `record_outcome(skill_id=..., outcome='success'|'failure', signals={...})`. The schema can be project-local \u2014 SkillsVote does not prescribe a specific format \u2014 but the call must be present in the same function body so the evidence-gated update loop can consume it.",
       "rule_id": "AAK-SKILL-LIFECYCLE-ATTRIBUTION-001",
@@ -7082,6 +7432,7 @@
       "owasp_agentic_references": [
         "ASI06"
       ],
+      "owasp_ast_references": [],
       "owasp_mcp_references": [
         "MCP05:2025"
       ],
@@ -7112,6 +7463,7 @@
       "owasp_agentic_references": [
         "ASI04"
       ],
+      "owasp_ast_references": [],
       "owasp_mcp_references": [
         "MCP08:2025"
       ],
@@ -7142,6 +7494,7 @@
       "owasp_agentic_references": [
         "ASI04"
       ],
+      "owasp_ast_references": [],
       "owasp_mcp_references": [
         "MCP08:2025"
       ],
@@ -7167,6 +7520,7 @@
       "owasp_agentic_references": [
         "ASI06"
       ],
+      "owasp_ast_references": [],
       "owasp_mcp_references": [
         "MCP09:2025"
       ],
@@ -7192,6 +7546,7 @@
       "owasp_agentic_references": [
         "ASI06"
       ],
+      "owasp_ast_references": [],
       "owasp_mcp_references": [
         "MCP09:2025"
       ],
@@ -7217,6 +7572,7 @@
       "owasp_agentic_references": [
         "ASI06"
       ],
+      "owasp_ast_references": [],
       "owasp_mcp_references": [
         "MCP09:2025"
       ],
@@ -7242,6 +7598,7 @@
       "owasp_agentic_references": [
         "ASI06"
       ],
+      "owasp_ast_references": [],
       "owasp_mcp_references": [
         "MCP09:2025"
       ],
@@ -7267,6 +7624,7 @@
       "owasp_agentic_references": [
         "ASI06"
       ],
+      "owasp_ast_references": [],
       "owasp_mcp_references": [
         "MCP09:2025"
       ],
@@ -7298,6 +7656,7 @@
       "owasp_agentic_references": [
         "ASI04"
       ],
+      "owasp_ast_references": [],
       "owasp_mcp_references": [
         "MCP05:2025"
       ],
@@ -7317,6 +7676,7 @@
       "incident_references": [],
       "limitations": "",
       "owasp_agentic_references": [],
+      "owasp_ast_references": [],
       "owasp_mcp_references": [],
       "remediation": "Add a 'Do Not Sell / Share My Personal Information' section and a usable opt-out mechanism.",
       "rule_id": "AAK-STATE-PRIVACY-001",
@@ -7334,6 +7694,7 @@
       "incident_references": [],
       "limitations": "",
       "owasp_agentic_references": [],
+      "owasp_ast_references": [],
       "owasp_mcp_references": [],
       "remediation": "Describe DSAR submission, 45-day cure window where applicable, and the portability format.",
       "rule_id": "AAK-STATE-PRIVACY-002",
@@ -7351,6 +7712,7 @@
       "incident_references": [],
       "limitations": "",
       "owasp_agentic_references": [],
+      "owasp_ast_references": [],
       "owasp_mcp_references": [],
       "remediation": "Add a privacy@ inbox and a postal mailing address for DSARs.",
       "rule_id": "AAK-STATE-PRIVACY-003",
@@ -7386,6 +7748,7 @@
       "owasp_agentic_references": [
         "ASI02"
       ],
+      "owasp_ast_references": [],
       "owasp_mcp_references": [
         "MCP01:2025"
       ],
@@ -7411,6 +7774,7 @@
       "owasp_agentic_references": [
         "ASI04"
       ],
+      "owasp_ast_references": [],
       "owasp_mcp_references": [
         "MCP03:2025"
       ],
@@ -7436,6 +7800,7 @@
       "owasp_agentic_references": [
         "ASI04"
       ],
+      "owasp_ast_references": [],
       "owasp_mcp_references": [
         "MCP03:2025",
         "MCP10:2025"
@@ -7462,6 +7827,7 @@
       "owasp_agentic_references": [
         "ASI04"
       ],
+      "owasp_ast_references": [],
       "owasp_mcp_references": [
         "MCP03:2025"
       ],
@@ -7487,6 +7853,7 @@
       "owasp_agentic_references": [
         "ASI04"
       ],
+      "owasp_ast_references": [],
       "owasp_mcp_references": [
         "MCP03:2025"
       ],
@@ -7512,6 +7879,7 @@
       "owasp_agentic_references": [
         "ASI04"
       ],
+      "owasp_ast_references": [],
       "owasp_mcp_references": [
         "MCP03:2025"
       ],
@@ -7537,6 +7905,7 @@
       "owasp_agentic_references": [
         "ASI04"
       ],
+      "owasp_ast_references": [],
       "owasp_mcp_references": [
         "MCP03:2025"
       ],
@@ -7562,6 +7931,7 @@
       "owasp_agentic_references": [
         "ASI05"
       ],
+      "owasp_ast_references": [],
       "owasp_mcp_references": [
         "MCP04:2025"
       ],
@@ -7587,6 +7957,7 @@
       "owasp_agentic_references": [
         "ASI05"
       ],
+      "owasp_ast_references": [],
       "owasp_mcp_references": [
         "MCP04:2025"
       ],
@@ -7612,6 +7983,7 @@
       "owasp_agentic_references": [
         "ASI05"
       ],
+      "owasp_ast_references": [],
       "owasp_mcp_references": [
         "MCP06:2025"
       ],
@@ -7637,6 +8009,7 @@
       "owasp_agentic_references": [
         "ASI05"
       ],
+      "owasp_ast_references": [],
       "owasp_mcp_references": [
         "MCP09:2025"
       ],
@@ -7662,6 +8035,7 @@
       "owasp_agentic_references": [
         "ASI02"
       ],
+      "owasp_ast_references": [],
       "owasp_mcp_references": [
         "MCP04:2025"
       ],
@@ -7687,6 +8061,7 @@
       "owasp_agentic_references": [
         "ASI05"
       ],
+      "owasp_ast_references": [],
       "owasp_mcp_references": [
         "MCP04:2025"
       ],
@@ -7712,6 +8087,7 @@
       "owasp_agentic_references": [
         "ASI02"
       ],
+      "owasp_ast_references": [],
       "owasp_mcp_references": [
         "MCP04:2025"
       ],
@@ -7737,6 +8113,7 @@
       "owasp_agentic_references": [
         "ASI02"
       ],
+      "owasp_ast_references": [],
       "owasp_mcp_references": [
         "MCP06:2025"
       ],
@@ -7760,6 +8137,7 @@
       "owasp_agentic_references": [
         "ASI03"
       ],
+      "owasp_ast_references": [],
       "owasp_mcp_references": [
         "MCP05:2025"
       ],
@@ -7783,6 +8161,7 @@
       "owasp_agentic_references": [
         "ASI03"
       ],
+      "owasp_ast_references": [],
       "owasp_mcp_references": [
         "MCP05:2025"
       ],
@@ -7806,6 +8185,7 @@
       "owasp_agentic_references": [
         "ASI03"
       ],
+      "owasp_ast_references": [],
       "owasp_mcp_references": [
         "MCP05:2025"
       ],
@@ -7832,6 +8212,7 @@
       "owasp_agentic_references": [
         "ASI08"
       ],
+      "owasp_ast_references": [],
       "owasp_mcp_references": [
         "MCP05:2025"
       ],
@@ -7858,6 +8239,7 @@
       "owasp_agentic_references": [
         "ASI09"
       ],
+      "owasp_ast_references": [],
       "owasp_mcp_references": [],
       "remediation": "Place every social-platform write call behind a human-review gate. AAK ships an `aak.review.human_in_loop(text, comment=...)` helper that defaults closed and requires explicit approval (CLI, webhook, or workflow). For high-volume agents, route generated replies to a moderation queue instead of the platform sink directly.",
       "rule_id": "AAK-TIKTOK-AGENT-HIJACK-001",
@@ -7883,6 +8265,7 @@
         "ASI02",
         "ASI09"
       ],
+      "owasp_ast_references": [],
       "owasp_mcp_references": [
         "MCP06:2025"
       ],
@@ -7908,6 +8291,7 @@
       "owasp_agentic_references": [
         "ASI03"
       ],
+      "owasp_ast_references": [],
       "owasp_mcp_references": [
         "MCP07:2025"
       ],
@@ -7933,6 +8317,7 @@
       "owasp_agentic_references": [
         "ASI03"
       ],
+      "owasp_ast_references": [],
       "owasp_mcp_references": [
         "MCP07:2025"
       ],
@@ -7958,6 +8343,7 @@
       "owasp_agentic_references": [
         "ASI08"
       ],
+      "owasp_ast_references": [],
       "owasp_mcp_references": [
         "MCP07:2025"
       ],
@@ -7983,6 +8369,7 @@
       "owasp_agentic_references": [
         "ASI03"
       ],
+      "owasp_ast_references": [],
       "owasp_mcp_references": [
         "MCP01:2025"
       ],
@@ -8010,6 +8397,7 @@
       "owasp_agentic_references": [
         "ASI10"
       ],
+      "owasp_ast_references": [],
       "owasp_mcp_references": [
         "MCP05:2025"
       ],
@@ -8037,6 +8425,7 @@
       "owasp_agentic_references": [
         "ASI10"
       ],
+      "owasp_ast_references": [],
       "owasp_mcp_references": [
         "MCP01:2025"
       ],
@@ -8062,6 +8451,7 @@
       "owasp_agentic_references": [
         "ASI03"
       ],
+      "owasp_ast_references": [],
       "owasp_mcp_references": [
         "MCP05:2025"
       ],
@@ -8087,6 +8477,7 @@
       "owasp_agentic_references": [
         "ASI03"
       ],
+      "owasp_ast_references": [],
       "owasp_mcp_references": [
         "MCP05:2025",
         "MCP08:2025"
@@ -8115,6 +8506,7 @@
       "owasp_agentic_references": [
         "ASI10"
       ],
+      "owasp_ast_references": [],
       "owasp_mcp_references": [
         "MCP01:2025"
       ],
@@ -8140,6 +8532,7 @@
       "owasp_agentic_references": [
         "ASI09"
       ],
+      "owasp_ast_references": [],
       "owasp_mcp_references": [
         "MCP05:2025"
       ],
@@ -8165,6 +8558,7 @@
       "owasp_agentic_references": [
         "ASI03"
       ],
+      "owasp_ast_references": [],
       "owasp_mcp_references": [
         "MCP05:2025"
       ],
@@ -8192,6 +8586,7 @@
       "owasp_agentic_references": [
         "ASI06"
       ],
+      "owasp_ast_references": [],
       "owasp_mcp_references": [
         "MCP03:2025"
       ],
@@ -8202,5 +8597,5 @@
       "title": "Windsurf .windsurf/mcp.json auto-approves server registrations"
     }
   ],
-  "schema": "agent-audit-kit/rule-bundle/2"
+  "schema": "agent-audit-kit/rule-bundle/3"
 }

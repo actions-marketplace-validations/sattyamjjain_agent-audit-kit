@@ -633,6 +633,75 @@
       "title": "MCP server built on the upstream SDK without STDIO sanitizer"
     },
     {
+      "category": "agentic-skill",
+      "cve_references": [],
+      "eu_ai_act": [
+        "Art. 10 - Data Governance",
+        "Art. 15 - Robustness & Security"
+      ],
+      "nsa_mcp_csi": [
+        "Choose supported MCP projects when possible (p.10)",
+        "Sign and verify MCP messages (p.12)",
+        "Track and patch MCP related vulnerabilities (p.13)",
+        "Scan local network for open or vulnerable MCP servers (p.14)"
+      ],
+      "owasp_agentic": [
+        "ASI04 Supply Chain Vulnerabilities"
+      ],
+      "owasp_mcp": [
+        "MCP03:2025 Supply Chain Attacks"
+      ],
+      "rule_id": "AAK-AST02-001",
+      "severity": "high",
+      "title": "Skill bundle pulls an external resource that nothing pins"
+    },
+    {
+      "category": "agentic-skill",
+      "cve_references": [],
+      "eu_ai_act": [
+        "Art. 9 - Risk Management",
+        "Art. 15 - Robustness & Security"
+      ],
+      "nsa_mcp_csi": [
+        "Design for boundaries (p.10)",
+        "Validate parameters (p.11)",
+        "Constrain and sandbox tool execution (p.11)",
+        "Filter and monitor output pipelines and chained execution (p.12)"
+      ],
+      "owasp_agentic": [
+        "ASI05 Unexpected Code Execution"
+      ],
+      "owasp_mcp": [
+        "MCP05:2025 Tool Poisoning / Trust Boundary"
+      ],
+      "rule_id": "AAK-AST04-001",
+      "severity": "critical",
+      "title": "Skill frontmatter carries a deserialization tag that executes on parse"
+    },
+    {
+      "category": "agentic-skill",
+      "cve_references": [],
+      "eu_ai_act": [
+        "Art. 10 - Data Governance",
+        "Art. 15 - Robustness & Security"
+      ],
+      "nsa_mcp_csi": [
+        "Choose supported MCP projects when possible (p.10)",
+        "Sign and verify MCP messages (p.12)",
+        "Track and patch MCP related vulnerabilities (p.13)",
+        "Scan local network for open or vulnerable MCP servers (p.14)"
+      ],
+      "owasp_agentic": [
+        "ASI04 Supply Chain Vulnerabilities"
+      ],
+      "owasp_mcp": [
+        "MCP02:2025 Context Over-Sharing / Tool Sprawl"
+      ],
+      "rule_id": "AAK-AST10-001",
+      "severity": "medium",
+      "title": "Skill ships platform manifests whose security metadata disagrees"
+    },
+    {
       "category": "supply-chain",
       "cve_references": [
         "CVE-2026-7591"
@@ -7073,6 +7142,7 @@
     "by_category": {
       "a2a-protocol": 13,
       "agent-config": 18,
+      "agentic-skill": 3,
       "composition": 3,
       "hook-injection": 17,
       "legal-compliance": 12,
@@ -7086,29 +7156,29 @@
       "trust-boundary": 15
     },
     "by_eu_ai_act": {
-      "Art. 10 - Data Governance": 107,
+      "Art. 10 - Data Governance": 109,
       "Art. 13 - Transparency": 31,
       "Art. 14 - Human Oversight": 39,
-      "Art. 15 - Robustness & Security": 183,
-      "Art. 9 - Risk Management": 108
+      "Art. 15 - Robustness & Security": 186,
+      "Art. 9 - Risk Management": 109
     },
     "by_nsa_mcp_csi": {
-      "Choose supported MCP projects when possible (p.10)": 70,
-      "Constrain and sandbox tool execution (p.11)": 95,
-      "Design for boundaries (p.10)": 167,
-      "Filter and monitor output pipelines and chained execution (p.12)": 69,
+      "Choose supported MCP projects when possible (p.10)": 72,
+      "Constrain and sandbox tool execution (p.11)": 96,
+      "Design for boundaries (p.10)": 168,
+      "Filter and monitor output pipelines and chained execution (p.12)": 70,
       "Instrument for logging and detection (p.13)": 34,
-      "Scan local network for open or vulnerable MCP servers (p.14)": 137,
-      "Sign and verify MCP messages (p.12)": 136,
-      "Track and patch MCP related vulnerabilities (p.13)": 81,
-      "Validate parameters (p.11)": 99
+      "Scan local network for open or vulnerable MCP servers (p.14)": 139,
+      "Sign and verify MCP messages (p.12)": 138,
+      "Track and patch MCP related vulnerabilities (p.13)": 83,
+      "Validate parameters (p.11)": 100
     },
     "by_owasp_agentic": {
       "ASI01": 14,
       "ASI02": 47,
       "ASI03": 69,
-      "ASI04": 64,
-      "ASI05": 48,
+      "ASI04": 66,
+      "ASI05": 49,
       "ASI06": 45,
       "ASI07": 9,
       "ASI08": 5,
@@ -7117,10 +7187,10 @@
     },
     "by_owasp_mcp": {
       "MCP01:2025": 78,
-      "MCP02:2025": 13,
-      "MCP03:2025": 32,
+      "MCP02:2025": 14,
+      "MCP03:2025": 33,
       "MCP04:2025": 37,
-      "MCP05:2025": 54,
+      "MCP05:2025": 55,
       "MCP06:2025": 15,
       "MCP07:2025": 33,
       "MCP08:2025": 7,
@@ -7128,14 +7198,14 @@
       "MCP10:2025": 11
     },
     "by_severity": {
-      "critical": 70,
-      "high": 151,
+      "critical": 71,
+      "high": 152,
       "info": 5,
       "low": 9,
-      "medium": 81
+      "medium": 82
     },
     "total_cves_covered": 165,
-    "total_rules": 316
+    "total_rules": 319
   },
   "tool": "agent-audit-kit"
 }

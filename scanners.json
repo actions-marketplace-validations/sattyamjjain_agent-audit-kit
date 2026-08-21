@@ -1,5 +1,5 @@
 {
-  "count": 93,
+  "count": 94,
   "scanners": [
     {
       "module": "a2a_protocol",
@@ -16,6 +16,10 @@
     {
       "module": "agent_trust_surface",
       "name": "Agent config/skill auto-trust (headless -p in CI)"
+    },
+    {
+      "module": "agentic_skills",
+      "name": "OWASP Agentic Skills Top 10 (AAK-AST02/04/10)"
     },
     {
       "module": "argv_toctou",

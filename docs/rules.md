@@ -18,8 +18,9 @@
 | Transport Security | 13 |
 | Legal Compliance | 12 |
 | MCP Server Card | 4 |
+| Agentic Skills (AST10) | 3 |
 | Composition | 3 |
-| **Total** | **316** |
+| **Total** | **319** |
 
 <!-- END rules-summary -->
 

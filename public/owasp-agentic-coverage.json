@@ -1,8 +1,8 @@
 {
   "schema_version": "1",
-  "last_updated": "2026-08-21T04:41:57Z",
+  "last_updated": "2026-08-21T04:50:10Z",
   "aak_version": "0.3.84",
-  "rule_count": 316,
+  "rule_count": 319,
   "coverage": [
     {
       "asi_id": "ASI01",
@@ -1218,7 +1218,7 @@
     {
       "asi_id": "ASI04",
       "title": "Identity & Privilege Abuse",
-      "rule_density": 64,
+      "rule_density": 66,
       "rules": [
         {
           "id": "AAK-AGENT-HARNESS-SHARED-STATE-001",
@@ -1235,6 +1235,18 @@
           "cve_references": [
             "CVE-2026-44654"
           ],
+          "aicm_references": []
+        },
+        {
+          "id": "AAK-AST02-001",
+          "severity": "high",
+          "cve_references": [],
+          "aicm_references": []
+        },
+        {
+          "id": "AAK-AST10-001",
+          "severity": "medium",
+          "cve_references": [],
           "aicm_references": []
         },
         {
@@ -1861,7 +1873,7 @@
     {
       "asi_id": "ASI05",
       "title": "Cascading Failures",
-      "rule_density": 48,
+      "rule_density": 49,
       "rules": [
         {
           "id": "AAK-AGENT-TRUST-001",
@@ -1882,6 +1894,12 @@
             "IAM-05",
             "IVS-04"
           ]
+        },
+        {
+          "id": "AAK-AST04-001",
+          "severity": "critical",
+          "cve_references": [],
+          "aicm_references": []
         },
         {
           "id": "AAK-COMPOSE-003",

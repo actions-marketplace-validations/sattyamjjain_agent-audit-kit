@@ -147,6 +147,7 @@ _CATEGORY_DISPLAY = {
     "TRANSPORT_SECURITY": "Transport Security",
     "MCP_SERVER_CARD": "MCP Server Card",
     "COMPOSITION": "Composition",
+    "AGENTIC_SKILL": "Agentic Skills (AST10)",
 }
 
 

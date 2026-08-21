@@ -53,5 +53,6 @@ def make_finding(
         adversa_references=rule.adversa_references,
         incident_references=rule.incident_references,
         aicm_references=rule.aicm_references,
+        owasp_ast_references=rule.owasp_ast_references,
         related_locations=related_locations or [],
     )

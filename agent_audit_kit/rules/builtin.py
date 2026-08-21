@@ -22,6 +22,9 @@ class RuleDefinition:
     # v0.3.2 — SCHEMA_VERSION 2
     incident_references: list[str] = field(default_factory=list)
     aicm_references: list[str] = field(default_factory=list)
+    # v0.3.85 — OWASP Agentic Skills Top 10 (AST01-AST10). Defaults empty, so
+    # every existing rule definition is unchanged.
+    owasp_ast_references: list[str] = field(default_factory=list)
     # v0.3.73 — honest scope note. What the rule provably does NOT catch, in
     # plain language. Used by the AAK-AGENT-TRUST-* pre-screen rules to state
     # that single-artifact scanning does not detect intent split across multiple
@@ -307,6 +310,7 @@ def _r(
     auto_fixable: bool = False,
     incident_references: list[str] | None = None,
     aicm_references: list[str] | None = None,
+    owasp_ast_references: list[str] | None = None,
     limitations: str = "",
 ) -> None:
     RULES[rule_id] = RuleDefinition(
@@ -321,6 +325,7 @@ def _r(
         owasp_mcp_references=owasp_mcp_references or [],
         owasp_agentic_references=owasp_agentic_references or [],
         adversa_references=adversa_references or [],
+        owasp_ast_references=owasp_ast_references or [],
         auto_fixable=auto_fixable,
         incident_references=incident_references or [],
         aicm_references=aicm_references or [],
@@ -7693,6 +7698,135 @@ _r(
     owasp_mcp_references=["MCP06:2025"],
     owasp_agentic_references=["ASI03"],
     adversa_references=["ADV-INJECT-01"],
+)
+
+
+# ---------------------------------------------------------------------------
+# OWASP Agentic Skills Top 10 (AST10) — the statically decidable subset.
+# Three rules, not ten. AST01, AST03 and the semantic half of AST04 were already
+# covered by AAK-SKILL-*, AAK-POISON-* and AAK-COMPOSE-003, and the remaining
+# categories need runtime evidence. See scanners/agentic_skills.py.
+# ---------------------------------------------------------------------------
+
+_r(
+    "AAK-AST02-001",
+    "Skill bundle pulls an external resource that nothing pins",
+    "A skill bundle references an external resource with no content hash, commit "
+    "SHA, integrity field or exact version anywhere in it: a git ref that moves "
+    "(`main`, `master`, `HEAD`), a `releases/latest` redirect, a pipe-to-shell "
+    "installer, or an unpinned package install. What the skill runs is then "
+    "whatever that source serves at the moment it is used, and the skill itself "
+    "never has to change for its behaviour to. This is OWASP AST02 Supply Chain "
+    "Compromise together with the pinning half of AST07 Update Drift, whose own "
+    "mitigation is stated as pinning to immutable content hashes rather than "
+    "version ranges. The scale is why it is a rule rather than a lint: Air "
+    "Security's *Circus of Skills* (2026-06-24) found 17,822 of 142,836 live "
+    "skills, about 12.4% and 6.7M installs, resting on at least one untrusted "
+    "external resource, and *SkillJacking* (2026-07-02) found 925 of them on "
+    "sources that could be taken over outright — a deleted GitHub account "
+    "re-registered, an expired domain — with no update event and no scanner alert.",
+    Severity.HIGH,
+    Category.AGENTIC_SKILL,
+    "Pin every external resource the bundle reaches to something immutable: a "
+    "commit SHA rather than a branch, a release asset with a recorded `sha256:` "
+    "rather than `releases/latest`, an exact package version rather than a range. "
+    "If the resource is a script fetched at run time, vendor it into the bundle so "
+    "review and pinning apply to it. Pinning is what makes a later change "
+    "reviewable; without it an upstream takeover reaches you on next use rather "
+    "than on next upgrade.",
+    sarif_name="AgenticSkillUnpinnedExternalResource",
+    owasp_mcp_references=["MCP03:2025"],
+    owasp_agentic_references=["ASI04"],
+    adversa_references=["ADV-SUPPLY-01"],
+    owasp_ast_references=["AST02", "AST07"],
+    limitations=(
+        "Static, and scoped to what a skill bundle declares on disk. It cannot see a resource that is pinned at install time by tooling outside the bundle, and it does not fetch anything, so a pinned reference that now resolves elsewhere looks the same as one that does not. "
+        "It reports a bundle only when *nothing* in it is pinned, so a bundle that "
+        "pins its dependencies and floats one script is not reported — that keeps "
+        "the rule quiet on ordinary projects at the cost of missing partial "
+        "pinning. It reads the shapes listed above and will miss an unpinned "
+        "resource fetched through an indirection it cannot follow."
+    ),
+)
+
+_r(
+    "AAK-AST04-001",
+    "Skill frontmatter carries a deserialization tag that executes on parse",
+    "A skill's YAML frontmatter contains a language-specific deserialization tag — "
+    "`!!python/object/apply`, `!ruby/object`, `!!java/...` and the like. A loader "
+    "using its language's unsafe default constructs the named object *while "
+    "parsing*, so the payload runs before any field of the skill is read and "
+    "before the skill is ever invoked: installing or merely listing the skill is "
+    "enough. This is the parsing layer of OWASP AST04 Insecure Metadata, which "
+    "names the case directly. Distinct from `AAK-SKILL-005`, which reads "
+    "frontmatter *values* for prompt-injection triggers: that rule assumes parsing "
+    "already happened safely, and this one is about parsing being the "
+    "vulnerability.",
+    Severity.CRITICAL,
+    Category.AGENTIC_SKILL,
+    "Remove the tag. There is no legitimate reason for skill metadata to construct "
+    "a language object, so treat its presence as intent rather than as a mistake, "
+    "and review what else the bundle ships. Load skill frontmatter with a safe "
+    "loader — `yaml.safe_load` in Python, `safe_load` equivalents elsewhere — so a "
+    "tag like this raises rather than executes; if you maintain a loader, that "
+    "change protects every skill it will ever read.",
+    sarif_name="AgenticSkillFrontmatterDeserializationTag",
+    owasp_mcp_references=["MCP05:2025"],
+    owasp_agentic_references=["ASI05"],
+    adversa_references=["ADV-INJECT-01"],
+    owasp_ast_references=["AST04"],
+    limitations=(
+        "Static, and scoped to what a skill bundle declares on disk. It cannot see a resource that is pinned at install time by tooling outside the bundle, and it does not fetch anything, so a pinned reference that now resolves elsewhere looks the same as one that does not. "
+        "It matches the tag syntax of the common unsafe loaders and will miss a "
+        "loader with a bespoke tag vocabulary. It reports the tag's presence, not "
+        "whether the loader in use is configured unsafely — a bundle parsed only "
+        "by a safe loader carries the tag harmlessly, which is still worth "
+        "removing because the next loader may not be."
+    ),
+)
+
+_r(
+    "AAK-AST10-001",
+    "Skill ships platform manifests whose security metadata disagrees",
+    "A skill bundle carries more than one platform manifest — `SKILL.md` "
+    "frontmatter, `skill.json`, `manifest.json`, `package.json` — and a "
+    "security-relevant field declared in one is absent from another, or declares "
+    "something weaker in one than the other: a risk tier that exists on one "
+    "platform and not the next, a permission list replaced by a blanket `true`, a "
+    "signature field that survives in one format only. Whichever platform loads "
+    "the weaker manifest runs the skill without the control the other declares. "
+    "This is OWASP AST10 Cross-Platform Reuse, whose first attack scenario is a "
+    "`risk_tier: L3` skill ported to a platform that does not support `risk_tier` "
+    "so the warning is silently dropped. Like the composition rules, this is a "
+    "question no single artifact can answer: each manifest is internally "
+    "consistent, and the defect exists only in the disagreement between them.",
+    Severity.MEDIUM,
+    Category.AGENTIC_SKILL,
+    "Normalise the security fields across every manifest the bundle ships, which "
+    "is AST10's own mitigation: `risk_tier`, permissions, egress and signature "
+    "should say the same thing in each format or the bundle should ship one "
+    "format. Where a platform has no equivalent for a field, do not drop it "
+    "silently — record the gap in the bundle so a reviewer sees that the control "
+    "is unenforced there rather than absent by design. Re-validate the metadata "
+    "whenever a skill is ported; equivalence between formats is the assumption "
+    "this risk is named after.",
+    sarif_name="AgenticSkillCrossPlatformMetadataLoss",
+    owasp_mcp_references=["MCP02:2025"],
+    owasp_agentic_references=["ASI04"],
+    adversa_references=["ADV-SUPPLY-01"],
+    owasp_ast_references=["AST10"],
+    limitations=(
+        "Static, and scoped to what a skill bundle declares on disk. It cannot see a resource that is pinned at install time by tooling outside the bundle, and it does not fetch anything, so a pinned reference that now resolves elsewhere looks the same as one that does not. "
+        "It compares only fields whose loss is unambiguous, and only in the "
+        "unambiguous direction: an allow-list replaced by a blanket `true`, or a "
+        "declaration replaced by nothing. Two differing permission lists are left "
+        "alone, because deciding which is weaker needs a judgement this rule "
+        "cannot make without guessing. A bundle shipping one manifest is out of "
+        "scope by construction, and so is a manifest that does not parse — which "
+        "matters here, because frontmatter carrying a deserialization tag is "
+        "rejected by safe parsing and therefore drops out of this comparison "
+        "entirely. In that case `AAK-AST04-001` is the finding that applies."
+    ),
 )
 
 

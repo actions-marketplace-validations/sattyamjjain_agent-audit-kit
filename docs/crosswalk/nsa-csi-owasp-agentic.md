@@ -1,6 +1,6 @@
 # AgentAuditKit standards crosswalk
 
-Every AgentAuditKit rule (316 total; 303 mapped) against two agentic-security standards. Static and deterministic — generated from the committed rule registry and compliance mappings, no scan required.
+Every AgentAuditKit rule (319 total; 306 mapped) against two agentic-security standards. Static and deterministic — generated from the committed rule registry and compliance mappings, no scan required.
 
 **Standards**
 
@@ -40,6 +40,9 @@ Every AgentAuditKit rule (316 total; 303 mapped) against two agentic-security st
 | `AAK-AGENT-TRUST-004` | medium | agent-config | — | ASI06 Memory & Context Poisoning |
 | `AAK-AGENT-ZERO-CVE-2026-30624-PIN-001` | high | supply-chain | Design for boundaries; Validate parameters; Constrain and sandbox tool execution; Instrument for logging and detection | ASI02 Tool Misuse; ASI10 Rogue Agents |
 | `AAK-ANTHROPIC-SDK-001` | high | supply-chain | Design for boundaries; Validate parameters; Constrain and sandbox tool execution; Instrument for logging and detection | ASI02 Tool Misuse; ASI10 Rogue Agents |
+| `AAK-AST02-001` | high | agentic-skill | Choose supported MCP projects when possible; Sign and verify MCP messages; Track and patch MCP related vulnerabilities; Scan local network for open or vulnerable MCP servers | ASI04 Supply Chain Vulnerabilities |
+| `AAK-AST04-001` | critical | agentic-skill | Design for boundaries; Validate parameters; Constrain and sandbox tool execution; Filter and monitor output pipelines and chained execution | ASI05 Unexpected Code Execution |
+| `AAK-AST10-001` | medium | agentic-skill | Choose supported MCP projects when possible; Sign and verify MCP messages; Track and patch MCP related vulnerabilities; Scan local network for open or vulnerable MCP servers | ASI04 Supply Chain Vulnerabilities |
 | `AAK-ASTROMCP-SQLI-CVE-2026-7591-001` | high | supply-chain | Design for boundaries; Validate parameters; Constrain and sandbox tool execution; Instrument for logging and detection; Track and patch MCP related vulnerabilities | ASI02 Tool Misuse; ASI10 Rogue Agents |
 | `AAK-AZURE-MCP-001` | high | mcp-config | Choose supported MCP projects when possible; Sign and verify MCP messages; Track and patch MCP related vulnerabilities; Scan local network for open or vulnerable MCP servers | ASI04 Supply Chain Vulnerabilities |
 | `AAK-AZURE-MCP-NOAUTH-001` | high | mcp-config | Choose supported MCP projects when possible; Sign and verify MCP messages; Track and patch MCP related vulnerabilities; Scan local network for open or vulnerable MCP servers | ASI04 Supply Chain Vulnerabilities |
