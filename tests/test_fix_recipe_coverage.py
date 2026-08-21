@@ -246,3 +246,59 @@ def test_a_bare_prm_keyword_silences_oauth_008_without_fixing_anything() -> None
         assert "sk-live-abc123" in config.read_text(encoding="utf-8"), (
             "the credential must still be present: that is the whole point"
         )
+
+
+def test_every_rule_carries_remediation_guidance() -> None:
+    """The claim that defuses the fix-recipe percentage, held so it cannot rot.
+
+    Read bare, "11 of 319 rules have a fix recipe" invites the reading that the
+    scanner says what is wrong 319 times and how to fix it 11 times. That reading
+    is false: every rule carries remediation prose, and the 3.4% is about
+    *automated application*, not about guidance.
+
+    The README states "all 319 of 319 rules" next to the recipe count on the
+    strength of this test. If a rule ever ships without remediation text, the
+    README becomes a false claim, so this fails first.
+    """
+    from agent_audit_kit.rules.builtin import RULES
+
+    missing = sorted(
+        rule_id for rule_id, rule in RULES.items() if not (rule.remediation or "").strip()
+    )
+    assert not missing, (
+        f"{len(missing)} rule(s) have no remediation text: {missing[:5]}. The README "
+        "claims every rule carries guidance; either write the remediation or change "
+        "the claim."
+    )
+
+
+def test_remediation_guidance_is_substantive_not_a_placeholder() -> None:
+    """Non-empty is not the same as useful.
+
+    A one-word remediation would satisfy the test above while making the README's
+    claim hollow. This holds a floor that a real sentence clears and a placeholder
+    does not, without pretending the exact number is meaningful.
+    """
+    from agent_audit_kit.rules.builtin import RULES
+
+    thin = sorted(
+        (len(rule.remediation), rule_id)
+        for rule_id, rule in RULES.items()
+        if len(rule.remediation.strip()) < 20
+    )
+    assert not thin, f"remediation text too short to be actionable: {thin[:5]}"
+
+
+def test_readme_states_the_recipe_scope_next_to_the_number() -> None:
+    """The number is a scope decision, and the README has to say which scope.
+
+    Without the sentence the percentage reads as a gap a competitor would quote.
+    With it, it reads as a bar the project chose. This asserts the sentence stays
+    attached to the figure rather than drifting into a section nobody reads.
+    """
+    readme = (REPO_ROOT / "README.md").read_text(encoding="utf-8")
+    block = readme.split("Mechanical fix recipes", 1)[1][:1200]
+    assert "deterministic and one-line" in block, (
+        "the fix-recipe count must state the scope that produces it"
+    )
+    assert "advisory" in block
