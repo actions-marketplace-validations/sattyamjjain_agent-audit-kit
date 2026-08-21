@@ -47,6 +47,8 @@ OUT_OF_SCOPE = {
                       "PyPI/npm manifest the pin detector reads",
     "CVE-2026-72846": "Lightdash backend - container-deployed, publishes no npm "
                       "distribution; the name that is on npm belongs to someone else",
+    "CVE-2026-59279": "Spring AI - Maven Central only; third advisory on that "
+                      "boundary after ArcadeDB and the Splunk app",
 }
 
 # Names a pin must never be keyed on for this batch. `mcp-server-splunk` is a real,
@@ -58,6 +60,9 @@ COLLIDING_NAMES = (
     # versions in lockstep with the monorepo so it *looks* pinnable -- but the CLI
     # is not the component that runs the vulnerable sendWebhook path.
     "lightdash", "@lightdash/cli",
+    # Spring AI is org.springframework.ai on Maven; neither spelling resolves
+    # on PyPI or npm, so a pin on either would key on nothing.
+    "spring-ai", "springai",
 )
 
 
@@ -70,7 +75,10 @@ def _ids(tmp_path: Path, name: str, content: str) -> set[str]:
 def _row_for(cve: str) -> str:
     """The 2026-08-21 ledger row for ``cve``, scoped to this batch's section."""
     text = LEDGER.read_text(encoding="utf-8")
-    section = text.split("## 2026-08-21", 1)[1].split("\n## ", 1)[0]
+    # Anchored on the full heading, not the date: a later same-day section
+    # ("## 2026-08-21 (later): ...") is inserted above this one, and a prefix
+    # split silently started returning that section instead.
+    section = text.split("## 2026-08-21: seven advisories", 1)[1].split("\n## ", 1)[0]
     rows = [ln for ln in section.splitlines() if ln.startswith("|") and cve in ln]
     assert rows, f"{cve} has no row in the 2026-08-21 ledger section"
     return rows[0]
@@ -280,3 +288,22 @@ def test_lightdash_row_names_both_near_misses() -> None:
     assert "Out of scope" in row
     assert "@lightdash/cli" in row
     assert "lodash" in row
+
+
+def test_spring_ai_row_names_the_ecosystem_boundary() -> None:
+    """Third advisory on the Maven boundary, written out rather than cross-referenced.
+
+    ArcadeDB (#614) and the Splunk app (#622) came first. Repeating the reason is
+    deliberate: a reader who lands on this row should not have to find the
+    earlier ones to learn why a CVSS 7.5 is out of scope.
+    """
+    text = LEDGER.read_text(encoding="utf-8")
+    section = text.split("## 2026-08-21 (later)", 1)[1].split("\n## ", 1)[0]
+    row = next(ln for ln in section.splitlines() if "CVE-2026-59279" in ln and ln.startswith("|"))
+    assert "Out of scope" in row
+    assert "Maven" in row
+    assert "_CANDIDATE_NAMES" in row
+    assert "AAK-MCP-001" in row, (
+        "the row must name what does cover the visible half -- an MCP HTTP "
+        "surface with no auth is a finding even though session exhaustion is not"
+    )

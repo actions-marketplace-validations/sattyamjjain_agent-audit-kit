@@ -16,6 +16,12 @@ open.
 > issue. The per-CVE latency figures in the tables are **measurements recorded at
 > the time**, kept as dated facts, not a standing promise.
 
+## 2026-08-21 (later): Spring AI, and the Maven boundary for the third time
+
+| CVE | Reference | AAK rule / disposition | Triaged |
+|---|---|---|---|
+| CVE-2026-59279 (Spring AI 2.0.0, CWE-770, CVSS 3.1 7.5 - the MCP Streamable HTTP server transport, WebFlux and WebMvc variants alike, puts no limit on retained sessions and requires no client authentication by default, so a remote attacker accumulates sessions until memory is exhausted and every legitimate client is denied service) | [Spring advisory](https://spring.io/security/cve-2026-59279) | **Out of scope** - Spring AI is published to Maven Central under `org.springframework.ai` and resolves on neither PyPI nor npm, so its version never appears in a file `_CANDIDATE_NAMES` opens. Third time on this boundary, after ArcadeDB CVE-2026-75845 (#614) and Splunk CVE-2026-76404 (#622); recorded again rather than pointed at, because a reader hitting this row should not have to find the earlier ones to learn why. The unauthenticated-by-default half of the precondition is the posture `AAK-MCP-001` reports, and that is the part of this a config scan can actually see: an MCP HTTP surface with no auth is the finding, and unbounded session retention is the server-side consequence. Upgrade per the Spring advisory. Revisit if the pin detector ever reads JVM manifests - the same condition recorded for ArcadeDB. (#628) | 2026-08-21 |
+
 ## 2026-08-21: seven advisories, and the deciding question is never severity
 
 Seven `cve-response` issues cleared in one pass (#621 through #627): the two the day

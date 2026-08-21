@@ -48,7 +48,8 @@ SEARCH_QUERIES = [
     "mcpServers filename:mcp_settings.json",
 ]
 PER_PAGE = 100  # max allowed by GitHub
-RATE_LIMIT_PAUSE_S = 10  # seconds to wait when rate-limited
+RATE_LIMIT_PAUSE_S = 10  # base back-off when rate-limited
+MAX_RATE_LIMIT_WAIT_S = 90  # never stall a scheduled job longer than this
 DATA_DIR = Path(__file__).resolve().parent / "data"
 
 
@@ -120,23 +121,50 @@ class RateLimited(RuntimeError):
     """
 
 
+def _retry_after_seconds(exc: urllib.error.HTTPError, attempt: int) -> int:
+    """How long to wait, preferring what GitHub actually told us.
+
+    ``Retry-After`` when present, else the gap to ``X-RateLimit-Reset``, else an
+    exponential back-off. Capped so a crawl cannot hang a scheduled job.
+    """
+    header = exc.headers.get("Retry-After")
+    if header:
+        try:
+            return min(int(header), MAX_RATE_LIMIT_WAIT_S)
+        except ValueError:
+            pass
+    reset = exc.headers.get("X-RateLimit-Reset")
+    if reset:
+        try:
+            delta = int(reset) - int(time.time())
+            if delta > 0:
+                return min(delta, MAX_RATE_LIMIT_WAIT_S)
+        except ValueError:
+            pass
+    return min(RATE_LIMIT_PAUSE_S * (2 ** attempt), MAX_RATE_LIMIT_WAIT_S)
+
+
 def _api_get(url: str) -> dict[str, Any]:
     """Perform a GET request against the GitHub API with retry on rate-limit."""
     headers = _github_headers()
     req = urllib.request.Request(url, headers=headers)
 
-    for attempt in range(3):
+    attempts = 5
+    for attempt in range(attempts):
         try:
             with urllib.request.urlopen(req, timeout=30) as resp:
                 return json.loads(resp.read().decode("utf-8"))
         except urllib.error.HTTPError as exc:
-            if exc.code == 403:
-                # Rate limited -- back off and retry
-                retry_after = int(exc.headers.get("Retry-After", RATE_LIMIT_PAUSE_S))
+            # 429 is what the Search API actually returns for a secondary rate
+            # limit, and it used to fall straight through to `raise` because only
+            # 403 was handled. That is why every scheduled snapshot since
+            # 2026-06-15 died with an unhandled HTTPError instead of degrading:
+            # the retry path existed but the status code never reached it.
+            if exc.code in (403, 429):
+                retry_after = _retry_after_seconds(exc, attempt)
                 logger.warning(
-                    "Rate limited (attempt %d/3). Waiting %ds...",
-                    attempt + 1,
-                    retry_after,
+                    "Rate limited: HTTP %d (attempt %d/%d). Waiting %ds...",
+                    exc.code, attempt + 1, attempts, retry_after,
                 )
                 time.sleep(retry_after)
                 continue
