@@ -17,6 +17,7 @@ on:
 
 permissions:
   contents: write
+  issues: write
 
 jobs:
   snapshot:
@@ -37,13 +38,24 @@ jobs:
           pip install mkdocs mkdocs-material
 
       # ---- MCP Security Index (only on schedule / manual dispatch) ----
+      # --limit was 500. Every scheduled run from 2026-06-15 failed except one
+      # (2026-07-20), which is exactly why data/history.json held a single
+      # snapshot while the site rendered "not enough snapshots yet for a trend
+      # chart". The cause is the crawl asking for more than the throttled
+      # `secrets.GITHUB_TOKEN` search budget allows, and a rate-limit wall used
+      # to be fatal, so a week's data point was lost rather than shortened.
+      #
+      # 150 is sized to finish inside the budget. The crawler now also keeps a
+      # partial crawl and records `partial: true` with the reason, so an overrun
+      # produces a shorter snapshot rather than a gap -- and nothing downstream
+      # can mistake it for a full one.
       - name: Crawl public MCP servers
         if: github.event_name != 'push'
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           mkdir -p benchmarks/data
-          python benchmarks/crawler.py --limit 500 --output benchmarks/results.json
+          python benchmarks/crawler.py --limit 150 --output benchmarks/results.json
 
       - name: Build MCP Security Index site
         if: github.event_name != 'push'
@@ -85,3 +97,46 @@ jobs:
           git commit -q -m "snapshot: $(date -u +%Y-%m-%dT%H:%M:%SZ)"
           git remote add origin "https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/${{ github.repository }}.git"
           git push --force origin gh-pages
+
+      # ------------------------------------------------------------------
+      # A scheduled workflow that fails silently is worse than one that does
+      # not exist: the README keeps making the claim while nothing runs. This
+      # workflow failed every Monday from 2026-06-15 bar one and nobody was
+      # told. Files (or reuses) one issue so the next failure is visible.
+      # ------------------------------------------------------------------
+      - name: Report scheduled failure
+        if: failure() && github.event_name == 'schedule'
+        uses: actions/github-script@v9
+        with:
+          script: |
+            const label = 'scheduled-failure';
+            const title = `Scheduled workflow failing: ${context.workflow}`;
+            const url = `${context.serverUrl}/${context.repo.owner}/${context.repo.repo}/actions/runs/${context.runId}`;
+            const body = [
+              `\`${context.workflow}\` failed on its schedule.`,
+              ``,
+              `- Run: ${url}`,
+              `- Commit: ${context.sha}`,
+              ``,
+              `This issue is reused for repeat failures -- check the run log above for`,
+              `the current cause. Close it once a scheduled run goes green.`,
+            ].join('\n');
+            const existing = await github.rest.issues.listForRepo({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              state: 'open',
+              labels: label,
+            });
+            const match = existing.data.find(i => i.title === title);
+            if (match) {
+              await github.rest.issues.createComment({
+                owner: context.repo.owner, repo: context.repo.repo,
+                issue_number: match.number,
+                body: `Failed again: ${url}`,
+              });
+            } else {
+              await github.rest.issues.create({
+                owner: context.repo.owner, repo: context.repo.repo,
+                title, body, labels: [label],
+              });
+            }

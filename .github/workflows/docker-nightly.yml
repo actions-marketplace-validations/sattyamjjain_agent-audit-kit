@@ -13,6 +13,13 @@ permissions:
   packages: write
   id-token: write
   attestations: write
+  # Required by github/codeql-action/upload-sarif. Its absence is why this
+  # workflow went red for six consecutive nights (2026-08-16 .. 08-21) while the
+  # image itself built and pushed fine every time -- only the Security-tab upload
+  # failed. An explicit permissions block replaces the defaults rather than
+  # extending them, so omitting this scope silently removed it.
+  security-events: write
+  issues: write
 
 jobs:
   rebuild:
@@ -72,3 +79,46 @@ jobs:
         with:
           sarif_file: trivy-nightly.sarif
           category: trivy-nightly
+
+      # ------------------------------------------------------------------
+      # A scheduled workflow that fails silently is worse than one that does
+      # not exist: the README keeps making the claim while nothing runs. This
+      # files (or reuses) one issue so the next failure is visible without
+      # anyone thinking to open the Actions tab.
+      # ------------------------------------------------------------------
+      - name: Report scheduled failure
+        if: failure() && github.event_name == 'schedule'
+        uses: actions/github-script@v9
+        with:
+          script: |
+            const label = 'scheduled-failure';
+            const title = `Scheduled workflow failing: ${context.workflow}`;
+            const url = `${context.serverUrl}/${context.repo.owner}/${context.repo.repo}/actions/runs/${context.runId}`;
+            const body = [
+              `\`${context.workflow}\` failed on its schedule.`,
+              ``,
+              `- Run: ${url}`,
+              `- Commit: ${context.sha}`,
+              ``,
+              `This issue is reused for repeat failures -- check the run log above for`,
+              `the current cause. Close it once a scheduled run goes green.`,
+            ].join('\n');
+            const existing = await github.rest.issues.listForRepo({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              state: 'open',
+              labels: label,
+            });
+            const match = existing.data.find(i => i.title === title);
+            if (match) {
+              await github.rest.issues.createComment({
+                owner: context.repo.owner, repo: context.repo.repo,
+                issue_number: match.number,
+                body: `Failed again: ${url}`,
+              });
+            } else {
+              await github.rest.issues.create({
+                owner: context.repo.owner, repo: context.repo.repo,
+                title, body, labels: [label],
+              });
+            }

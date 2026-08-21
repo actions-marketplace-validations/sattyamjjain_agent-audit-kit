@@ -109,6 +109,17 @@ def _github_headers() -> dict[str, str]:
     return headers
 
 
+class RateLimited(RuntimeError):
+    """The GitHub API rate limit did not clear within the retry budget.
+
+    Distinct from a bug so the caller can keep a partial crawl instead of losing
+    the week. This workflow snapshots a time series: 200 configs is a data point,
+    a crash is a gap, and the gap is what happened -- every scheduled run from
+    2026-06-15 failed except one, so history.json held a single snapshot while
+    the site said "not enough snapshots yet for a trend chart".
+    """
+
+
 def _api_get(url: str) -> dict[str, Any]:
     """Perform a GET request against the GitHub API with retry on rate-limit."""
     headers = _github_headers()
@@ -130,7 +141,7 @@ def _api_get(url: str) -> dict[str, Any]:
                 time.sleep(retry_after)
                 continue
             raise
-    raise RuntimeError(f"GitHub API request failed after 3 attempts: {url}")
+    raise RateLimited(f"GitHub API rate limit not cleared after 3 attempts: {url}")
 
 
 # ---------------------------------------------------------------------------
@@ -415,7 +426,13 @@ def run_benchmark(limit: int, output_path: Path) -> BenchmarkResults:
         The aggregated BenchmarkResults.
     """
     logger.info("Searching GitHub for public .mcp.json files (limit=%d)...", limit)
-    items = search_mcp_configs(limit=limit)
+    partial_reason: str | None = None
+    try:
+        items = search_mcp_configs(limit=limit)
+    except RateLimited as exc:
+        logger.warning("Rate limited during search: %s", exc)
+        items = []
+        partial_reason = f"rate limit reached during search: {exc}"
     logger.info("Found %d results from GitHub Search API.", len(items))
 
     config_results: list[ConfigResult] = []
@@ -425,12 +442,28 @@ def run_benchmark(limit: int, output_path: Path) -> BenchmarkResults:
         file_path = item.get("path", "unknown")
         logger.info("[%d/%d] Processing %s/%s", idx, len(items), repo, file_path)
 
-        local_path = download_config(item, idx)
+        try:
+            local_path = download_config(item, idx)
+        except RateLimited as exc:
+            logger.warning(
+                "Rate limit reached while downloading %d/%d: %s. Keeping the "
+                "partial crawl.", idx, len(items), exc,
+            )
+            partial_reason = f"rate limit reached after {idx - 1}/{len(items)} configs"
+            break
         if local_path is None:
             logger.warning("  Skipped (download failed)")
             continue
 
-        result = analyze_config(local_path, repo, file_path)
+        try:
+            result = analyze_config(local_path, repo, file_path)
+        except RateLimited as exc:
+            logger.warning(
+                "Rate limit reached after %d/%d configs: %s. Keeping the partial "
+                "crawl rather than losing the snapshot.", idx - 1, len(items), exc,
+            )
+            partial_reason = f"rate limit reached after {idx - 1}/{len(items)} configs"
+            break
         config_results.append(result)
         logger.info(
             "  Findings: %d | Secrets: %s | EnableAll: %s",
@@ -446,12 +479,23 @@ def run_benchmark(limit: int, output_path: Path) -> BenchmarkResults:
     benchmark = aggregate_results(config_results)
 
     # Write output
+    payload = asdict(benchmark)
+    payload["partial"] = partial_reason is not None
+    payload["partial_reason"] = partial_reason
+    payload["requested_limit"] = limit
     output_path.parent.mkdir(parents=True, exist_ok=True)
     output_path.write_text(
-        json.dumps(asdict(benchmark), indent=2, default=str),
+        json.dumps(payload, indent=2, default=str),
         encoding="utf-8",
     )
-    logger.info("Results written to %s", output_path)
+    if partial_reason:
+        logger.warning(
+            "PARTIAL snapshot (%s). Written to %s -- a short snapshot beats a gap, "
+            "but it is recorded as partial so nothing downstream reads it as a full "
+            "crawl.", partial_reason, output_path,
+        )
+    else:
+        logger.info("Results written to %s", output_path)
 
     # Print summary to stdout
     _print_summary(benchmark)
