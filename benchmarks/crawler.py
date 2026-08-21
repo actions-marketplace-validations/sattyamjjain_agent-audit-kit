@@ -50,6 +50,12 @@ SEARCH_QUERIES = [
 PER_PAGE = 100  # max allowed by GitHub
 RATE_LIMIT_PAUSE_S = 10  # base back-off when rate-limited
 MAX_RATE_LIMIT_WAIT_S = 90  # never stall a scheduled job longer than this
+# Total wall-clock budget for a crawl. Surviving rate limits is unbounded in
+# time without this: the back-off ladder is 240s per API call, which over 150
+# configs is ~10 hours against GitHub's 6-hour job timeout -- and a timeout kill
+# produces no snapshot at all, which is the original failure with extra steps.
+# The budget guarantees an artifact instead of a gap.
+DEFAULT_MAX_SECONDS = 1800
 DATA_DIR = Path(__file__).resolve().parent / "data"
 
 
@@ -108,6 +114,16 @@ def _github_headers() -> dict[str, str]:
     if token:
         headers["Authorization"] = f"Bearer {token}"
     return headers
+
+
+class EmptyCrawl(RuntimeError):
+    """The crawl finished with zero configs.
+
+    Distinct from a partial crawl, which is a smaller but real data point. Zero
+    is not a data point, so this is the one case that should still fail the
+    workflow: better a visible failure and a notification than a zero silently
+    entering the trend chart.
+    """
 
 
 class RateLimited(RuntimeError):
@@ -438,7 +454,9 @@ def aggregate_results(config_results: list[ConfigResult]) -> BenchmarkResults:
 # ---------------------------------------------------------------------------
 
 
-def run_benchmark(limit: int, output_path: Path) -> BenchmarkResults:
+def run_benchmark(
+    limit: int, output_path: Path, max_seconds: int = DEFAULT_MAX_SECONDS
+) -> BenchmarkResults:
     """Execute the full benchmark pipeline.
 
     1. Search GitHub for public .mcp.json files.
@@ -454,6 +472,7 @@ def run_benchmark(limit: int, output_path: Path) -> BenchmarkResults:
         The aggregated BenchmarkResults.
     """
     logger.info("Searching GitHub for public .mcp.json files (limit=%d)...", limit)
+    deadline = time.monotonic() + max_seconds if max_seconds else None
     partial_reason: str | None = None
     try:
         items = search_mcp_configs(limit=limit)
@@ -470,6 +489,16 @@ def run_benchmark(limit: int, output_path: Path) -> BenchmarkResults:
         file_path = item.get("path", "unknown")
         logger.info("[%d/%d] Processing %s/%s", idx, len(items), repo, file_path)
 
+        if deadline is not None and time.monotonic() > deadline:
+            logger.warning(
+                "Wall-clock budget of %ds spent after %d/%d configs. Emitting the "
+                "partial crawl rather than being killed by the job timeout with "
+                "nothing to show.", max_seconds, idx - 1, len(items),
+            )
+            partial_reason = (
+                f"wall-clock budget of {max_seconds}s spent after {idx - 1}/{len(items)} configs"
+            )
+            break
         try:
             local_path = download_config(item, idx)
         except RateLimited as exc:
@@ -511,11 +540,24 @@ def run_benchmark(limit: int, output_path: Path) -> BenchmarkResults:
     payload["partial"] = partial_reason is not None
     payload["partial_reason"] = partial_reason
     payload["requested_limit"] = limit
+    payload["max_seconds"] = max_seconds
     output_path.parent.mkdir(parents=True, exist_ok=True)
     output_path.write_text(
         json.dumps(payload, indent=2, default=str),
         encoding="utf-8",
     )
+    # A snapshot with nothing in it is not a data point. Publishing it would put a
+    # zero into the trend chart and read as "we scanned and found nothing" rather
+    # than "the crawl never got started". The file is still written for debugging;
+    # the non-zero exit is what stops the workflow publishing it and fires the
+    # scheduled-failure notification.
+    if not config_results:
+        _print_summary(benchmark)
+        raise EmptyCrawl(
+            f"crawl produced 0 configs ({partial_reason or 'no results from search'}); "
+            "refusing to publish an empty snapshot"
+        )
+
     if partial_reason:
         logger.warning(
             "PARTIAL snapshot (%s). Written to %s -- a short snapshot beats a gap, "
@@ -567,6 +609,16 @@ def main() -> None:
         help="Maximum number of configs to download and scan (default: 100).",
     )
     parser.add_argument(
+        "--max-seconds",
+        type=int,
+        default=DEFAULT_MAX_SECONDS,
+        help=(
+            "Wall-clock budget. On expiry the crawl stops and writes what it has, "
+            "marked partial, instead of running until the CI job timeout kills it "
+            f"with nothing (default: {DEFAULT_MAX_SECONDS})."
+        ),
+    )
+    parser.add_argument(
         "--output",
         type=str,
         default=str(Path(__file__).resolve().parent / "results.json"),
@@ -603,7 +655,11 @@ def main() -> None:
         run_server_card_prevalence(limit=args.limit)
         return
 
-    run_benchmark(limit=args.limit, output_path=Path(args.output))
+    run_benchmark(
+        limit=args.limit,
+        output_path=Path(args.output),
+        max_seconds=args.max_seconds,
+    )
 
 
 def run_server_card_prevalence(limit: int = 200) -> dict[str, Any]:

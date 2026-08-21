@@ -26,6 +26,7 @@ import argparse
 import datetime as dt
 import html
 import json
+import logging
 import shutil
 from collections import Counter
 from dataclasses import asdict, dataclass, field
@@ -94,6 +95,9 @@ Index code: <a href="https://github.com/sattyamjjain/agent-audit-kit/tree/main/b
 </p>
 </body></html>
 """
+
+
+logger = logging.getLogger(__name__)
 
 
 def _render_trend_svg(history: list[dict]) -> str:
@@ -393,7 +397,9 @@ def _rule_hit_section(card: ServerCard, now: dt.datetime) -> str:
     return _TEMPLATE_RULE_HIT_SECTION_PUBLIC.format(rule_rows=rows)
 
 
-def write_site(cards: list[ServerCard], site_dir: Path) -> None:
+def write_site(
+    cards: list[ServerCard], site_dir: Path, history_seed: Path | None = None
+) -> None:
     (site_dir / "data").mkdir(parents=True, exist_ok=True)
     (site_dir / "server").mkdir(parents=True, exist_ok=True)
     now = dt.datetime.now(dt.timezone.utc)
@@ -410,6 +416,20 @@ def write_site(cards: list[ServerCard], site_dir: Path) -> None:
 
     history_path = site_dir / "data" / "history.json"
     history: list[dict] = []
+    # `--clean` rmtree's site_dir before we get here, so the prior history never
+    # survives into this read: every run started from empty, appended one entry,
+    # and published a one-entry file. That is why the site said "not enough
+    # snapshots yet for a trend chart (need >= 2)" even after a successful run --
+    # the condition was unsatisfiable by construction, independently of the
+    # scheduled failures. `--history` seeds from the previously published copy.
+    if not history_path.is_file() and history_seed is not None and history_seed.is_file():
+        try:
+            seeded = json.loads(history_seed.read_text(encoding="utf-8"))
+            if isinstance(seeded, list):
+                history = seeded
+                logger.info("Seeded %d prior snapshot(s) from %s", len(history), history_seed)
+        except (OSError, json.JSONDecodeError):
+            logger.warning("Could not read history seed %s; starting fresh", history_seed)
     if history_path.is_file():
         try:
             loaded = json.loads(history_path.read_text(encoding="utf-8"))
@@ -494,6 +514,15 @@ def main() -> int:
         action="store_true",
         help="Remove site_dir before building.",
     )
+    parser.add_argument(
+        "--history",
+        default=None,
+        help=(
+            "Previously published history.json to seed from. Required with --clean "
+            "if the trend chart is ever to have more than one point: --clean removes "
+            "site_dir, so without a seed each run starts from an empty history."
+        ),
+    )
     args = parser.parse_args()
     input_path = Path(args.input)
     site_dir = Path(args.site_dir)
@@ -505,7 +534,11 @@ def main() -> int:
         raise SystemExit(f"input not found: {input_path}")
 
     cards = cards_from_results(input_path)
-    write_site(cards, site_dir)
+    write_site(
+        cards,
+        site_dir,
+        history_seed=Path(args.history) if args.history else None,
+    )
     print(f"wrote {len(cards)} cards to {site_dir}/")
     return 0
 

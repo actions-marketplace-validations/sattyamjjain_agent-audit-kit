@@ -22,6 +22,10 @@ permissions:
 jobs:
   snapshot:
     runs-on: ubuntu-latest
+    # Backstop under the crawl's own 1500s budget plus build/publish. Without
+    # it a rate-limited crawl could grind against the 6-hour default and be
+    # killed with no artifact -- the original failure, slower.
+    timeout-minutes: 45
     steps:
       - uses: actions/checkout@v7.0.1
         with:
@@ -55,18 +59,18 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           mkdir -p benchmarks/data
-          python benchmarks/crawler.py --limit 150 --output benchmarks/results.json
+          python benchmarks/crawler.py --limit 150 --max-seconds 1500 \
+            --output benchmarks/results.json
 
-      - name: Build MCP Security Index site
-        if: github.event_name != 'push'
-        run: python benchmarks/index_builder.py --input benchmarks/results.json --site-dir benchmarks/site --clean
-
-      # ---- MkDocs ----
-      - name: Build MkDocs
-        run: mkdocs build -d docs_build
-
-      # ---- Assemble gh-pages payload: index/ at root, docs at /docs/ ----
-      - name: Fetch prior gh-pages state (so we preserve the index on docs-only pushes)
+      # Moved ABOVE the index build. It used to run after it, which meant
+      # index_builder never saw the previously published history: --clean removes
+      # site_dir, the history read found nothing, and every run appended one entry
+      # to an empty list. Every published history.json in this project's life has
+      # held exactly one snapshot (2026-04-18, then 2026-04-18, then 2026-08-21),
+      # which is why the site said "not enough snapshots yet for a trend chart
+      # (need >= 2)" even after a run succeeded. gh-pages is force-pushed as an
+      # orphan each time, so nothing else preserved it either.
+      - name: Fetch prior gh-pages state (index preservation + history seed)
         run: |
           git fetch origin gh-pages:gh-pages-remote || echo "no existing gh-pages branch"
           mkdir -p pages_staging
@@ -74,6 +78,20 @@ jobs:
             git --work-tree=pages_staging checkout gh-pages-remote -- . || true
           fi
 
+      - name: Build MCP Security Index site
+        if: github.event_name != 'push'
+        run: |
+          python benchmarks/index_builder.py \
+            --input benchmarks/results.json \
+            --site-dir benchmarks/site \
+            --clean \
+            --history pages_staging/data/history.json
+
+      # ---- MkDocs ----
+      - name: Build MkDocs
+        run: mkdocs build -d docs_build
+
+      # ---- Assemble gh-pages payload: index/ at root, docs at /docs/ ----
       - name: Stage payload
         run: |
           # docs always rebuilt from latest main
