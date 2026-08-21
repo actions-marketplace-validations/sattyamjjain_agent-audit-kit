@@ -54,6 +54,52 @@ def _newest_git_tag() -> str | None:
     return versions[-1][1]
 
 
+def _semver(tag: str) -> tuple[int, int, int]:
+    """``v1.2.3`` / ``1.2.3`` -> ``(1, 2, 3)``. Returns ``(-1, -1, -1)`` when
+    unparseable, so an odd string sorts below every real version."""
+    m = re.fullmatch(r"v?(\d+)\.(\d+)\.(\d+)", tag.strip())
+    if not m:
+        return (-1, -1, -1)
+    return (int(m.group(1)), int(m.group(2)), int(m.group(3)))
+
+
+def _head_is_tagged() -> bool:
+    """True when a ``vX.Y.Z`` tag points at HEAD itself.
+
+    Distinct from "a tag is reachable from HEAD": every commit after a release
+    has the release tag as an ancestor, but only the release commit carries it.
+    That distinction is what separates "the tag was cut" from "the tag has not
+    been cut yet", which is the whole question here.
+    """
+    try:
+        out = subprocess.run(
+            ["git", "-C", str(REPO_ROOT), "tag", "--points-at", "HEAD"],
+            capture_output=True,
+            text=True,
+            timeout=10,
+        )
+    except (OSError, subprocess.SubprocessError):
+        return False
+    if out.returncode != 0:
+        return False
+    return any(_semver(line) != (-1, -1, -1) for line in out.stdout.split())
+
+
+def _changelog_top_version() -> str | None:
+    """The newest ``## [X.Y.Z] - DATE`` heading in CHANGELOG.md.
+
+    ``[Unreleased]`` is skipped: it carries no version, so it cannot be compared
+    against a tag.
+    """
+    path = REPO_ROOT / "CHANGELOG.md"
+    try:
+        text = path.read_text(encoding="utf-8")
+    except OSError:
+        return None
+    m = re.search(r"^##\s*\[(\d+\.\d+\.\d+)\]\s*-\s*\d{4}-\d{2}-\d{2}", text, re.M)
+    return m.group(1) if m else None
+
+
 def _pyproject_version() -> str:
     text = (REPO_ROOT / "pyproject.toml").read_text(encoding="utf-8")
     m = re.search(r'^version\s*=\s*"([^"]+)"', text, re.MULTILINE)
@@ -115,11 +161,46 @@ def test_readme_action_pin_matches_newest_git_tag() -> None:
 
     Skips when no ``vX.Y.Z`` tag is reachable (a shallow CI checkout without
     ``fetch-tags``); CI fetches tags (``.github/workflows/ci.yml``) so this
-    enforces there. A red result here during a release means: cut the tag.
+    enforces there.
+
+    Also skips, with an explicit reason, on a release commit whose tag has not
+    been cut yet -- HEAD carries no tag *and* the CHANGELOG's newest dated entry
+    is ahead of the newest tag. That window is real and unavoidable, and this
+    test going red in it is what kept main's CI badge red across four releases
+    while release.yml published regardless. The assertion is not weakened for the
+    case it was written for: a cut tag that disagrees with the README still fails
+    hard, and release.yml runs this suite on the tagged commit, where the skip
+    cannot apply.
     """
     newest = _newest_git_tag()
     if newest is None:
         pytest.skip("no vX.Y.Z git tag reachable in this checkout")
+
+    # A release commit is legitimately in this state for the minutes between
+    # "version bumped, README repinned, pushed" and "tag cut". CI runs on the
+    # push, so it saw that window and went red on every release: four failed
+    # main runs, and the release workflow published anyway because it depended
+    # on nothing that tested. Skipping that window is only safe because it is
+    # narrow and because the tag itself is tested: release.yml now runs this
+    # suite on the tagged commit, where HEAD *is* tagged and the assertion below
+    # runs at full strength.
+    #
+    # Both conditions are required. HEAD carrying no tag alone is the normal
+    # state of every ordinary commit; the changelog being ahead of the newest tag
+    # alone would let a permanently-untagged bump hide here forever.
+    changelog_top = _changelog_top_version()
+    if (
+        not _head_is_tagged()
+        and changelog_top is not None
+        and _semver(changelog_top) > _semver(newest)
+    ):
+        pytest.skip(
+            f"release in flight: CHANGELOG's newest dated entry is {changelog_top} "
+            f"but the newest tag is {newest}, and HEAD carries no tag. The pin is "
+            f"checked at full strength when the tag is cut -- release.yml runs this "
+            f"suite on the tagged commit. If you are NOT mid-release, this skip is "
+            f"hiding a real drift: cut the tag, or repin the README to {newest}."
+        )
 
     readme = (REPO_ROOT / "README.md").read_text(encoding="utf-8")
     pins = re.findall(r"sattyamjjain/agent-audit-kit@v\d+\.\d+\.\d+", readme)
@@ -132,3 +213,101 @@ def test_readme_action_pin_matches_newest_git_tag() -> None:
         f"`python scripts/sync_repo_metadata.py --write` and re-tag. A pin to an "
         f"untagged version does not resolve for users."
     )
+
+
+# ---------------------------------------------------------------------------
+# Guard the guard: the release-window skip must fire exactly when intended.
+#
+# A skip is a hole. These hold that the hole is the shape it is meant to be --
+# open only while a release is genuinely in flight, closed everywhere else --
+# because a skip that silently widened would look identical to a green run.
+# ---------------------------------------------------------------------------
+
+import sys as _sys  # noqa: E402  (test-only, kept next to the tests that use it)
+
+_MODULE = _sys.modules[__name__]
+
+
+def _with_state(
+    monkeypatch: pytest.MonkeyPatch, newest: str, head_tagged: bool, changelog: str
+) -> None:
+    """Pin the three inputs the skip decision reads."""
+    monkeypatch.setattr(_MODULE, "_newest_git_tag", lambda: newest)
+    monkeypatch.setattr(_MODULE, "_head_is_tagged", lambda: head_tagged)
+    monkeypatch.setattr(_MODULE, "_changelog_top_version", lambda: changelog)
+
+
+def test_skip_fires_on_an_untagged_release_commit(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The exact state that made four main runs red.
+
+    Version bumped and README repinned to 0.3.99, tag not cut yet. CI runs on
+    that push, so it must not go red for a condition the next minute resolves.
+    """
+    _with_state(monkeypatch, newest="v0.3.98", head_tagged=False, changelog="0.3.99")
+
+    # skip raises an OutcomeException, which derives from BaseException and so is
+    # NOT caught by `pytest.raises(Exception)`.
+    with pytest.raises(pytest.skip.Exception) as excinfo:
+        test_readme_action_pin_matches_newest_git_tag()
+    message = str(excinfo.value)
+    assert "release in flight" in message
+    assert "0.3.99" in message and "v0.3.98" in message
+    assert "hiding a real drift" in message, (
+        "the skip reason must tell a reader who is NOT mid-release what it means"
+    )
+
+
+def test_no_skip_once_the_tag_is_cut(monkeypatch: pytest.MonkeyPatch) -> None:
+    """HEAD tagged means the release landed, so the assertion runs at full strength.
+
+    This is the half that must never be weakened: a cut tag disagreeing with the
+    README is the original defect (``@v0.3.61`` pinned against a ``v0.3.60``
+    tag), and it still fails hard.
+    """
+    _with_state(monkeypatch, newest="v0.3.60", head_tagged=True, changelog="0.3.61")
+
+    with pytest.raises(AssertionError) as excinfo:
+        test_readme_action_pin_matches_newest_git_tag()
+    assert "do not match the newest git tag" in str(excinfo.value)
+
+
+def test_no_skip_when_the_changelog_is_not_ahead(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A permanently-untagged bump must not be able to hide here.
+
+    HEAD carrying no tag is the normal state of every ordinary commit, so that
+    condition alone cannot open the skip. With the changelog level to the newest
+    tag the assertion runs, and fails, because the README is pinned ahead.
+    """
+    _with_state(monkeypatch, newest="v0.3.60", head_tagged=False, changelog="0.3.60")
+
+    with pytest.raises(AssertionError) as excinfo:
+        test_readme_action_pin_matches_newest_git_tag()
+    assert "do not match the newest git tag" in str(excinfo.value)
+
+
+def test_head_is_tagged_distinguishes_carrying_from_reachable() -> None:
+    """The distinction the skip turns on, asserted against real git.
+
+    Every commit after a release has that tag as an ancestor; only the release
+    commit carries it. If ``_head_is_tagged`` collapsed into "reachable", the
+    skip would open on every ordinary commit.
+    """
+    out = subprocess.run(
+        ["git", "-C", str(REPO_ROOT), "tag", "--points-at", "HEAD"],
+        capture_output=True, text=True, timeout=10,
+    )
+    carried = [t for t in out.stdout.split() if _semver(t) != (-1, -1, -1)]
+    assert _head_is_tagged() == bool(carried)
+    assert _newest_git_tag() is not None, "repo has releases; a tag is reachable"
+
+
+def test_changelog_top_version_reads_the_newest_dated_heading() -> None:
+    """The skip compares against this, so a misread would open the hole wrongly."""
+    top = _changelog_top_version()
+    assert top is not None, "CHANGELOG.md has no dated version heading"
+    assert re.fullmatch(r"\d+\.\d+\.\d+", top)
+    assert _semver(top) >= _semver(_pyproject_version()) or top == _pyproject_version()
