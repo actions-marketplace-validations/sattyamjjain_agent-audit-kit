@@ -136,6 +136,18 @@ _CODEWHALE_RE = re.compile(r"(?<![\w./-])codewhale(?![\w-])" + _VER_OPT, re.IGNO
 _DEEPSEEK_TUI_RE = re.compile(
     r"(?<![\w./-])deepseek-tui(?![\w-])" + _VER_OPT, re.IGNORECASE
 )
+# `marimo` (the PyPI reactive-notebook server). Bounded because npm carries an
+# unrelated `marimo` -- a test runner (lawrips/marimo) whose line runs 0.0.1 to
+# 1.6.1 with no 0.23.x at all, which is what shows the two are different projects.
+# Its current release sits above this floor, so a normal install stays quiet; a
+# project pinning an *old* npm marimo would be a false positive, and that is the
+# accepted cost of covering three real pip CVEs on the same name.
+_MARIMO_RE = re.compile(r"(?<![\w./-])marimo(?![\w-])" + _VER_OPT, re.IGNORECASE)
+# `neo.mjs` (npm). The dot is inside the name, so the right boundary must not treat
+# it as a separator; the lookbehind keeps it off scoped forks.
+_NEOMJS_RE = re.compile(r"(?<![\w./-])neo\.mjs(?![\w.-])" + _VER_OPT, re.IGNORECASE)
+# `langbot` (PyPI). Bounded so it stays off `langbot-plugin`-style siblings.
+_LANGBOT_RE = re.compile(r"(?<![\w./-])langbot(?![\w-])" + _VER_OPT, re.IGNORECASE)
 # `cline` needs the same treatment, and for a blunter reason: unbounded, `_mk_re`
 # matches the substring in ordinary English. "declined", "inclined", "recline" and
 # "declines" all fired, so any prose file that happened to contain one reported a
@@ -358,8 +370,15 @@ _PINS: tuple[_Pin, ...] = (
     # two-branch OAuth fix. NVD says "before 2.32.1", so all prior versions are affected
     # (floor 2.32.1, no `introduced`). Uses `_N8N_RE` so it never trips the distinct
     # `n8n-mcp` package.
-    _Pin("AAK-MCP-N8N-CVE-2026-72768-001", "n8n", ("n8n",), (2, 32, 1),
-         fix_label="2.32.1", regexes=(_N8N_RE,)),
+    # Floor moved 2.32.1 -> 2.34.1 for CVE-2026-77068 (node-schema loader path
+    # traversal -> RCE) and CVE-2026-77073 (cross-project credential reference).
+    # This is already the highest of AAK's three n8n floors, so raising it here
+    # keeps one authoritative floor instead of adding a fifth pin to a package that
+    # would then report the same dependency five times. CVE-2026-77068 names two
+    # lines ("before 2.33.4 and 2.34.x before 2.34.1"); a single 2.34.1 floor covers
+    # both, and CVE-2026-77073 is "before 2.34.1" outright.
+    _Pin("AAK-MCP-N8N-CVE-2026-72768-001", "n8n", ("n8n",), (2, 34, 1),
+         fix_label="2.34.1", regexes=(_N8N_RE,)),
     # claude-code-templates (npm) < 1.29.4: the `--studio` option launches the Claude Code
     # Studio server (`cli-tool/src/sandbox-server.js`) bound to 0.0.0.0:3444 with CORS open
     # and no authentication. `POST /api/execute` (the `prompt` body field) and
@@ -477,6 +496,45 @@ _PINS: tuple[_Pin, ...] = (
     _Pin("AAK-MCP-CODEWHALE-CVE-2026-75858-001", "deepseek-tui", ("deepseek-tui",),
          (0, 8, 41), fix_label="0.8.41 (deprecated — migrate to codewhale >= 0.8.64)",
          regexes=(_DEEPSEEK_TUI_RE,)),
+    # --- 2026-08-19 wave ---
+    #
+    # marimo: a notebook's own MCP server entry carries an attacker-controlled
+    # `command` that marimo launches as a subprocess when the notebook is opened in
+    # edit mode -- before any cell runs and with no authentication. This is AAK's own
+    # stdio-launcher shape arriving through a notebook file rather than an MCP config.
+    #
+    # No `introduced` bound, deliberately. NVD says "before 0.23.15" with no lower
+    # bound, and the advisory database independently carries two other pip-ecosystem
+    # marimo CVEs at `< 0.23.0` (GHSA-2679-6mx9-h9xc, pre-auth RCE) and `< 0.23.9`
+    # (GHSA-8m59-7xv8-735h, reflected XSS), so "any marimo below 0.23.15 is exposed"
+    # is a true statement about the package rather than an over-reach on this one CVE.
+    _Pin("AAK-MCP-MARIMO-CVE-2026-75149-001", "marimo", ("marimo",),
+         (0, 23, 15), fix_label="0.23.15", regexes=(_MARIMO_RE,)),
+    # --- 2026-08-20 wave ---
+    #
+    # neo.mjs: command injection in the file-system MCP server (checkSyntax /
+    # runPlaywrightTest interpolate a caller-controlled absolutePath into a shell
+    # command). floor=None, and the reason is checked rather than assumed: the fix
+    # is commit 88c77fc dated 2026-08-11, and npm's own publish timeline shows no
+    # neo.mjs release after 2026-07-03 (13.1.0 is latest on both npm and GitHub
+    # releases). The fix exists in git and has never shipped, so there is no version
+    # to pin to and every published release is affected. Convert to a floor the day
+    # a release containing 88c77fc appears -- this is a placeholder, unlike the
+    # mcp-florence2 pin below whose vendor has ruled a source fix out entirely.
+    _Pin("AAK-MCP-NEOMJS-CVE-2026-18482-001", "neo.mjs", ("neo.mjs",), None,
+         fix_label="no released fix yet — the fix commit (88c77fc, 2026-08-11) "
+                   "postdates the newest published release (13.1.0)",
+         regexes=(_NEOMJS_RE,)),
+    # LangBot: any authenticated user can set an STDIO MCP server `command`, which
+    # StdioServerParameters starts as a subprocess on the LangBot host. floor=None
+    # because there is no fix: GHSA-3pvh-63gf-j9mw records `patched: null`, NVD
+    # states no fixed version is available, and 4.10.8 (published 31 minutes after
+    # the CVE) is a WeCom media-delivery patch whose notes claim no security fix.
+    # The remediation is therefore an authorization control, not an upgrade.
+    _Pin("AAK-MCP-LANGBOT-CVE-2026-54449-001", "langbot", ("langbot",), None,
+         fix_label="no fixed release — restrict who may configure STDIO MCP servers "
+                   "rather than waiting for a version bump",
+         regexes=(_LANGBOT_RE,)),
 )
 
 _CANDIDATE_NAMES = (

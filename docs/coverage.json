@@ -3769,6 +3769,29 @@
     {
       "category": "supply-chain",
       "cve_references": [
+        "CVE-2026-54449"
+      ],
+      "eu_ai_act": [
+        "Art. 15 - Robustness & Security"
+      ],
+      "nsa_mcp_csi": [
+        "Design for boundaries (p.10)",
+        "Sign and verify MCP messages (p.12)",
+        "Scan local network for open or vulnerable MCP servers (p.14)"
+      ],
+      "owasp_agentic": [
+        "ASI03 Identity & Privilege Abuse"
+      ],
+      "owasp_mcp": [
+        "MCP06:2025 Privilege Escalation"
+      ],
+      "rule_id": "AAK-MCP-LANGBOT-CVE-2026-54449-001",
+      "severity": "high",
+      "title": "LangBot lets any authenticated user configure an STDIO MCP command (no fix)"
+    },
+    {
+      "category": "supply-chain",
+      "cve_references": [
         "CVE-2026-12940",
         "CVE-2026-17623",
         "CVE-2026-17626",
@@ -3914,6 +3937,31 @@
     },
     {
       "category": "supply-chain",
+      "cve_references": [
+        "CVE-2026-75149"
+      ],
+      "eu_ai_act": [
+        "Art. 9 - Risk Management",
+        "Art. 15 - Robustness & Security"
+      ],
+      "nsa_mcp_csi": [
+        "Design for boundaries (p.10)",
+        "Validate parameters (p.11)",
+        "Constrain and sandbox tool execution (p.11)",
+        "Filter and monitor output pipelines and chained execution (p.12)"
+      ],
+      "owasp_agentic": [
+        "ASI05 Unexpected Code Execution"
+      ],
+      "owasp_mcp": [
+        "MCP04:2025 Command Injection"
+      ],
+      "rule_id": "AAK-MCP-MARIMO-CVE-2026-75149-001",
+      "severity": "high",
+      "title": "marimo launches a notebook-supplied MCP server command on open (< 0.23.15)"
+    },
+    {
+      "category": "supply-chain",
       "cve_references": [],
       "eu_ai_act": [
         "Art. 9 - Risk Management",
@@ -4003,21 +4051,32 @@
     {
       "category": "supply-chain",
       "cve_references": [
-        "CVE-2026-72768"
+        "CVE-2026-72768",
+        "CVE-2026-77068",
+        "CVE-2026-77073"
       ],
       "eu_ai_act": [
-        "Art. 10 - Data Governance"
+        "Art. 9 - Risk Management",
+        "Art. 10 - Data Governance",
+        "Art. 15 - Robustness & Security"
       ],
-      "nsa_mcp_csi": [],
+      "nsa_mcp_csi": [
+        "Design for boundaries (p.10)",
+        "Validate parameters (p.11)",
+        "Constrain and sandbox tool execution (p.11)",
+        "Filter and monitor output pipelines and chained execution (p.12)"
+      ],
       "owasp_agentic": [
+        "ASI05 Unexpected Code Execution",
         "ASI06 Memory & Context Poisoning"
       ],
       "owasp_mcp": [
+        "MCP04:2025 Command Injection",
         "MCP09:2025 SSRF / Network Boundary"
       ],
       "rule_id": "AAK-MCP-N8N-CVE-2026-72768-001",
-      "severity": "medium",
-      "title": "n8n < 2.32.1 (MCP Client node bypasses SSRF protection \u2192 internal-host access)"
+      "severity": "high",
+      "title": "n8n < 2.34.1 (MCP Client SSRF bypass, node-schema loader RCE, cross-project credential reference)"
     },
     {
       "category": "supply-chain",
@@ -4044,6 +4103,31 @@
       "rule_id": "AAK-MCP-N8NMCP-CVE-2026-54052-001",
       "severity": "critical",
       "title": "n8n-MCP multi-tenant backup isolation bypass (`n8n-mcp` < 2.57.4)"
+    },
+    {
+      "category": "supply-chain",
+      "cve_references": [
+        "CVE-2026-18482"
+      ],
+      "eu_ai_act": [
+        "Art. 9 - Risk Management",
+        "Art. 15 - Robustness & Security"
+      ],
+      "nsa_mcp_csi": [
+        "Design for boundaries (p.10)",
+        "Validate parameters (p.11)",
+        "Constrain and sandbox tool execution (p.11)",
+        "Filter and monitor output pipelines and chained execution (p.12)"
+      ],
+      "owasp_agentic": [
+        "ASI05 Unexpected Code Execution"
+      ],
+      "owasp_mcp": [
+        "MCP04:2025 Command Injection"
+      ],
+      "rule_id": "AAK-MCP-NEOMJS-CVE-2026-18482-001",
+      "severity": "high",
+      "title": "Neo.mjs file-system MCP server shell injection (no released fix yet)"
     },
     {
       "category": "mcp-config",
@@ -6995,7 +7079,7 @@
       "mcp-config": 65,
       "mcp-server-card": 4,
       "secret-exposure": 18,
-      "supply-chain": 92,
+      "supply-chain": 95,
       "taint-analysis": 14,
       "tool-poisoning": 29,
       "transport-security": 13,
@@ -7005,26 +7089,26 @@
       "Art. 10 - Data Governance": 107,
       "Art. 13 - Transparency": 31,
       "Art. 14 - Human Oversight": 39,
-      "Art. 15 - Robustness & Security": 179,
-      "Art. 9 - Risk Management": 105
+      "Art. 15 - Robustness & Security": 183,
+      "Art. 9 - Risk Management": 108
     },
     "by_nsa_mcp_csi": {
       "Choose supported MCP projects when possible (p.10)": 70,
-      "Constrain and sandbox tool execution (p.11)": 92,
-      "Design for boundaries (p.10)": 163,
-      "Filter and monitor output pipelines and chained execution (p.12)": 66,
+      "Constrain and sandbox tool execution (p.11)": 95,
+      "Design for boundaries (p.10)": 167,
+      "Filter and monitor output pipelines and chained execution (p.12)": 69,
       "Instrument for logging and detection (p.13)": 34,
-      "Scan local network for open or vulnerable MCP servers (p.14)": 136,
-      "Sign and verify MCP messages (p.12)": 135,
+      "Scan local network for open or vulnerable MCP servers (p.14)": 137,
+      "Sign and verify MCP messages (p.12)": 136,
       "Track and patch MCP related vulnerabilities (p.13)": 81,
-      "Validate parameters (p.11)": 96
+      "Validate parameters (p.11)": 99
     },
     "by_owasp_agentic": {
       "ASI01": 14,
       "ASI02": 47,
-      "ASI03": 68,
+      "ASI03": 69,
       "ASI04": 64,
-      "ASI05": 45,
+      "ASI05": 48,
       "ASI06": 45,
       "ASI07": 9,
       "ASI08": 5,
@@ -7035,9 +7119,9 @@
       "MCP01:2025": 78,
       "MCP02:2025": 13,
       "MCP03:2025": 32,
-      "MCP04:2025": 34,
+      "MCP04:2025": 37,
       "MCP05:2025": 54,
-      "MCP06:2025": 14,
+      "MCP06:2025": 15,
       "MCP07:2025": 33,
       "MCP08:2025": 7,
       "MCP09:2025": 27,
@@ -7045,13 +7129,13 @@
     },
     "by_severity": {
       "critical": 70,
-      "high": 147,
+      "high": 151,
       "info": 5,
       "low": 9,
-      "medium": 82
+      "medium": 81
     },
-    "total_cves_covered": 160,
-    "total_rules": 313
+    "total_cves_covered": 165,
+    "total_rules": 316
   },
   "tool": "agent-audit-kit"
 }

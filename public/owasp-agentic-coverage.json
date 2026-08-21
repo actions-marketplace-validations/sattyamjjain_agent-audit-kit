@@ -1,8 +1,8 @@
 {
   "schema_version": "1",
-  "last_updated": "2026-08-19T13:01:48Z",
+  "last_updated": "2026-08-21T04:41:57Z",
   "aak_version": "0.3.84",
-  "rule_count": 313,
+  "rule_count": 316,
   "coverage": [
     {
       "asi_id": "ASI01",
@@ -641,7 +641,7 @@
     {
       "asi_id": "ASI03",
       "title": "Memory Poisoning",
-      "rule_density": 68,
+      "rule_density": 69,
       "rules": [
         {
           "id": "AAK-A2A-005",
@@ -893,6 +893,17 @@
             "CVE-2026-50287"
           ],
           "aicm_references": []
+        },
+        {
+          "id": "AAK-MCP-LANGBOT-CVE-2026-54449-001",
+          "severity": "high",
+          "cve_references": [
+            "CVE-2026-54449"
+          ],
+          "aicm_references": [
+            "IAM-01",
+            "IVS-04"
+          ]
         },
         {
           "id": "AAK-MCP-N8N-CVE-2026-65594-001",
@@ -1850,7 +1861,7 @@
     {
       "asi_id": "ASI05",
       "title": "Cascading Failures",
-      "rule_density": 45,
+      "rule_density": 48,
       "rules": [
         {
           "id": "AAK-AGENT-TRUST-001",
@@ -2088,6 +2099,41 @@
           ],
           "aicm_references": [
             "AIS-07",
+            "IVS-04",
+            "STA-08"
+          ]
+        },
+        {
+          "id": "AAK-MCP-MARIMO-CVE-2026-75149-001",
+          "severity": "high",
+          "cve_references": [
+            "CVE-2026-75149"
+          ],
+          "aicm_references": [
+            "IVS-04",
+            "STA-08"
+          ]
+        },
+        {
+          "id": "AAK-MCP-N8N-CVE-2026-72768-001",
+          "severity": "high",
+          "cve_references": [
+            "CVE-2026-72768",
+            "CVE-2026-77068",
+            "CVE-2026-77073"
+          ],
+          "aicm_references": [
+            "IVS-04",
+            "STA-08"
+          ]
+        },
+        {
+          "id": "AAK-MCP-NEOMJS-CVE-2026-18482-001",
+          "severity": "high",
+          "cve_references": [
+            "CVE-2026-18482"
+          ],
+          "aicm_references": [
             "IVS-04",
             "STA-08"
           ]
@@ -2416,9 +2462,11 @@
         },
         {
           "id": "AAK-MCP-N8N-CVE-2026-72768-001",
-          "severity": "medium",
+          "severity": "high",
           "cve_references": [
-            "CVE-2026-72768"
+            "CVE-2026-72768",
+            "CVE-2026-77068",
+            "CVE-2026-77073"
           ],
           "aicm_references": [
             "IVS-04",

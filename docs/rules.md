@@ -6,7 +6,7 @@
 
 | Category | Rules |
 |----------|-------|
-| Supply Chain | 92 |
+| Supply Chain | 95 |
 | MCP Configuration | 65 |
 | Tool Poisoning | 29 |
 | Agent Config | 18 |
@@ -19,7 +19,7 @@
 | Legal Compliance | 12 |
 | MCP Server Card | 4 |
 | Composition | 3 |
-| **Total** | **313** |
+| **Total** | **316** |
 
 <!-- END rules-summary -->
 

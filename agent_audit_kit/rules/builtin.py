@@ -181,6 +181,9 @@ _AICM_TAGS: dict[str, list[str]] = {
     "AAK-MCP-GOOGLESEARCH-CVE-2026-19337-001": ["IVS-04", "STA-08"],
     "AAK-MCP-FLORENCE2-CVE-2026-19984-001": ["IVS-04", "STA-08"],
     "AAK-MCP-CODEWHALE-CVE-2026-75858-001": ["IVS-04", "STA-08"],
+    "AAK-MCP-MARIMO-CVE-2026-75149-001": ["IVS-04", "STA-08"],
+    "AAK-MCP-NEOMJS-CVE-2026-18482-001": ["IVS-04", "STA-08"],
+    "AAK-MCP-LANGBOT-CVE-2026-54449-001": ["IVS-04", "IAM-01"],
     "AAK-MCP-GRAFANA-CVE-2026-19516-001": ["IVS-04", "STA-08"],
     "AAK-MCP-N8N-CVE-2026-72768-001": ["IVS-04", "STA-08"],
     "AAK-MCP-CCTEMPLATES-CVE-2026-73222-001": ["IAM-01", "STA-08"],
@@ -6936,24 +6939,38 @@ _r(
 
 _r(
     "AAK-MCP-N8N-CVE-2026-72768-001",
-    "n8n < 2.32.1 (MCP Client node bypasses SSRF protection → internal-host access)",
-    "n8n before 2.32.1 has a server-side-request-forgery-protection bypass in the "
-    "MCP Client node: an authenticated user can craft a workflow whose MCP Client "
-    "requests reach internal or blocked hosts without routing through n8n's SSRF "
-    "protection, exposing internal services and reading their responses back through "
-    "the workflow (CVE-2026-72768). A project pinning `n8n` below 2.32.1 (or unpinned) "
-    "is exposed. This is a distinct MCP-Client-node SSRF from the earlier n8n "
-    "credential-domain-bypass and OAuth two-branch-fix pins already carried by the pin "
-    "scanner — a third n8n arm. Fixed in 2.32.1, with all prior versions affected.",
-    Severity.MEDIUM,
+    "n8n < 2.34.1 (MCP Client SSRF bypass, node-schema loader RCE, cross-project "
+    "credential reference)",
+    "Three MCP-surface defects in `n8n`, carried by one pin because they share a "
+    "package and the highest fix version covers all of them. Before 2.32.1 the MCP "
+    "Client node bypasses server-side-request-forgery protection: an authenticated "
+    "user crafts a workflow whose MCP Client requests reach internal or blocked "
+    "hosts and reads their responses back through the workflow (CVE-2026-72768). "
+    "Before 2.33.4, and on the 2.34.x line before 2.34.1, the `@n8n/workflow-sdk` "
+    "node-schema loader used for MCP node-schema loading derives a schema module "
+    "path directly from the attacker-supplied node type string with no "
+    "path-traversal validation, so a `global:member` user reaches code execution in "
+    "the n8n main process (CVE-2026-77068). Before 2.34.1 the MCP "
+    "`create_workflow_from_code` tool skips credential validation when the "
+    "authentication type is an expression, letting a holder of a valid MCP Bearer "
+    "API key persist unauthorized cross-project credential references "
+    "(CVE-2026-77073). A project pinning `n8n` below 2.34.1, or leaving it "
+    "unpinned, is exposed to at least one of these. Distinct from the earlier n8n "
+    "credential-domain-bypass and OAuth two-branch-fix pins the scanner already "
+    "carries; this is the highest of its three n8n floors.",
+    Severity.HIGH,
     Category.SUPPLY_CHAIN,
-    "Upgrade `n8n` to >= 2.32.1 and pin it. Route the MCP Client node's outbound "
-    "requests through n8n's SSRF protection so a workflow author cannot reach internal "
-    "or blocked hosts, and segment the n8n runner from sensitive internal services.",
+    "Upgrade `n8n` to >= 2.34.1 and pin it — that floor clears all three. Route the "
+    "MCP Client node's outbound requests through n8n's SSRF protection so a workflow "
+    "author cannot reach internal or blocked hosts, and segment the n8n runner from "
+    "sensitive internal services. Treat `global:member` as a privileged role until "
+    "you are past 2.33.4, since the node-schema loader reaches code execution from "
+    "it, and audit workflows for credential references that cross project "
+    "boundaries.",
     sarif_name="N8nMcpClientNodeSsrfBypass",
-    cve_references=["CVE-2026-72768"],
-    owasp_mcp_references=["MCP09:2025"],
-    owasp_agentic_references=["ASI06"],
+    cve_references=["CVE-2026-72768", "CVE-2026-77068", "CVE-2026-77073"],
+    owasp_mcp_references=["MCP09:2025", "MCP04:2025"],
+    owasp_agentic_references=["ASI06", "ASI05"],
     adversa_references=["ADV-SSRF-01"],
 )
 
@@ -7585,6 +7602,96 @@ _r(
     cve_references=["CVE-2026-75858", "CVE-2026-75857"],
     owasp_mcp_references=["MCP01:2025"],
     owasp_agentic_references=["ASI01"],
+    adversa_references=["ADV-INJECT-01"],
+)
+
+
+_r(
+    "AAK-MCP-MARIMO-CVE-2026-75149-001",
+    "marimo launches a notebook-supplied MCP server command on open (< 0.23.15)",
+    "`marimo` before 0.23.15 has code injection in the notebook configuration "
+    "handler: a notebook can embed an MCP server entry whose `command` value is "
+    "attacker-controlled, and opening that notebook in edit mode launches the "
+    "command as a local subprocess before any cell executes and without "
+    "authentication (CVE-2026-75149, CVSS 3.1 8.8, CWE-94). Cloning a repository "
+    "and opening the notebook is the whole exploit. This is the stdio-launcher "
+    "shape `AAK-MCP-STDIO-LAUNCHER-INJECT-001` already describes, arriving through "
+    "a notebook file rather than an MCP config, which is why it needs a pin: the "
+    "config scanners never open a `.py` notebook. Fixed in 0.23.15. The floor "
+    "carries no lower bound because two further pip-ecosystem marimo advisories "
+    "record `< 0.23.0` (pre-auth RCE) and `< 0.23.9` (reflected XSS), so anything "
+    "below this floor is exposed to something.",
+    Severity.HIGH,
+    Category.SUPPLY_CHAIN,
+    "Upgrade `marimo` to >= 0.23.15 and pin it. Until then, do not open untrusted "
+    "notebooks in edit mode: the subprocess launches before any cell runs, so "
+    "reviewing the cells first does not protect you. Treat a notebook from an "
+    "untrusted repository as executable content, not as a document.",
+    sarif_name="MarimoNotebookMcpCommandInjection",
+    cve_references=["CVE-2026-75149"],
+    owasp_mcp_references=["MCP04:2025"],
+    owasp_agentic_references=["ASI05"],
+    adversa_references=["ADV-INJECT-01"],
+)
+
+
+_r(
+    "AAK-MCP-NEOMJS-CVE-2026-18482-001",
+    "Neo.mjs file-system MCP server shell injection (no released fix yet)",
+    "`neo.mjs` has command injection in `FileSystemService.mjs` of the "
+    "`ai/mcp/server/file-system` MCP server: `checkSyntax()` and "
+    "`runPlaywrightTest()` interpolate a caller-controlled `absolutePath` into a "
+    "shell command, so an agent induced to call either tool reaches arbitrary OS "
+    "command execution (CVE-2026-18482). This is a **presence-only** pin because "
+    "there is nothing to pin to: the fix is commit `88c77fc` dated 2026-08-11, and "
+    "no `neo.mjs` release has been published since 13.1.0 on 2026-07-03 on either "
+    "npm or GitHub releases. Every published version is therefore affected. Unlike "
+    "the `mcp-florence2` pin, this is a placeholder rather than a permanent state: "
+    "upstream has written the fix and simply not shipped it, so this becomes a "
+    "version floor the day a release containing that commit appears.",
+    Severity.HIGH,
+    Category.SUPPLY_CHAIN,
+    "There is no fixed release to upgrade to yet, so do not treat a version bump as "
+    "the mitigation. Remove the `ai/mcp/server/file-system` server from the exposed "
+    "tool set, or vendor the fix from commit `88c77fc` if you build from source. If "
+    "the tools must stay reachable, ensure `absolutePath` cannot carry shell "
+    "metacharacters by passing it as an argv element rather than interpolating it "
+    "into a command string. Re-pin to a version floor once upstream publishes a "
+    "release containing the fix.",
+    sarif_name="NeoMjsFileSystemMcpShellInjection",
+    cve_references=["CVE-2026-18482"],
+    owasp_mcp_references=["MCP04:2025"],
+    owasp_agentic_references=["ASI05"],
+    adversa_references=["ADV-INJECT-01"],
+)
+
+_r(
+    "AAK-MCP-LANGBOT-CVE-2026-54449-001",
+    "LangBot lets any authenticated user configure an STDIO MCP command (no fix)",
+    "LangBot at 4.10.7 and earlier applies no adequate authorization boundary to "
+    "the Extensions MCP configuration: in "
+    "`src/langbot/pkg/provider/tools/loaders/mcp.py`, `StdioServerParameters` takes "
+    "the configured command and arguments and starts a server-side subprocess, so "
+    "anyone who can sign up or obtain an account executes arbitrary commands with "
+    "the privileges of the LangBot service (CVE-2026-54449, CVSS 3.1 8.8). This is "
+    "a **presence-only** pin because no fix exists: "
+    "[GHSA-3pvh-63gf-j9mw](https://github.com/advisories/GHSA-3pvh-63gf-j9mw) "
+    "records no patched version, NVD states none is available, and 4.10.8 -- "
+    "published 31 minutes after the advisory -- is a media-delivery patch whose "
+    "release notes claim no security fix. Treat every published version as exposed "
+    "until upstream states otherwise.",
+    Severity.HIGH,
+    Category.SUPPLY_CHAIN,
+    "No upgrade resolves this, so do not wait for one. Close the account boundary "
+    "instead: disable open sign-up, and restrict the Extensions MCP configuration "
+    "surface to operators rather than any authenticated user. If the deployment "
+    "cannot enforce that, take the STDIO MCP configuration path out of the reachable "
+    "UI, since the subprocess runs with the service's own privileges. Re-pin to a "
+    "version floor once upstream ships a release that states it fixes this.",
+    sarif_name="LangBotStdioMcpAuthzBypass",
+    cve_references=["CVE-2026-54449"],
+    owasp_mcp_references=["MCP06:2025"],
+    owasp_agentic_references=["ASI03"],
     adversa_references=["ADV-INJECT-01"],
 )
 

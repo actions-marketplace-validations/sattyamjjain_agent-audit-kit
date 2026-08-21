@@ -80,11 +80,14 @@ PINS = {
     # 2026-08-11 wave
     "AAK-MCP-GRAFANA-CVE-2026-19516-001": "critical",
     # 2026-08-11..12 wave
-    "AAK-MCP-N8N-CVE-2026-72768-001": "medium",
+    "AAK-MCP-N8N-CVE-2026-72768-001": "high",
     "AAK-MCP-CCTEMPLATES-CVE-2026-73222-001": "high",
     # 2026-08-17 wave
     "AAK-MCP-FLORENCE2-CVE-2026-19984-001": "medium",
     "AAK-MCP-CODEWHALE-CVE-2026-75858-001": "high",
+    "AAK-MCP-MARIMO-CVE-2026-75149-001": "high",
+    "AAK-MCP-NEOMJS-CVE-2026-18482-001": "high",
+    "AAK-MCP-LANGBOT-CVE-2026-54449-001": "high",
 }
 
 
@@ -806,7 +809,22 @@ def test_n8n_72768_below_floor_fires(tmp_path: Path) -> None:
 
 
 def test_n8n_72768_patched_passes(tmp_path: Path) -> None:
-    assert _N8N_72768 not in _ids(tmp_path, "package.json", '{"dependencies": {"n8n": "2.32.1"}}')
+    """2.34.1, not 2.32.1.
+
+    CVE-2026-77068 and CVE-2026-77073 moved this floor up. 2.32.1 fixed the SSRF
+    bypass alone and is still exposed to the node-schema loader RCE, so it belongs
+    in the positive case below rather than here.
+    """
+    assert _N8N_72768 not in _ids(tmp_path, "package.json", '{"dependencies": {"n8n": "2.34.1"}}')
+
+
+def test_n8n_72768_old_fix_version_is_still_exposed(tmp_path: Path) -> None:
+    """The regression the floor move exists to catch.
+
+    A project that upgraded to 2.32.1 for CVE-2026-72768 and stopped there is still
+    exposed to CVE-2026-77068. If this stops firing, the floor moved back down.
+    """
+    assert _N8N_72768 in _ids(tmp_path, "package.json", '{"dependencies": {"n8n": "2.32.1"}}')
 
 
 def test_n8n_72768_unpinned_fires(tmp_path: Path) -> None:
