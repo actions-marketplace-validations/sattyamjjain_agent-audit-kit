@@ -64,10 +64,50 @@ def build_manifest() -> list[dict[str, str]]:
     return scanner_manifest()
 
 
+def scanner_module_files() -> list[str]:
+    """Non-private ``*.py`` module names under ``agent_audit_kit/scanners/``."""
+    directory = REPO_ROOT / "agent_audit_kit" / "scanners"
+    return sorted(
+        p.stem for p in directory.glob("*.py") if not p.stem.startswith("_")
+    )
+
+
+def unregistered_shims() -> list[str]:
+    """Modules on disk that the engine does not register.
+
+    Derived, not hardcoded: a hardcoded list is the same hand-copied number this
+    repo keeps getting wrong. These are back-compat re-exports kept so old import
+    paths still resolve, and counting them as detectors would inflate the
+    advertised number.
+    """
+    from agent_audit_kit.engine import scanner_manifest
+
+    registered = {entry["module"] for entry in scanner_manifest()}
+    return [name for name in scanner_module_files() if name not in registered]
+
+
 def render_manifest_json(manifest: list[dict[str, str]]) -> str:
-    """Byte-deterministic ``scanners.json`` (mirrors ``rules.json``)."""
+    """Byte-deterministic ``scanners.json`` (mirrors ``rules.json``).
+
+    Carries the shim list explicitly. ``count`` is the number of scanners the
+    engine runs, which is smaller than the number of files in the directory, and
+    before v0.3.86 nothing in the published artifact said why -- anyone who
+    counted files got a different number and had no way to reconcile it.
+    """
+    shims = unregistered_shims()
     return json.dumps(
-        {"count": len(manifest), "scanners": manifest},
+        {
+            "_comment": (
+                "count = scanner modules the engine registers and runs. "
+                "unregistered_shims are back-compat re-exports kept so old import "
+                "paths resolve; they run no detection of their own. "
+                "count + len(unregistered_shims) == non-private *.py files in "
+                "agent_audit_kit/scanners/, asserted by scripts/check_counts.py."
+            ),
+            "count": len(manifest),
+            "unregistered_shims": shims,
+            "scanners": manifest,
+        },
         indent=2,
         sort_keys=True,
     ) + "\n"

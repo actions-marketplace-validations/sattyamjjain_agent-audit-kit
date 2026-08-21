@@ -181,8 +181,206 @@ def find_stale_counts() -> list[str]:
     return failures
 
 
+# ---------------------------------------------------------------------------
+# Corroboration sweep (v0.3.86)
+#
+# `find_stale_counts` above matches PHRASES. That is why it kept missing things:
+# a count written in a phrasing absent from PATTERNS is never looked at, and the
+# CHANGELOG records the same blind spot being found three separate times
+# (v0.3.72 "N existing rules", v0.3.81 "N registered scanners", v0.3.84 the
+# category count). Each fix added one more phrase, which fixes one instance and
+# leaves the class.
+#
+# This sweep inverts the question. Instead of "does this known phrasing hold?"
+# it asks, of EVERY "<n> rules" and "<n> scanners" in README.md and docs/**:
+# does that number correspond to anything real in the registry? A claim is
+# corroborated when it equals the total, or equals the count of a category named
+# on the same line, or sits inside a generated marker. Anything else is a number
+# nobody can source, which is what "A2A protocol scanning | 12 rules" was while
+# the registry said 13 and `make count-check` reported clean.
+#
+# It cannot be phrase-blind, because it does not read phrases.
+# ---------------------------------------------------------------------------
+
+_SWEEP_ROOTS: tuple[str, ...] = ("README.md", "docs")
+
+_RULE_CLAIM_RE = re.compile(
+    r"(?<![\d.])(\d[\d,]*)\s+(?:[A-Za-z][\w-]*\s+){0,2}rules?\b", re.I
+)
+_SCANNER_CLAIM_RE = re.compile(
+    r"(?<![\d.])(\d[\d,]*)\s+(?:[A-Za-z][\w-]*\s+){0,2}scanners?\b", re.I
+)
+
+# Inside a generated marker the number is written by scripts/sync_rule_count.py,
+# so it cannot drift by hand and re-checking it here only duplicates that owner.
+_MARKER_RE = re.compile(r"<!--\s*[\w:-]+\s*-->\s*\d[\d,]*\s*<!--\s*/[\w:-]+\s*-->")
+
+# Numbers that are legitimately not a registry count, each with the reason it is
+# exempt. Keyed by (relative path, the matched text). Enumerating EXEMPTIONS
+# rather than obligations means a new unsourced number fails closed.
+SWEEP_ALLOW: dict[tuple[str, str], str] = {
+    ("README.md", "2 scanners"):
+        "per-language pattern-scanner count (TypeScript + Rust), not the registry total",
+    ("docs/RELEASING.md", "77 rules"):
+        "narrative quoting the v0.2.0-era numbers a past drift left behind; the "
+        "sentence exists to describe that bug, so correcting it would erase the point",
+    ("docs/RELEASING.md", "13 scanners"):
+        "same sentence as above",
+}
+
+# A number introduced by a threshold operator states a bar, not a count:
+# "Full = >=3 rules", "with >= 1 deterministic rule". Recognised as a shape
+# rather than allow-listed one by one, because writing a new threshold is
+# ordinary and should not require editing this file.
+_THRESHOLD_RE = re.compile(
+    r"(?:>=|≥|>|at least|minimum of|min\.?|no fewer than|each with)\s*$", re.I
+)
+
+# Phrases whose number is a claim about something other than AAK's own registry.
+_NOT_OUR_COUNT_RE = re.compile(
+    r"\b(?:new|added|shipped|net-new|mapped|reference|other|competing|their|its)\b",
+    re.I,
+)
+
+
+def _category_counts() -> dict[str, int]:
+    """Category display + enum name -> rule count, for same-line corroboration."""
+    from collections import Counter
+
+    from agent_audit_kit.rules.builtin import RULES
+
+    by_enum = Counter(r.category.name for r in RULES.values())
+    out: dict[str, int] = {}
+    for enum_name, n in by_enum.items():
+        out[enum_name.lower()] = n
+        out[enum_name.replace("_", " ").lower()] = n
+        out[enum_name.replace("_", "-").lower()] = n
+    return out
+
+
+def _sweep_files() -> list[str]:
+    out: list[str] = []
+    for rel in _tracked_markdown():
+        if not any(rel == root or rel.startswith(root + "/") for root in _SWEEP_ROOTS):
+            continue
+        if is_excluded(rel):
+            continue
+        out.append(rel)
+    return out
+
+
+def find_uncorroborated_counts() -> list[str]:
+    """Every "<n> rules"/"<n> scanners" in README.md and docs/** that matches no
+    real registry number.
+
+    Corroboration, in order: the generated-marker owner, the explicit allow-list,
+    a phrase that is plainly about someone else's count, the registry total, or a
+    category named on the same line.
+    """
+    counts = canonical_counts()
+    categories = _category_counts()
+    failures: list[str] = []
+
+    for rel in _sweep_files():
+        path = REPO_ROOT / rel
+        if not path.is_file():
+            continue
+        if has_historical_banner(path):
+            continue
+        for lineno, line in enumerate(path.read_text(encoding="utf-8").splitlines(), start=1):
+            marker_spans = [m.span() for m in _MARKER_RE.finditer(line)]
+            lowered = line.lower()
+            for rx, key in ((_RULE_CLAIM_RE, "rules"), (_SCANNER_CLAIM_RE, "scanners")):
+                for m in rx.finditer(line):
+                    text = m.group(0).strip()
+                    if any(a <= m.start() and m.end() <= b for a, b in marker_spans):
+                        continue
+                    if SWEEP_ALLOW.get((rel, text)):
+                        continue
+                    if _NOT_OUR_COUNT_RE.search(text):
+                        continue
+                    if _THRESHOLD_RE.search(line[: m.start()]):
+                        continue
+                    claimed = int(m.group(1).replace(",", ""))
+                    if claimed == counts[key]:
+                        continue
+                    if key == "rules" and any(
+                        name in lowered and claimed == n for name, n in categories.items()
+                    ):
+                        continue
+                    expected = counts[key]
+                    hint = ""
+                    if key == "rules":
+                        near = sorted(
+                            {n for name, n in categories.items() if name in lowered}
+                        )
+                        if near:
+                            hint = f" (a category on this line has {near[0]})"
+                    failures.append(
+                        f"{rel}:{lineno}: {text!r} matches no registry number"
+                        f"{hint}; total is {expected}. Fix it, wrap it in a generated "
+                        f"marker, or add it to SWEEP_ALLOW with a reason."
+                    )
+    return failures
+
+
+def find_manifest_arithmetic_faults() -> list[str]:
+    """``count + unregistered_shims == files on disk`` in ``scanners.json``.
+
+    94 registered against 96 files on disk is defensible -- two of those files
+    are back-compat re-exports -- but until v0.3.86 nothing in the tree said so,
+    and anyone who counted files got a number the manifest contradicted. This
+    turns "defensible" into "asserted": if a module is added and not registered,
+    or a shim is deleted, the arithmetic stops working and says which.
+    """
+    import json
+
+    sys.path.insert(0, str(REPO_ROOT / "scripts"))
+    from sync_scanner_count import scanner_module_files, unregistered_shims
+
+    manifest_path = REPO_ROOT / "scanners.json"
+    if not manifest_path.is_file():
+        return ["scanners.json is missing"]
+    try:
+        data = json.loads(manifest_path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError) as exc:
+        return [f"scanners.json is unreadable: {exc}"]
+
+    failures: list[str] = []
+    declared_shims = data.get("unregistered_shims")
+    if declared_shims is None:
+        return [
+            "scanners.json has no `unregistered_shims` key, so its `count` cannot be "
+            "reconciled with the files on disk"
+        ]
+
+    actual_shims = unregistered_shims()
+    if sorted(declared_shims) != sorted(actual_shims):
+        failures.append(
+            f"scanners.json lists shims {sorted(declared_shims)} but the engine leaves "
+            f"{sorted(actual_shims)} unregistered. Run scripts/sync_scanner_count.py."
+        )
+
+    on_disk = scanner_module_files()
+    total = int(data.get("count", 0)) + len(declared_shims)
+    if total != len(on_disk):
+        missing = sorted(set(on_disk) - {e["module"] for e in data.get("scanners", [])}
+                         - set(declared_shims))
+        failures.append(
+            f"scanners.json: count {data.get('count')} + {len(declared_shims)} shim(s) "
+            f"= {total}, but {len(on_disk)} non-private modules are on disk"
+            + (f"; unaccounted: {missing}" if missing else "")
+            + ". Register the module, or record it as a shim."
+        )
+    return failures
+
+
 def main() -> int:
-    failures = find_stale_counts()
+    failures = (
+        find_stale_counts()
+        + find_uncorroborated_counts()
+        + find_manifest_arithmetic_faults()
+    )
     if failures:
         sys.stderr.write(
             "count-check: stale count(s) outside the changelog / historical exclusions "

@@ -104,6 +104,10 @@ _README_FIX_COUNT_RE = re.compile(
     r"(<!--\s*fix-recipe-coverage:count\s*-->)(.*?)(<!--\s*/fix-recipe-coverage\s*-->)",
     re.DOTALL,
 )
+_README_TEST_COUNT_RE = re.compile(
+    r"(<!--\s*test-count:total\s*-->)(.*?)(<!--\s*/test-count\s*-->)",
+    re.DOTALL,
+)
 _README_FIX_PCT_RE = re.compile(
     r"(<!--\s*fix-recipe-coverage:pct\s*-->)(.*?)(<!--\s*/fix-recipe-coverage\s*-->)",
     re.DOTALL,
@@ -156,6 +160,29 @@ def _category_counts() -> dict[str, int]:
     from collections import Counter
     from agent_audit_kit.rules.builtin import RULES
     return {cat.name: n for cat, n in Counter(r.category for r in RULES.values()).items()}
+
+
+def _test_function_count() -> int:
+    """``test_*`` functions under ``tests/``, counted from the AST.
+
+    Deterministic and offline, which is why it is the AST rather than pytest's
+    collected total: collection varies with parametrisation, skips and plugins,
+    so a generated number taken from it would differ between machines and start
+    drifting again. The README says "test functions" so the noun matches what is
+    counted.
+    """
+    import ast
+
+    total = 0
+    for path in sorted((REPO_ROOT / "tests").rglob("test_*.py")):
+        try:
+            tree = ast.parse(path.read_text(encoding="utf-8"))
+        except (OSError, SyntaxError):
+            continue
+        for node in ast.walk(tree):
+            if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)) and node.name.startswith("test_"):
+                total += 1
+    return total
 
 
 def _fix_recipe_count() -> int:
@@ -224,6 +251,13 @@ def _update_readme(count: int, *, check: bool) -> bool:
     )
     text = _README_FIX_PCT_RE.sub(
         lambda m: f"{m.group(1)}{fix_count / count * 100:.1f}{m.group(3)}", text
+    )
+
+    # Test-function count — was a hand-written "1,100+" that sat at roughly 60%
+    # of the real number. Generated for the same reason every other count here is.
+    test_count = _test_function_count()
+    text = _README_TEST_COUNT_RE.sub(
+        lambda m: f"{m.group(1)}{test_count:,}{m.group(3)}", text
     )
 
     # Report headline numbers — see report_headline_numbers() above.

@@ -43,11 +43,17 @@ def test_scanners_json_is_committed_and_current() -> None:
     data = json.loads(SCANNERS_JSON.read_text(encoding="utf-8"))
     assert data["count"] == len(data["scanners"]) == SCANNER_COUNT
     # The committed file must equal a fresh render (byte-deterministic).
-    expected = json.dumps(
-        {"count": _manifest_count(), "scanners": scanner_manifest()},
-        indent=2,
-        sort_keys=True,
-    ) + "\n"
+    #
+    # Rendered by calling the generator, not by rebuilding its output here. The
+    # rebuilt copy silently disagreed the moment the manifest gained a key, which
+    # is the same second-copy problem the counts in this repo keep hitting: a
+    # test that restates what it is checking only checks the restatement.
+    import sys
+
+    sys.path.insert(0, str(REPO_ROOT / "scripts"))
+    from sync_scanner_count import render_manifest_json
+
+    expected = render_manifest_json(scanner_manifest())
     assert SCANNERS_JSON.read_text(encoding="utf-8") == expected, (
         "scanners.json is stale — run `python scripts/sync_scanner_count.py`"
     )

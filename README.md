@@ -505,7 +505,7 @@ See [`docs/comparisons.md`](docs/comparisons.md) for a fully-sourced version. Ve
 | Auto-fix CVE dependency bumps | **Yes** (`fix --cve`) | No | No | No |
 | GitHub Security Advisories | **Yes** (`--advisories`) | No | No | No |
 | Secret verification | **Yes** | No | No | No |
-| A2A protocol scanning | **12 rules** | Agent Mesh | No | No |
+| A2A protocol scanning | **13 rules** | Agent Mesh | No | No |
 | Reproducible finding set (same input → same digest) | **[Yes — 20/20 runs, 0% variance](benchmarks/determinism/RESULTS.md)** | Runtime governance | LLM-judge in path | LLM-assisted |
 | Healthcare-AI legal triggers | **Yes** (TN SB 1580, KS/WA/UT) | No | No | No |
 | Offline / zero cloud | **Yes** | Yes | No | Optional |
@@ -630,7 +630,7 @@ agent-audit-kit verify-bundle rules.json --signature rules.json.sigstore
 git clone https://github.com/sattyamjjain/agent-audit-kit
 cd agent-audit-kit
 pip install -e ".[dev]"
-pytest -v                          # 1,100+ tests
+pytest -v                          # <!-- test-count:total -->1,871<!-- /test-count --> test functions
 ruff check .                       # Lint
 mypy agent_audit_kit/              # Type check
 agent-audit-kit scan .             # Self-scan

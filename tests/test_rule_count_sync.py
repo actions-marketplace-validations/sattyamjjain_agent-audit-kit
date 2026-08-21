@@ -279,3 +279,67 @@ def test_rule_count_is_canonical() -> None:
         text = (REPO_ROOT / rel).read_text(encoding="utf-8")
         anchors = anchor_re.findall(text)
         assert anchors and all(int(a) == count for a in anchors), f"{rel} rule-count anchor drift"
+
+
+def test_readme_test_count_marker_matches_the_tests_on_disk() -> None:
+    """The README's test count is generated, not hand-written.
+
+    It said "1,100+ tests" while the suite held 1,868 test functions -- roughly
+    60% of the real number, and stale in the direction that undersells. A
+    hand-written number next to a command is exactly the shape this repo keeps
+    getting wrong, so it is now a marker with an owner.
+    """
+    import re
+    import sys
+
+    sys.path.insert(0, str(REPO_ROOT / "scripts"))
+    from sync_rule_count import _test_function_count
+
+    readme = (REPO_ROOT / "README.md").read_text(encoding="utf-8")
+    m = re.search(r"<!--\s*test-count:total\s*-->([\d,]+)<!--\s*/test-count\s*-->", readme)
+    assert m, "README lost its test-count marker; run scripts/sync_rule_count.py"
+    claimed = int(m.group(1).replace(",", ""))
+    actual = _test_function_count()
+    assert claimed == actual, (
+        f"README claims {claimed} test functions; the tree has {actual}. "
+        "Run `python scripts/sync_rule_count.py`."
+    )
+
+
+def test_test_count_is_deterministic_and_offline() -> None:
+    """Counted from the AST, not from pytest collection.
+
+    Collection varies with parametrisation, skips and plugins, so a number taken
+    from it would differ between machines and drift again. Two calls must agree,
+    and the number must be large enough that a silent parse failure returning
+    almost nothing would fail here.
+    """
+    import sys
+
+    sys.path.insert(0, str(REPO_ROOT / "scripts"))
+    from sync_rule_count import _test_function_count
+
+    first = _test_function_count()
+    assert first == _test_function_count()
+    assert first > 1000, f"only {first} test functions found; parsing likely broke"
+
+
+def test_scanner_manifest_arithmetic_reconciles_with_disk() -> None:
+    """94 registered + 2 shims == 96 files, asserted rather than merely defensible.
+
+    Anyone who counts files in agent_audit_kit/scanners/ gets 96 while the
+    manifest advertises 94. That gap is legitimate -- two files are back-compat
+    re-exports -- but until it was written down and checked, the only way to
+    learn it was to read the generator's docstring.
+    """
+    import json
+    import sys
+
+    sys.path.insert(0, str(REPO_ROOT / "scripts"))
+    from sync_scanner_count import scanner_module_files, unregistered_shims
+
+    data = json.loads((REPO_ROOT / "scanners.json").read_text(encoding="utf-8"))
+    assert "unregistered_shims" in data
+    assert "_comment" in data, "the manifest must explain its own arithmetic"
+    assert sorted(data["unregistered_shims"]) == sorted(unregistered_shims())
+    assert data["count"] + len(data["unregistered_shims"]) == len(scanner_module_files())
