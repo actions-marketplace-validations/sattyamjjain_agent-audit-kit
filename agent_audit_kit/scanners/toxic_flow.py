@@ -7,8 +7,13 @@ tools the codebase imports) and emit a HIGH finding for every
 `agent_audit_kit/data/toxic_flow_pairs.yml` — unless the pair appears
 in `.aak-toxic-flow-trust.yml` with a non-empty justification.
 
-Behind a feature flag for v0.3.5: requires `AAK_TOXIC_FLOW=1` in the
-environment to fire. Full deny-graph design review queues for v0.4.0.
+Off by default: requires `AAK_TOXIC_FLOW=1` in the environment to fire.
+That was introduced as a v0.3.5 temporary measure and is still the
+state at v0.3.86, so read it as the standing position rather than a
+countdown. The deny-graph design review it was waiting on has not
+happened, and until it does this rule pairs sources and sinks from a
+static YAML list, which over-reports on any project that legitimately
+does both.
 """
 
 from __future__ import annotations

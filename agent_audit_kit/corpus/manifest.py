@@ -6,9 +6,18 @@ last-updated timestamp. `aak corpus update` fetches the manifest,
 verifies the named corpus's expected digest, and writes the body to
 `agent_audit_kit/data/<corpus_id>.<ext>`.
 
-v0.3.8: SHA-256 verification only. Sigstore bundle verification using
-`sigstore-python` queues for v0.3.9 (matches the existing
-release-asset flow at `.github/workflows/release.yml`).
+Verification is SHA-256 digest pinning, and that is the whole of it.
+Sigstore bundle verification was scoped for v0.3.9 and is not shipped;
+the note saying otherwise stood for seventy-odd releases. Two reasons
+it has not been built, both still true: `public/corpora/manifest.json`
+publishes no signature field for a verifier to check, so the work
+starts upstream of this module, and `sigstore-python` is a heavy
+dependency for a tool whose stated position is stdlib-first. Digest
+pinning is real verification -- it is what npm `integrity` and pip
+hashes do -- so this is a deliberate stopping point rather than a
+half-finished one. Signed release *assets* are a separate, working
+flow (`.github/workflows/release.yml`); do not read that as covering
+the corpora.
 """
 
 from __future__ import annotations

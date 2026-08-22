@@ -1439,8 +1439,10 @@ def _check_docsgpt_mcp_pin(project_root: Path, scanned_files: set[str]) -> list[
 # without `local_dict`/`global_dict` pinning), reaching RCE.
 # Patched in 0.1.1 (latest at AAK ship time: 1.0.0). Pin-only arm;
 # a source-detector for `eval()` inside MCP `@tool` handlers
-# generally is queued for v0.3.19 (would catch any single-author
-# MCP server with the same shape, not just this one).
+# generally was scoped for v0.3.19 and never written. Recorded as a
+# known gap rather than a pending version: this pin catches the
+# package, not the shape, so another single-author MCP server with
+# the same `eval()` handler is not covered by it.
 # Disclosed by NVD on 2026-05-15.
 # ---------------------------------------------------------------------------
 
