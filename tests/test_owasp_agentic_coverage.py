@@ -78,7 +78,7 @@ def test_coverage_doc_exists_and_lists_every_asi() -> None:
         assert asi in text, f"{asi} missing from docs/owasp-agentic-coverage.md"
 
 
-def test_gen_coverage_script_runs_clean() -> None:
+def test_gen_coverage_script_runs_clean(tmp_path) -> None:
     """scripts/gen_owasp_coverage.py must exit 0 (no gaps, no write error).
 
     Called as ``main([])``, not ``main()``. Since v0.3.87 ``argv=None`` means
@@ -92,4 +92,10 @@ def test_gen_coverage_script_runs_clean() -> None:
     module = importlib.util.module_from_spec(spec)
     sys.modules["gen_owasp_coverage"] = module
     spec.loader.exec_module(module)
-    assert module.main([]) == 0
+    # Written to a temp path, not the default. `main([])` falls back to
+    # DEFAULT_JSON_PATH, so this test used to rewrite the tracked
+    # public/owasp-agentic-coverage.json on every run -- the second half of the
+    # churn that left the working tree dirty after a plain `pytest`.
+    out = tmp_path / "coverage.json"
+    assert module.main(["--json", str(out)]) == 0
+    assert out.is_file(), "generator did not honour --json"
