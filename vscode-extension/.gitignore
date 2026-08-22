@@ -1,0 +1,12 @@
+# Build artifacts. `.vscodeignore` already excludes these from the packaged
+# .vsix, but nothing kept them out of git: `npm install && npm run compile`
+# left node_modules/ and out/ as untracked noise in every status.
+node_modules/
+out/
+*.vsix
+
+# Not tracked today. The extension builds with `npm install`, so adding a lock
+# would change the build contract (and argue for `npm ci` in CI); worth doing
+# for supply-chain reasons, but as a deliberate decision rather than a side
+# effect of someone running a build once.
+package-lock.json

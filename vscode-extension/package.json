@@ -2,7 +2,7 @@
   "name": "agent-audit-kit",
   "displayName": "AgentAuditKit",
   "description": "Security scanner for MCP-connected AI agent pipelines",
-  "version": "0.3.2",
+  "version": "0.3.3",
   "publisher": "sattyamjjain",
   "license": "MIT",
   "repository": {
@@ -48,7 +48,24 @@
           "description": "Automatically run a scan when a file is saved."
         }
       }
-    }
+    },
+    "commands": [
+      {
+        "command": "agent-audit-kit.scan",
+        "title": "Scan workspace for MCP/agent security issues",
+        "category": "AgentAuditKit"
+      },
+      {
+        "command": "agent-audit-kit.showOutput",
+        "title": "Show output log",
+        "category": "AgentAuditKit"
+      },
+      {
+        "command": "agent-audit-kit.loadSarif",
+        "title": "Load SARIF report as diagnostics",
+        "category": "AgentAuditKit"
+      }
+    ]
   },
   "scripts": {
     "compile": "tsc -p ./",

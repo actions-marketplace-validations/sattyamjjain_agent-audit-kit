@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- **None of the VS Code extension's commands were reachable.** `sarifReader.ts` was known dead code, but the cause turned out to be wider than that one module: `package.json` declared no `contributes.commands` at all, while `extension.ts` registered `agent-audit-kit.scan` and `agent-audit-kit.showOutput` and `sarifReader.ts` registered `agent-audit-kit.loadSarif`. Three commands in code, zero in the manifest, so the Command Palette showed none of them. All three are declared now, and `activate()` calls `registerSarifCommands(context)`, which it never did — so the SARIF-to-diagnostics feature ran for the first time. Verified by `npm run compile`: `out/sarifReader.js` is emitted and required by `out/extension.js`. The SARIF reader keeps its own diagnostic collection (`agent-audit-kit-sarif`), so imported findings never overwrite scanned ones. Extension version 0.3.2 → 0.3.3.
+- `vscode-extension/.gitignore` was missing, which `.vscodeignore` already assumed existed by listing it. A single `npm install && npm run compile` left `node_modules/` and `out/` as untracked noise in every `git status`. Both are ignored now, along with `*.vsix`.
+- Removed a stale **draft** release for `v0.2.0`, created 2026-04-05 with no assets and superseded by 30 published releases. It sat at the top of the releases API response, so any tooling reading `.[0]` got a four-month-old draft instead of the current release. The `v0.2.0` tag is untouched, and the draft's body was backed up before deletion.
+
+
 ## [0.3.87] - 2026-08-22
 
 ### Fixed

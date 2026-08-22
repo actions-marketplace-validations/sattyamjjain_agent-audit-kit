@@ -16,7 +16,7 @@ Versioned independently of the Python package (its own `version` in `package.jso
 vscode-extension/
   src/
     extension.ts       # Entry point — activate/deactivate, runs the CLI, publishes diagnostics
-    sarifReader.ts     # SARIF → diagnostics + rule-doc hovers. NOT WIRED UP (see below)
+    sarifReader.ts     # SARIF → diagnostics. Wired up in v0.3.87 (see below)
   package.json         # Manifest — contributes.configuration only; no commands declared
   tsconfig.json        # TypeScript config
   README.md            # Marketplace-facing readme
@@ -29,7 +29,7 @@ vscode-extension/
 - **Output**: `./out/extension.js` (`main` in the manifest)
 - **Scan path**: `extension.ts` invokes the CLI via `child_process.execFile` — the extension carries no scanning logic of its own, so in-editor results always match `agent-audit-kit scan`.
 
-**`sarifReader.ts` is dead code.** It exports `loadSarif`, `applySarifToDiagnostics` and `registerSarifCommands`, but `extension.ts` imports only `vscode`, `child_process` and `path` and never calls any of them, and `package.json` declares no `contributes.commands` — so nothing can reach it from the UI either. Its header describes a second workflow ("open a SARIF file → this reader surfaces the same diagnostics") that does not currently run; the file itself notes it was scaffolded with a full publish deferred. Treat the described behaviour as unimplemented, not as a feature to document. Wiring it up means importing and calling `registerSarifCommands(context)` from `activate()` **and** declaring the commands in the manifest; doing only one of those leaves it unreachable.
+**`sarifReader.ts` is wired up as of v0.3.87.** It had been dead code since it was written: it exports `loadSarif`, `applySarifToDiagnostics` and `registerSarifCommands`, but `extension.ts` never imported it and `package.json` declared no `contributes.commands`, so nothing could reach it from code or from the UI. Both halves are now done — `activate()` calls `registerSarifCommands(context)`, and the manifest declares all three commands. Note the second half was a wider gap than this module: `agent-audit-kit.scan` and `agent-audit-kit.showOutput` were registered in code and undeclared too, so **none** of the extension's commands appeared in the Command Palette. All three are declared now. The SARIF reader uses its own diagnostic collection (`agent-audit-kit-sarif`) distinct from the extension's own `agent-audit-kit`, so imported findings do not overwrite scanned ones. Verified by `npm run compile`: `out/sarifReader.js` is emitted and required by `out/extension.js`.
 
 <!-- END AUTO-MANAGED -->
 
