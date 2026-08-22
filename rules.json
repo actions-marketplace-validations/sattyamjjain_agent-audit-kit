@@ -7284,7 +7284,7 @@
       ],
       "owasp_ast_references": [],
       "owasp_mcp_references": [],
-      "remediation": "Bump `semantic-kernel` to >= 1.39.4 in any Python manifest pinning Semantic Kernel. The rule fires only on the pin shape; a source detector for unsafe `InMemoryVectorStore(filter=...)` constructions is queued for v0.3.18 once the upstream filter API surface stabilises post-patch.",
+      "remediation": "Bump `semantic-kernel` to >= 1.39.4 in any Python manifest pinning Semantic Kernel. The rule fires only on the pin shape; This is a pin-only rule: it matches the dependency pin, not the `InMemoryVectorStore(filter=...)` construction itself. A source detector for that shape was scoped for v0.3.18 and has not been written, so a project that vendors the vulnerable code without pinning the package is not covered here.",
       "rule_id": "AAK-SK-INMEMORY-VECTORSTORE-FILTER-CVE-2026-26030-PIN-001",
       "sarif_name": "SemanticKernelInMemoryVectorStoreFilterRce",
       "severity": "critical",
