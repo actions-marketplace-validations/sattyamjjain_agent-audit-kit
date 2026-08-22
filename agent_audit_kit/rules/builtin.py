@@ -185,6 +185,7 @@ _AICM_TAGS: dict[str, list[str]] = {
     "AAK-MCP-FLORENCE2-CVE-2026-19984-001": ["IVS-04", "STA-08"],
     "AAK-MCP-CODEWHALE-CVE-2026-75858-001": ["IVS-04", "STA-08"],
     "AAK-MCP-MARIMO-CVE-2026-75149-001": ["IVS-04", "STA-08"],
+    "AAK-MCP-OMNIGENT-CVE-2026-62674-001": ["IVS-04", "IAM-01"],
     "AAK-MCP-NEOMJS-CVE-2026-18482-001": ["IVS-04", "STA-08"],
     "AAK-MCP-LANGBOT-CVE-2026-54449-001": ["IVS-04", "IAM-01"],
     "AAK-MCP-GRAFANA-CVE-2026-19516-001": ["IVS-04", "STA-08"],
@@ -7252,7 +7253,9 @@ _r(
     "exactly, never by prefix-matching the raw string; and return a generic "
     "error to the caller while logging the detail server-side.",
     sarif_name="CkanMcpServerCacheAndHostValidation",
-    cve_references=["CVE-2026-73846", "CVE-2026-73845", "CVE-2026-73844"],
+    cve_references=[
+        "CVE-2026-73846", "CVE-2026-73845", "CVE-2026-73844", "CVE-2026-53509",
+    ],
     owasp_mcp_references=["MCP09:2025"],
     owasp_agentic_references=["ASI06"],
     adversa_references=["ADV-SSRF-01"],
@@ -7636,6 +7639,34 @@ _r(
     cve_references=["CVE-2026-75149"],
     owasp_mcp_references=["MCP04:2025"],
     owasp_agentic_references=["ASI05"],
+    adversa_references=["ADV-INJECT-01"],
+)
+
+
+_r(
+    "AAK-MCP-OMNIGENT-CVE-2026-62674-001",
+    "Omnigent shared-agent swap injects a stdio MCP command (< 0.3.0)",
+    "`omnigent` before 0.3.0 checks `LEVEL_EDIT` on the session in "
+    "`PUT /sessions/{session_id}/agent` but never rejects a bound shared or "
+    "template agent whose `agent.session_id` is `None`. An authenticated user "
+    "with edit access to one session can therefore replace that shared agent "
+    "bundle through `omnigent/server/routes/sessions.py`, attach a stdio MCP "
+    "server, and have every later session that uses the shared agent launch an "
+    "attacker-chosen command through `omnigent/tools/mcp.py`, running with the "
+    "Omnigent runner's privileges (CVE-2026-62674, CVSS 3.1 9.0, CWE-94). The "
+    "blast radius is the point: the injection is written once into shared state "
+    "and executes for every consumer of it afterwards. Fixed in 0.3.0.",
+    Severity.CRITICAL,
+    Category.SUPPLY_CHAIN,
+    "Upgrade `omnigent` to >= 0.3.0 and pin it. Because the payload persists in a "
+    "shared agent bundle rather than in a single session, upgrading does not undo "
+    "an injection that already landed: audit shared and template agents for stdio "
+    "MCP server entries you did not add, and treat session edit rights as "
+    "equivalent to shared-agent edit rights until you are past 0.3.0.",
+    sarif_name="OmnigentSharedAgentMcpInjection",
+    cve_references=["CVE-2026-62674"],
+    owasp_mcp_references=["MCP06:2025"],
+    owasp_agentic_references=["ASI03"],
     adversa_references=["ADV-INJECT-01"],
 )
 

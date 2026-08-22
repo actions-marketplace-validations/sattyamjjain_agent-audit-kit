@@ -376,6 +376,24 @@ jobs:
   # --------------------------------------------------------------------------
   # 4. Create GitHub Release with auto-generated notes + signed bundle
   # --------------------------------------------------------------------------
+  # --------------------------------------------------------------------------
+  # 5. Sync repo metadata.
+  #
+  #    Called directly rather than left to sync-repo-metadata.yml's own
+  #    `release: published` trigger, which cannot fire: the release above is
+  #    created with GITHUB_TOKEN, and GitHub does not raise workflow triggers
+  #    from GITHUB_TOKEN events. That is why that workflow had never run once,
+  #    and why the repo description drifted on every release while
+  #    `description-liveness` caught it and a human pasted the fix by hand.
+  # --------------------------------------------------------------------------
+  metadata-sync:
+    name: Sync repo metadata
+    needs: github-release
+    uses: ./.github/workflows/sync-repo-metadata.yml
+    permissions:
+      contents: write
+    secrets: inherit
+
   github-release:
     name: Create GitHub Release
     runs-on: ubuntu-latest

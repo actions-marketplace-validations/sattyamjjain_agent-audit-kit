@@ -1,8 +1,8 @@
 {
   "schema_version": "1",
-  "last_updated": "2026-08-21T18:36:57Z",
+  "last_updated": "2026-08-22T08:12:58Z",
   "aak_version": "0.3.86",
-  "rule_count": 319,
+  "rule_count": 320,
   "coverage": [
     {
       "asi_id": "ASI01",
@@ -641,7 +641,7 @@
     {
       "asi_id": "ASI03",
       "title": "Memory Poisoning",
-      "rule_density": 69,
+      "rule_density": 70,
       "rules": [
         {
           "id": "AAK-A2A-005",
@@ -925,6 +925,17 @@
             "CVE-2026-48814"
           ],
           "aicm_references": []
+        },
+        {
+          "id": "AAK-MCP-OMNIGENT-CVE-2026-62674-001",
+          "severity": "critical",
+          "cve_references": [
+            "CVE-2026-62674"
+          ],
+          "aicm_references": [
+            "IAM-01",
+            "IVS-04"
+          ]
         },
         {
           "id": "AAK-MCP-OPENCLAW-CVE-2026-62195-001",
@@ -2408,6 +2419,7 @@
           "id": "AAK-MCP-CKAN-CVE-2026-73846-001",
           "severity": "medium",
           "cve_references": [
+            "CVE-2026-53509",
             "CVE-2026-73844",
             "CVE-2026-73845",
             "CVE-2026-73846"

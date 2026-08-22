@@ -16,6 +16,18 @@ open.
 > issue. The per-CVE latency figures in the tables are **measurements recorded at
 > the time**, kept as dated facts, not a standing promise.
 
+## 2026-08-22: one new pin, and one already covered
+
+The second row is the useful one: an advisory that needs no change, because a pin
+shipped a week ago already sits above its fix version. Recording it beats
+re-deriving it, and beats adding a duplicate rule that would report one dependency
+twice.
+
+| CVE | Reference | AAK rule / disposition | Triaged |
+|---|---|---|---|
+| CVE-2026-62674 (`omnigent` < 0.3.0, CWE-94, CVSS 3.1 9.0 - `PUT /sessions/{session_id}/agent` checks `LEVEL_EDIT` on the session but never rejects a bound shared or template agent whose `agent.session_id` is `None`, so an editor replaces the shared bundle, attaches a stdio MCP server, and every later session using that agent launches an attacker-chosen command with the runner's privileges) | [GHSA-jrrm-9hc7-2v3h](https://github.com/omnigent-ai/omnigent/security/advisories/GHSA-jrrm-9hc7-2v3h) | **In scope, pinned** `AAK-MCP-OMNIGENT-CVE-2026-62674-001` (SUPPLY_CHAIN, CRITICAL): floor `omnigent >= 0.3.0`, confirmed by the advisory as pip `omnigent`, `< 0.3.0`, patched 0.3.0, and present on PyPI (0.10.0 latest). Bounded regex: npm also carries an `omnigent`, an unrelated "AI Agent Platform with Built-in Economy" ([Paparusi/omniagent](https://github.com/Paparusi/omniagent)) published only at 2.0.0 with no 0.x line at all, which is what shows they are different projects. The remediation says more than "upgrade": the payload persists in shared state, so an injection that already landed survives the upgrade and the shared/template agents need auditing. (#629) | 2026-08-22 |
+| CVE-2026-53509 (`@aborruso/ckan-mcp-server` < 0.4.106, CWE-918, CVSS 3.1 5.7 - the SSRF filter added for CVE-2026-33060 compares the parsed hostname against `localhost` only, so aliases such as `ip6-localhost` and `ip6-loopback` are neither equal to `localhost`, nor dotted IPv4, nor bracketed IPv6, pass the check, and still resolve to loopback at connect time) | [GHSA-g84h-j7jj-x32p](https://github.com/ondata/ckan-mcp-server/security/advisories/GHSA-g84h-j7jj-x32p) | **In scope, already covered - no rule change.** `AAK-MCP-CKAN-CVE-2026-73846-001` has carried a floor of `>= 0.4.112` since 2026-08-15, which is above this advisory's 0.4.106 fix, so every version this CVE affects already fires. The CVE is added to that rule's `cve_references` so the coverage is auditable, and no second pin was added: two pins on one package report one dependency twice, which is the trap the CKAN rule itself was created to avoid when it took three CVEs at once. Worth noting the shape - this is an **incomplete-fix** CVE, the second on this package after CVE-2026-33060, and a floor set from the newest advisory is what made the coverage free. (#630) | 2026-08-22 |
+
 ## 2026-08-21 (later): Spring AI, and the Maven boundary for the third time
 
 | CVE | Reference | AAK rule / disposition | Triaged |

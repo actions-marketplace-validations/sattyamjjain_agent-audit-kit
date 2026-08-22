@@ -143,6 +143,11 @@ _DEEPSEEK_TUI_RE = re.compile(
 # project pinning an *old* npm marimo would be a false positive, and that is the
 # accepted cost of covering three real pip CVEs on the same name.
 _MARIMO_RE = re.compile(r"(?<![\w./-])marimo(?![\w-])" + _VER_OPT, re.IGNORECASE)
+# `omnigent` (the PyPI agent framework). Bounded because npm carries an unrelated
+# `omnigent` -- "The AI Agent Platform with Built-in Economy" (Paparusi/omniagent),
+# published only at 2.0.0 with no 0.x line at all, which is what shows they are
+# different projects. Its single release sits above this floor either way.
+_OMNIGENT_RE = re.compile(r"(?<![\w./-])omnigent(?![\w-])" + _VER_OPT, re.IGNORECASE)
 # `neo.mjs` (npm). The dot is inside the name, so the right boundary must not treat
 # it as a separator; the lookbehind keeps it off scoped forks.
 _NEOMJS_RE = re.compile(r"(?<![\w./-])neo\.mjs(?![\w.-])" + _VER_OPT, re.IGNORECASE)
@@ -510,6 +515,15 @@ _PINS: tuple[_Pin, ...] = (
     # is a true statement about the package rather than an over-reach on this one CVE.
     _Pin("AAK-MCP-MARIMO-CVE-2026-75149-001", "marimo", ("marimo",),
          (0, 23, 15), fix_label="0.23.15", regexes=(_MARIMO_RE,)),
+    # --- 2026-08-21 wave ---
+    #
+    # omnigent: PUT /sessions/{id}/agent checks LEVEL_EDIT on the session but does
+    # not reject a bound shared/template agent whose agent.session_id is None, so
+    # an editor swaps the shared bundle, adds a stdio MCP server, and every later
+    # session using that shared agent launches an attacker-chosen command.
+    # GHSA-jrrm-9hc7-2v3h: pip `omnigent` < 0.3.0, patched 0.3.0.
+    _Pin("AAK-MCP-OMNIGENT-CVE-2026-62674-001", "omnigent", ("omnigent",),
+         (0, 3, 0), fix_label="0.3.0", regexes=(_OMNIGENT_RE,)),
     # --- 2026-08-20 wave ---
     #
     # neo.mjs: command injection in the file-system MCP server (checkSyntax /

@@ -1,6 +1,6 @@
 # AgentAuditKit standards crosswalk
 
-Every AgentAuditKit rule (319 total; 306 mapped) against two agentic-security standards. Static and deterministic — generated from the committed rule registry and compliance mappings, no scan required.
+Every AgentAuditKit rule (320 total; 307 mapped) against two agentic-security standards. Static and deterministic — generated from the committed rule registry and compliance mappings, no scan required.
 
 **Standards**
 
@@ -198,6 +198,7 @@ Every AgentAuditKit rule (319 total; 306 mapped) against two agentic-security st
 | `AAK-MCP-N8NMCP-CVE-2026-54052-001` | critical | supply-chain | Choose supported MCP projects when possible; Sign and verify MCP messages; Track and patch MCP related vulnerabilities; Scan local network for open or vulnerable MCP servers | ASI04 Supply Chain Vulnerabilities |
 | `AAK-MCP-NEOMJS-CVE-2026-18482-001` | high | supply-chain | Design for boundaries; Validate parameters; Constrain and sandbox tool execution; Filter and monitor output pipelines and chained execution | ASI05 Unexpected Code Execution |
 | `AAK-MCP-NOAUTH-DEFAULT` | high | mcp-config | Design for boundaries; Sign and verify MCP messages; Scan local network for open or vulnerable MCP servers | ASI03 Identity & Privilege Abuse |
+| `AAK-MCP-OMNIGENT-CVE-2026-62674-001` | critical | supply-chain | Design for boundaries; Sign and verify MCP messages; Scan local network for open or vulnerable MCP servers | ASI03 Identity & Privilege Abuse |
 | `AAK-MCP-OPENAPI-BLOATED-PARAMS-001` | low | tool-poisoning | Filter and monitor output pipelines and chained execution | — |
 | `AAK-MCP-OPENAPI-LAZY-DESCRIPTION-001` | medium | tool-poisoning | Filter and monitor output pipelines and chained execution | — |
 | `AAK-MCP-OPENAPI-TANGLED-METHODS-001` | medium | tool-poisoning | Filter and monitor output pipelines and chained execution | — |

@@ -79,11 +79,17 @@ def test_coverage_doc_exists_and_lists_every_asi() -> None:
 
 
 def test_gen_coverage_script_runs_clean() -> None:
-    """scripts/gen_owasp_coverage.py must exit 0 (no gaps, no write error)."""
+    """scripts/gen_owasp_coverage.py must exit 0 (no gaps, no write error).
+
+    Called as ``main([])``, not ``main()``. Since v0.3.87 ``argv=None`` means
+    "read the real command line", so a bare ``main()`` under pytest would parse
+    pytest's own arguments and exit 2. Passing ``[]`` is how a caller says it
+    wants no arguments -- which is what this test means.
+    """
     script = REPO_ROOT / "scripts" / "gen_owasp_coverage.py"
     spec = importlib.util.spec_from_file_location("gen_owasp_coverage", script)
     assert spec is not None and spec.loader is not None
     module = importlib.util.module_from_spec(spec)
     sys.modules["gen_owasp_coverage"] = module
     spec.loader.exec_module(module)
-    assert module.main() == 0
+    assert module.main([]) == 0

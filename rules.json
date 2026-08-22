@@ -3793,7 +3793,8 @@
       "cve_references": [
         "CVE-2026-73846",
         "CVE-2026-73845",
-        "CVE-2026-73844"
+        "CVE-2026-73844",
+        "CVE-2026-53509"
       ],
       "description": "`@aborruso/ckan-mcp-server`, an MCP server for querying CKAN open-data portals, before 0.4.112 carries three related defects. `canonicalizeParams` in `src/utils/cache.ts` serialises request parameters without escaping `&`, `=` or `|`, so distinct logical parameter sets collapse to the same `buildCacheKey` output and an attacker can prime the shared cache with a response another user's different query then receives (CVE-2026-73846, CVSS 6.5). `isValidMqaServer`, used by `ckan_get_mqa_quality` and `ckan_get_mqa_quality_details` in `src/tools/quality.ts`, validates the `server_url` parameter with a prefix-only regular expression for `dati.gov.it`, which suffix-host and URL-userinfo forms defeat, letting a caller point the tool at an attacker-controlled host and receive a spoofed response (CVE-2026-73845, CVSS 5.3). Error paths reflect raw upstream response bodies and internal exception text \u2014 hostnames, internal IPs, database errors, stack fragments \u2014 back to the caller instead of a sanitised message (CVE-2026-73844, CVSS 3.7). All three are fixed in 0.4.112.",
       "incident_references": [],
@@ -4991,6 +4992,35 @@
       "sarif_name": "McpNoAuthDefault",
       "severity": "high",
       "title": "MCP server unauthenticated-by-default / fail-open authentication"
+    },
+    {
+      "adversa_references": [
+        "ADV-INJECT-01"
+      ],
+      "aicm_references": [
+        "IVS-04",
+        "IAM-01"
+      ],
+      "auto_fixable": false,
+      "category": "supply-chain",
+      "cve_references": [
+        "CVE-2026-62674"
+      ],
+      "description": "`omnigent` before 0.3.0 checks `LEVEL_EDIT` on the session in `PUT /sessions/{session_id}/agent` but never rejects a bound shared or template agent whose `agent.session_id` is `None`. An authenticated user with edit access to one session can therefore replace that shared agent bundle through `omnigent/server/routes/sessions.py`, attach a stdio MCP server, and have every later session that uses the shared agent launch an attacker-chosen command through `omnigent/tools/mcp.py`, running with the Omnigent runner's privileges (CVE-2026-62674, CVSS 3.1 9.0, CWE-94). The blast radius is the point: the injection is written once into shared state and executes for every consumer of it afterwards. Fixed in 0.3.0.",
+      "incident_references": [],
+      "limitations": "",
+      "owasp_agentic_references": [
+        "ASI03"
+      ],
+      "owasp_ast_references": [],
+      "owasp_mcp_references": [
+        "MCP06:2025"
+      ],
+      "remediation": "Upgrade `omnigent` to >= 0.3.0 and pin it. Because the payload persists in a shared agent bundle rather than in a single session, upgrading does not undo an injection that already landed: audit shared and template agents for stdio MCP server entries you did not add, and treat session edit rights as equivalent to shared-agent edit rights until you are past 0.3.0.",
+      "rule_id": "AAK-MCP-OMNIGENT-CVE-2026-62674-001",
+      "sarif_name": "OmnigentSharedAgentMcpInjection",
+      "severity": "critical",
+      "title": "Omnigent shared-agent swap injects a stdio MCP command (< 0.3.0)"
     },
     {
       "adversa_references": [],

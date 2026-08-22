@@ -186,8 +186,12 @@ def main(argv: list[str] | None = None) -> int:
         action="store_true",
         help="Skip writing the JSON artefact (keeps legacy MD/README behaviour)",
     )
-    # Default to [] not sys.argv when invoked as `main()` from tests.
-    args = parser.parse_args(argv if argv is not None else [])
+    # `argv is None` means "called as a CLI", so read the real command line.
+    # This used to parse `[]` in that case, which made every documented flag a
+    # no-op from the shell: `--json /tmp/x` printed in --help, was accepted
+    # without error, and wrote to the default path anyway. Callers that want no
+    # arguments pass `[]` explicitly, which is what the tests do.
+    args = parser.parse_args(sys.argv[1:] if argv is None else argv)
 
     coverage = build_coverage()
     missing = [asi for asi in ASI_TITLES if not coverage.get(asi)]

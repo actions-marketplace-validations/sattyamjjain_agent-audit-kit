@@ -25,12 +25,42 @@ def _load_module():
     return module
 
 
-@pytest.fixture(scope="module", autouse=True)
-def _regenerate(tmp_path_factory) -> None:
+@pytest.fixture(scope="module")
+def regenerated(tmp_path_factory) -> dict:
+    """Generate into a temp path and return the payload.
+
+    It used to regenerate into the canonical repo path, autouse, so merely
+    running pytest rewrote a tracked file and left the working tree dirty --
+    every session, for a timestamp nobody changed. A test that mutates tracked
+    state is a test you have to remember to undo, and this one was quietly
+    undone by hand many times.
+    """
     module = _load_module()
-    # Always regenerate into the canonical path before the assertions.
-    rc = module.main([])
+    out = tmp_path_factory.mktemp("owasp") / "coverage.json"
+    rc = module.main(["--json", str(out)])
     assert rc == 0, "gen_owasp_coverage.py failed (coverage gap?)"
+    return json.loads(out.read_text(encoding="utf-8"))
+
+
+def _without_timestamp(payload: dict) -> dict:
+    """Everything the generator derives, minus the one field that always differs."""
+    return {k: v for k, v in payload.items() if k != "last_updated"}
+
+
+def test_committed_json_matches_a_fresh_generation(regenerated: dict) -> None:
+    """The staleness check the autouse fixture was papering over.
+
+    Regenerating into the canonical path made every run pass by construction:
+    the assertions then read the file the fixture had just written. Comparing a
+    temp generation against the committed copy is what actually catches drift,
+    and ignoring `last_updated` is what stops a wall-clock field reporting drift
+    that is not there.
+    """
+    committed = json.loads(JSON_PATH.read_text(encoding="utf-8"))
+    assert _without_timestamp(committed) == _without_timestamp(regenerated), (
+        "public/owasp-agentic-coverage.json is stale -- run "
+        "`python scripts/gen_owasp_coverage.py` and commit the result."
+    )
 
 
 def test_json_file_exists() -> None:

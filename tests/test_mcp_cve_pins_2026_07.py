@@ -1081,10 +1081,20 @@ def test_ckan_later_release_passes(tmp_path: Path) -> None:
     assert _CKAN not in _ids(tmp_path, "package.json", content)
 
 
-def test_ckan_one_pin_carries_all_three_cves() -> None:
+def test_ckan_one_pin_carries_every_cve_its_floor_covers() -> None:
+    """One pin, four CVEs, and the fourth arrived free.
+
+    Three came from the 2026-08-15 batch, which shared a package and a fix
+    version. CVE-2026-53509 (2026-08-22) is fixed in 0.4.106, below this pin's
+    0.4.112 floor, so it was already being reported before it was published --
+    recorded here rather than given a second pin that would report one
+    dependency twice.
+    """
     from agent_audit_kit.rules.builtin import RULES
     refs = set(RULES[_CKAN].cve_references)
-    assert refs == {"CVE-2026-73846", "CVE-2026-73845", "CVE-2026-73844"}
+    assert refs == {
+        "CVE-2026-73846", "CVE-2026-73845", "CVE-2026-73844", "CVE-2026-53509",
+    }
 
 
 def test_ckan_fixtures_positive_and_negative() -> None:
