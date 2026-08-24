@@ -53,9 +53,16 @@ fp-check:
 	  || (echo "results.json is stale - run 'make fp', re-adjudicate by hand, and commit" && exit 1)
 	@python scripts/sync_fp_badge.py --check
 
-## count-check: fail if any tracked markdown carries a stale rule/scanner count (repo-wide, minus changelogs + dated artifacts)
+## count-check: fail if ANY rendered count is stale. Two guards, because they cover
+## different halves and each one alone gives a false all-clear:
+##   check_counts.py     - unmarked prose ("N rules across M categories") in tracked *.md
+##   sync_rule_count.py  - generated surfaces: the shields badge + alt text, action.yml,
+##                         __init__.py, docs/rules.md, and every <!-- rule-count --> anchor
+## The badge sat outside check_counts.py's phrase list, so `make count-check` reported
+## clean with a stale badge until v0.3.88. Both now run under the one target.
 count-check:
 	@PYTHONPATH=. python scripts/check_counts.py
+	@PYTHONPATH=. python scripts/sync_rule_count.py --check
 
 ## cve-latency: regenerate docs/cve-latency.md from the ledger (offline, deterministic)
 cve-latency:

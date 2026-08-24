@@ -123,6 +123,11 @@ _TOTAL_ANCHOR_DOCS = (
     # carried moved with the content they annotated.
     "docs/comparisons.md",
     "docs/STATE-OF-MCP-SECURITY-2026.md",
+    # v0.3.88: the docs landing page carried a bare "320 detection rules". The
+    # phrase pattern in check_counts.py caught it when it drifted, but catching
+    # drift and preventing it are different jobs -- every literal that a human
+    # has to retype is a literal that eventually disagrees with the registry.
+    "docs/index.md",
 )
 
 # docs/rules.md ships a per-category Summary table. It is regenerated wholesale

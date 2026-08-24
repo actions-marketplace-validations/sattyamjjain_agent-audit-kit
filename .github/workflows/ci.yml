@@ -54,3 +54,33 @@ jobs:
 
       - name: Verify score
         run: agent-audit-kit score .
+
+  counts:
+    name: Rendered counts match the registry
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.12'
+
+      - name: Install dependencies
+        run: pip install -e ".[dev]"
+
+      # The matrix job above already runs these via pytest. This job exists so a
+      # count failure is legible: "Rendered counts match the registry" names the
+      # problem, where a red 4-way matrix does not. Same reason link-check is its
+      # own job rather than a pytest case.
+      #
+      # Both guards run, because each alone gives a false all-clear:
+      # check_counts.py reads unmarked prose and has no pattern for the shields
+      # badge; sync_rule_count.py --check owns the badge, the anchors and the
+      # generated docs but never looks at free prose.
+      - name: Counts (prose + generated surfaces)
+        run: make count-check
+
+      # The scanner constant must equal the real registry size, not the number of
+      # files in scanners/. Cheap, and it is the invariant that decoupled once.
+      - name: Scanner count matches the registry
+        run: python scripts/sync_scanner_count.py --check
