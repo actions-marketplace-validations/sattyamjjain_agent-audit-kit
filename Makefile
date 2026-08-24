@@ -13,7 +13,8 @@ RESULTS  := $(RESEARCH)/results.json
 
 .PHONY: report corpus report-check count-check test lint typecheck repo-description \
         cve-latency cve-latency-check cve-latency-refresh \
-        remediation-corpus remediation-corpus-check
+        remediation-corpus remediation-corpus-check \
+        fp fp-check
 
 ## report: regenerate results.json from the corpus + manifest (offline, deterministic)
 report:
@@ -31,6 +32,26 @@ report-check:
 	@python $(RESEARCH)/run_report.py --corpus $(CORPUS) --registry-manifest $(MANIFEST) --out /tmp/aak-report-check.json >/dev/null
 	@diff -q $(RESULTS) /tmp/aak-report-check.json >/dev/null && echo "report is up to date" \
 	  || (echo "results.json is stale — run 'make report' and commit" && exit 1)
+
+## fp: re-measure the benign-slice false-positive benchmark and refresh every artifact
+## it feeds (slice manifest, results.json, README badge). Offline, deterministic, ~5s.
+## The adjudication in adjudication.json is a HUMAN judgement and is never regenerated —
+## re-running this after a rule change requires re-adjudicating the findings by hand.
+fp:
+	python benchmarks/false_positive/corpus.py --write
+	python benchmarks/false_positive/run.py --write
+	python scripts/sync_fp_badge.py
+
+## fp-check: fail if any false-positive artifact is stale vs a fresh derivation (drift guard).
+## This is the guard that was missing: the corpus manifest grew 1,374 -> 1,641 servers, the
+## benign slice 368 -> 536, and the published rate went on describing a slice that no longer
+## existed because nothing checked.
+fp-check:
+	@python benchmarks/false_positive/corpus.py --check
+	@python benchmarks/false_positive/run.py --out /tmp/aak-fp-check.json >/dev/null
+	@diff -q benchmarks/false_positive/results.json /tmp/aak-fp-check.json >/dev/null && echo "fp results are up to date" \
+	  || (echo "results.json is stale - run 'make fp', re-adjudicate by hand, and commit" && exit 1)
+	@python scripts/sync_fp_badge.py --check
 
 ## count-check: fail if any tracked markdown carries a stale rule/scanner count (repo-wide, minus changelogs + dated artifacts)
 count-check:

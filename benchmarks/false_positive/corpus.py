@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Benign-slice derivation for the false-positive benchmark.
 
-Derives a BENIGN SLICE from the committed 1,374-config corpus manifest
+Derives a BENIGN SLICE from the committed corpus manifest
 (`research/state-of-mcp-2026/corpus/registry-manifest.json`) via an explicit,
 pre-registered, NON-CIRCULAR predicate. "Benign" is a property of the server's
 own published metadata — it is deliberately NOT defined as "AAK found nothing".
@@ -117,10 +117,99 @@ def benign_slice(manifest_path: Path | None = None) -> list[dict[str, Any]]:
     return sorted(slice_, key=lambda s: str(s.get("name")))
 
 
-if __name__ == "__main__":
-    servers = benign_slice()
+# Fields carried into the published slice manifest. `config` is deliberately
+# excluded: it is derived from the upstream record and would double the file for
+# no provenance value. Everything here is the server's own registry metadata.
+_PROVENANCE_FIELDS = (
+    "name",
+    "version",
+    "transport",
+    "auth_mode",
+    "source_url",
+    "registry_status",
+    "published_at",
+    "fetched_at",
+)
+
+
+def slice_manifest(manifest_path: Path | None = None) -> dict[str, Any]:
+    """The benign slice as a citable, auditable artifact.
+
+    The predicate makes the slice *re-derivable*; this makes it *inspectable*.
+    Without it a reader has to run the code to learn which servers were measured,
+    which is the difference between a reproducible number and a checkable one.
+
+    Provenance per server is the registry's own: `source_url` (the endpoint the
+    server publishes), `version`, `registry_status`, `published_at`, and the
+    `fetched_at` date of the snapshot it was read from. Corpus-level provenance
+    is the upstream API URL carried through from the manifest.
+    """
+    path = manifest_path or MANIFEST
+    upstream = json.loads(path.read_text(encoding="utf-8"))
+    servers = benign_slice(path)
     from collections import Counter
-    print(f"benign slice: n = {len(servers)}")
+
+    return {
+        "predicate": PREDICATE,
+        "source": upstream.get("source"),
+        "source_fetched_at": upstream.get("fetched_at"),
+        "upstream_servers": len(upstream.get("servers") or []),
+        "n": len(servers),
+        "auth_mode_distribution": dict(
+            sorted(Counter(s.get("auth_mode") for s in servers).items())
+        ),
+        "transport_distribution": dict(
+            sorted(Counter(s.get("transport") for s in servers).items())
+        ),
+        "servers": [
+            {k: s.get(k) for k in _PROVENANCE_FIELDS if s.get(k) is not None}
+            for s in servers
+        ],
+    }
+
+
+SLICE_JSON = _HERE / "benign-slice.json"
+
+
+def main() -> int:
+    import argparse
+
+    ap = argparse.ArgumentParser(description="Derive and inspect the benign slice.")
+    ap.add_argument(
+        "--write", action="store_true", help="(Re)write benign-slice.json."
+    )
+    ap.add_argument(
+        "--check",
+        action="store_true",
+        help="Exit 1 if benign-slice.json is stale vs a fresh derivation.",
+    )
+    args = ap.parse_args()
+
+    data = slice_manifest()
+    blob = json.dumps(data, indent=2, sort_keys=True) + "\n"
+
+    if args.check:
+        current = SLICE_JSON.read_text(encoding="utf-8") if SLICE_JSON.is_file() else ""
+        if current != blob:
+            print(
+                "benign-slice.json is stale vs the corpus manifest - run "
+                "'make fp' and commit",
+                flush=True,
+            )
+            return 1
+        print(f"benign-slice.json is up to date (n = {data['n']})")
+        return 0
+
+    if args.write:
+        SLICE_JSON.write_text(blob, encoding="utf-8")
+        print(f"wrote {SLICE_JSON.name} (n = {data['n']})")
+
+    print(f"benign slice: n = {data['n']}")
     print("predicate:", PREDICATE)
-    print("auth_mode dist:", dict(Counter(s["auth_mode"] for s in servers)))
-    print("transport dist:", dict(Counter(s["transport"] for s in servers)))
+    print("auth_mode dist:", data["auth_mode_distribution"])
+    print("transport dist:", data["transport_distribution"])
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

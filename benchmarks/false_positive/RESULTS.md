@@ -1,37 +1,48 @@
 # Benign-slice HIGH/CRITICAL false-positive rate — AgentAuditKit
 
 > Generated from `benchmarks/false_positive/run.py` over a benign slice derived
-> by `corpus.py`. Run date **2026-07-22** (post-#475). Offline, deterministic, no LLM.
-> Reproduce: `python benchmarks/false_positive/run.py`.
+> by `corpus.py`. Run date **2026-08-24**. Offline, deterministic, no LLM.
+> Reproduce: `make fp` (or `python benchmarks/false_positive/run.py`).
+> The slice itself is committed as [`benign-slice.json`](benign-slice.json), so
+> which servers were measured is checkable without running anything.
 
 ## Headline
 
-On a **368-config benign slice** of public MCP servers, AgentAuditKit produces
-**1 HIGH/CRITICAL finding** (0.27% of the slice, Wilson 95% CI [0.0%, 1.5%]).
-Hand-adjudicated: **0 false positives, 1 true positive**.
+On a **536-config benign slice** of public MCP servers, AgentAuditKit produces
+**6 HIGH/CRITICAL findings** (1.1% of the slice). Hand-adjudicated: **4 false
+positives, 1 true positive, 1 ambiguous**.
 
-**Benign-slice HIGH/CRITICAL false-positive rate = 0 / 1 = 0.0%** (Wilson 95%
-CI **[0.0%, 79.3%]**; n = 1, so the interval is very wide — stated plainly).
+**Benign-slice HIGH/CRITICAL false-positive rate = 4 / 6 = 66.7%** (Wilson 95%
+CI **[30.0%, 90.3%]**).
 
-### What changed (2026-07-20 → 2026-07-22)
+That is a large regression against the 0.0% published on 2026-07-22, and the
+reason is worth stating first: **the 0.0% was never re-measured after the corpus
+grew.** The manifest went from 1,374 to 1,641 registry servers and the benign
+slice from 368 to 536, and nothing re-ran the benchmark. The published number
+described a slice that no longer existed. There is now a drift guard
+(`make fp-check`) so that cannot recur silently.
 
-The 2026-07-20 run produced **4 HIGH/CRITICAL findings** (1.1%), hand-adjudicated
-**2 FP / 1 TP / 1 ambiguous → 2/4 = 50.0%**. Both false positives shared one root
-cause: `AAK-MCP-001` recognized only `Authorization`/`Bearer`/`X-API-Key`/`Api-Key`
-and **missed vendor-prefixed API-key headers**, so `ai.nefesh/human-state`
-(`X-Nefesh-Key`) and `ai.satoshidata/wallet-intelligence` (`X-WR-API-Key`) were
-wrongly flagged "without authentication". **[#475](https://github.com/sattyamjjain/agent-audit-kit/issues/475)**
-extended the matcher to the `X-*-Key` / `*-API-Key` credential-header family (and
-the x402 `X-PAYMENT` access gate), value-aware so a hardcoded literal still fires.
-That cleared the 2 false positives **and** the 1 ambiguous x402 finding, leaving
-only the genuine true positive (`ai.spala/public-mcp`, whose sole header is
-`Accept`). Benign-slice HIGH/CRITICAL FP rate: **50.0% → 0.0%** (n 4 → 1). No new
-findings were introduced elsewhere.
+This number is **untuned**. It was measured, adjudicated, and committed before
+any rule was changed, so the record shows what the scanner actually did rather
+than what it did after being adjusted to look better. The fix follows in the
+next commit, with its own re-measurement.
 
-This number is deliberately labelled *benign-slice HIGH/CRITICAL false-positive
-rate* — not "false-positive rate" unqualified. It says: of the high-severity
-findings AAK raises on servers that look benign, how many were wrong. The
-interval is wide because n is tiny — stated plainly rather than smoothed over.
+### How to read the badge
+
+The README badge reads `benign-slice 536 configs · HIGH/CRIT FP 4/6`. The two
+numbers answer different questions and both are needed:
+
+- **536** is how many benign configs were scanned. This is the sample size of
+  the *measurement*.
+- **4/6** is how many of the HIGH/CRITICAL findings raised on those 536 configs
+  were wrong. The denominator is small because the scanner is quiet on benign
+  input — 6 high-severity findings across 536 configs — not because little was
+  tested.
+
+The previous badge read `0/1 (n=1)`, which reads as "one thing was tested." It
+was not: 368 configs were tested and exactly one high-severity finding came out
+of them. The badge is now explicit about both figures because that phrasing
+misled every reader who did not open this file, which is the point of a badge.
 
 ## Method
 
@@ -43,12 +54,15 @@ own. It reuses:
 - `agent_audit_kit.engine.run_scan` — the scan entrypoint the `scan` CLI drives.
 - `agent_audit_kit.rules.builtin.RULES` — rule titles, severities, families.
 - the committed corpus manifest
-  `research/state-of-mcp-2026/corpus/registry-manifest.json` (1,374 configs).
+  `research/state-of-mcp-2026/corpus/registry-manifest.json` (1,641 servers,
+  fetched 2026-07-26 from `https://registry.modelcontextprotocol.io/v0/servers`).
 
 ### Pre-registered benign predicate
 
-A server is in the benign slice iff ALL hold (see `corpus.py`; also pre-registered
-in the repo README):
+A server is in the benign slice iff ALL hold (pre-registered in `corpus.py`, where
+the `PREDICATE` string has been byte-identical since its first commit
+[`412575c`](https://github.com/sattyamjjain/agent-audit-kit/commit/412575c) / #476 —
+so "pre-registered" is a checkable claim about git history, not an assurance):
 
 1. It is an **official MCP Registry** latest-version server.
 2. Its registry status is **active**.
@@ -60,8 +74,14 @@ in the repo README):
 "Benign" is a property of the server's own published metadata. It is **not**
 defined as "AAK found nothing" — that would make the measurement circular.
 
-**Resulting n = 368** (291 static-credential, 76 local-stdio, 1 header-nonsecret;
-26 declared-auth servers were excluded for appearing in a shipped CVE feed).
+**Resulting n = 536**: 1,641 upstream servers → 603 active with a declared auth
+mode → 67 excluded for appearing in a shipped CVE feed → **536**. By auth mode:
+400 static-credential, 135 local-stdio, 1 header-nonsecret. By transport: 399
+streamable-http, 133 stdio, 4 sse.
+
+The predicate is unchanged from 2026-07-20. It was **not** adjusted in this run —
+loosening a pre-registered predicate after seeing the result is the failure mode
+the pre-registration exists to prevent.
 
 **Stars substitution (honesty).** The commonly-suggested "repo ≥ N stars"
 conjunct is *not* used: neither the MCP Registry API nor the cached raw data
@@ -70,50 +90,74 @@ repos would require a networked GitHub-API pass — this benchmark is offline by
 construction. Predicate (1)+(2) is the offline curation proxy that stands in for
 the stars signal.
 
-## Findings profile (n = 368)
+### Provenance
 
-793 findings total (2.15 per config), almost all low-severity / advisory:
+[`benign-slice.json`](benign-slice.json) carries every server in the slice with
+its registry provenance: `name`, `version`, `source_url` (the endpoint the server
+publishes), `registry_status`, `published_at`, `auth_mode`, `transport`, and the
+`fetched_at` date of the snapshot. Corpus-level provenance — the upstream API URL
+and fetch date — is carried at the top of the file. `make fp-check` fails if it
+drifts from a fresh derivation.
+
+## Findings profile (n = 536)
+
+1,160 findings total (2.16 per config), almost all low-severity / advisory:
 
 | Severity | Findings |
 |----------|---------:|
-| critical | 4 |
+| critical | 6 |
 | high | 0 |
-| medium | 441 |
-| low | 348 |
+| medium | 665 |
+| low | 489 |
 
 ### Noisiest rules overall (all severities)
 
 | Rule | Severity | Findings | Note |
 |------|:--------:|---------:|------|
-| `AAK-MCP-ATTEST-001` | MEDIUM | 368 | Advisory-posture rule — fires on every config (no attestation); excluded from the report headline as advisory. |
-| `AAK-OAUTH-008` | LOW | 275 | Expected on static-credential servers (no RFC 9728 discovery). |
-| `AAK-MCP-005` | MEDIUM | 73 | `npx`/`uvx` fetch-and-execute — a real supply-chain pattern, MEDIUM. |
-| `AAK-MCP-007` | LOW | 73 | Advisory-posture. |
-| `AAK-MCP-001` | **CRITICAL** | 4 | The only HIGH/CRITICAL rule that fired — adjudicated below. |
+| `AAK-MCP-ATTEST-001` | MEDIUM | 536 | Advisory-posture rule — fires on every config (no attestation); excluded from the report headline as advisory. |
+| `AAK-OAUTH-008` | LOW | 366 | Expected on static-credential servers (no RFC 9728 discovery). |
+| `AAK-MCP-005` | MEDIUM | 123 | `npx`/`uvx` fetch-and-execute — a real supply-chain pattern, MEDIUM. |
+| `AAK-MCP-007` | LOW | 123 | Advisory-posture. |
+| `AAK-MCP-001` | **CRITICAL** | 6 | The only HIGH/CRITICAL rule that fired — adjudicated below. |
 
 The MEDIUM count is inflated by one advisory rule (`AAK-MCP-ATTEST-001`) that
 fires on 100% of configs by design; it is not an exploitable misconfiguration.
 Only `AAK-MCP-001` produced HIGH/CRITICAL findings, so it is the whole of the FP
-surface here.
+surface here — as it was in both previous runs.
 
-## Adjudication (single rater, 2026-07-20)
+## Adjudication (single rater, 2026-08-24)
 
 Full table in [`triage.md`](triage.md). Summary:
 
 | # | Rule | Config | Verdict | Reason |
 |--:|------|--------|:------:|--------|
-| 1 | `AAK-MCP-001` | `ai.nefesh/human-state` | **FP** | `X-Nefesh-Key` API-key header = auth; rule only sees `Authorization`/`Bearer`. |
-| 2 | `AAK-MCP-001` | `ai.satoshidata/wallet-intelligence` | **FP** | `X-WR-API-Key` API-key header = auth; same gap. |
-| 3 | `AAK-MCP-001` | `ai.lattiq/x402-trading-signals` | ambiguous | `X-PAYMENT` (x402 pay-to-access) gates access but isn't identity auth. |
-| 4 | `AAK-MCP-001` | `ai.spala/public-mcp` | TP | only header is `Accept`; genuinely no auth (server named `public-mcp`). |
+| 1 | `AAK-MCP-001` | `ai.spala/public-mcp` | TP | Only header is `Accept`; genuinely no auth (server named `public-mcp`). |
+| 2 | `AAK-MCP-001` | `ai.velarion/company-intelligence` | **FP** | `X-Velarion-Agent-Token` is a credential header; the recognised family ends at `-key`/`-api-token`. |
+| 3 | `AAK-MCP-001` | `br.com.signdocs/mcp-server` | **FP** | `X-SignDocs-Client-Id` + `X-SignDocs-Client-Secret` — an OAuth client-credentials pair, unrecognised. |
+| 4 | `AAK-MCP-001` | `co.curie/commerce` | **FP** | Server declares `Authorization` (`isSecret`) on remote 1; only remote 0 was converted. |
+| 5 | `AAK-MCP-001` | `co.huggingface/hf-mcp-server` | **FP** | Same: `Authorization` on remote 1; remote 0 is the `?login` OAuth entry point. |
+| 6 | `AAK-MCP-001` | `app.thoughtspot/mcp-server` | ambiguous | Snapshot says `static-credential` at v1.0.1; the live registry has moved to v0.5.0, so the July record cannot be re-verified. |
 
-### Root cause + fix filed
+Findings 4 and 5 were verified against the **live** MCP Registry at the same
+version as the snapshot, so the auth they declare is a fact and not an inference.
 
-Both false positives are the same gap: **`AAK-MCP-001` treats a remote server as
-unauthenticated unless it sees an `Authorization`/`Bearer` header, missing custom
-API-key credential headers** (`X-*-Key`, `X-API-Key`, `Api-Key`). Filed as
-[#475](https://github.com/sattyamjjain/agent-audit-kit/issues/475). Publishing the
-bad number and the fix is the point of this benchmark.
+### Two root causes, and only one of them is the scanner
+
+**A. Scanner gap (findings 2, 3).** [#475](https://github.com/sattyamjjain/agent-audit-kit/issues/475)
+extended `AAK-MCP-001` from `Authorization`/`Bearer` to the `X-*-Key` /
+`*-API-Key` family. Real vendors also authenticate with `-Token`, `-Secret`, and
+client-credential *pairs*. The 2026-07 fix generalised one suffix and stopped —
+which is why the same class of false positive came back the moment the slice grew.
+
+**B. Benchmark gap (findings 4, 5, and probably 6).**
+`fetch_registry._to_config()` builds the scannable config from `remotes[0]` only.
+A server that publishes an anonymous or login entry point first and its
+credentialled endpoint second loses its declared auth in conversion. AAK is then
+correct about the config it was handed and wrong about the server. This has been
+listed under Limitations since 2026-07-20; these are the first findings it has
+actually produced. They are counted as false positives rather than excused,
+because the finding text makes a claim about the *server* — but the fix belongs
+in the corpus builder, not the rule.
 
 ## Limitations (stated plainly)
 
@@ -124,13 +168,26 @@ bad number and the fix is the point of this benchmark.
 - **Single rater, no inter-rater agreement.** All verdicts are the maintainer's.
   There is no second independent adjudicator, so no agreement statistic is
   reported.
-- **Small n → wide interval.** Post-#475 only 1 HIGH/CRITICAL finding arises, so
-  the Wilson 95% CI on the FP rate spans [0%, 79%]. The point estimate (0%)
-  should not be read as precise; the interval is the honest summary. (The prior
-  2026-07-20 run had n = 4 and a 50% point estimate, CI [15%, 85%].)
+- **Small adjudication denominator → wide interval.** 6 HIGH/CRITICAL findings
+  across 536 configs gives a Wilson 95% CI of [30.0%, 90.3%] on the FP rate. The
+  point estimate (66.7%) should not be read as precise; the interval is the
+  honest summary. The *slice* is large; the number of high-severity findings it
+  provokes is small, and that is what bounds the precision of this rate.
 - **Config-level + conversion fidelity.** Registry servers are converted to
-  `.mcp.json` shape from their `remotes`/`packages` metadata (first remote only),
-  so a multi-remote server's auth may be under-represented in the scanned config.
+  `.mcp.json` shape from their `remotes`/`packages` metadata (**first remote
+  only**), so a multi-remote server's auth can be under-represented. This is no
+  longer hypothetical — see root cause B above.
+- **Snapshot vs live drift.** The manifest is a 2026-07-26 snapshot. Servers
+  republish, and at least one (`app.thoughtspot/mcp-server`) has changed version
+  since, which is why its finding is adjudicated ambiguous rather than guessed at.
 - **Scope is HIGH/CRITICAL.** MEDIUM/LOW findings (the bulk of the volume) are not
   adjudicated here; this measures the false-positive rate of the severities that
   drive operational action.
+
+## History
+
+| Run | Slice | HIGH/CRIT | FP / adjudicated | Rate | Note |
+|-----|------:|----------:|-----------------:|-----:|------|
+| 2026-07-20 | 368 | 4 | 2 / 4 | 50.0% | Custom API-key headers unrecognised. |
+| 2026-07-22 | 368 | 1 | 0 / 1 | 0.0% | Post-#475: `X-*-Key` family recognised. |
+| 2026-08-24 | 536 | 6 | 4 / 6 | 66.7% | Slice grew 368→536; `-Token`/`-Secret` families still unrecognised, plus 2 first-remote conversion artifacts. **Untuned.** |

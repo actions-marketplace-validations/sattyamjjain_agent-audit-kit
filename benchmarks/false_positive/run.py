@@ -144,11 +144,23 @@ def run_benchmark(servers: list[dict[str, Any]] | None = None) -> dict[str, Any]
 def main() -> int:
     ap = argparse.ArgumentParser(description=__doc__)
     ap.add_argument("--write", action="store_true", help="(Re)write results.json.")
+    ap.add_argument(
+        "--out",
+        default=None,
+        help=(
+            "Write the result to this path instead of results.json. The drift "
+            "guard uses it to render into a temp file and diff, so checking "
+            "never dirties the working tree (mirrors run_report.py --out)."
+        ),
+    )
     args = ap.parse_args()
 
     data = run_benchmark()
     blob = json.dumps(data, indent=2, sort_keys=True) + "\n"
-    if args.write:
+    if args.out:
+        Path(args.out).write_text(blob, encoding="utf-8")
+        print(f"wrote {args.out}")
+    elif args.write:
         RESULTS_JSON.write_text(blob, encoding="utf-8")
         print(f"wrote {RESULTS_JSON.relative_to(_REPO)}")
 

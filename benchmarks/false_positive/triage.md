@@ -64,3 +64,59 @@ fires). Re-running the harness on the same 368-config slice:
 - Ambiguous: **0** (the x402 `X-PAYMENT` case is now recognised as a declared access gate).
 - **Benign-slice HIGH/CRITICAL false-positive rate = 0 / 1 = 0.0%** (Wilson 95% CI [0.0%, 79.3%]; n = 1, interval very wide).
 - No new HIGH/CRITICAL findings were introduced elsewhere on the corpus (full-corpus AAK-MCP-001 configs 497 → 492, delta −5, 0 newly firing).
+
+## Adjudication — 2026-08-24 re-run (n = 6 HIGH/CRITICAL), UNTUNED
+
+The corpus manifest grew from 1,374 to 1,641 registry servers, and the benign
+slice with it: **368 → 536 configs**. Nobody re-ran the benchmark when the
+manifest was refreshed, so the published number was measured against a slice
+that no longer existed. This run is that re-measurement, and it is published
+**before** any rule change, so the untuned number is on the record.
+
+Six HIGH/CRITICAL findings, all `AAK-MCP-001`. Verified against the live MCP
+Registry where the record still matches the snapshot version.
+
+| # | Rule ID | Config | Verdict | One-line reason |
+|--:|---------|--------|:-------:|-----------------|
+| 1 | `AAK-MCP-001` | `ai.spala/public-mcp` | **TRUE POSITIVE** | Sole header is `Accept` (content negotiation, not auth); server is named `public-mcp`. Same verdict as 2026-07-22. |
+| 2 | `AAK-MCP-001` | `ai.velarion/company-intelligence` | **FALSE POSITIVE** | Authenticates with `X-Velarion-Agent-Token`. `_CUSTOM_AUTH_HEADER_RE` covers the `-key` family (`x-*-key`, `*-api-key`, `*-api-token`, `*-access-key`) but a vendor token ending plain `-token` matches none of them. |
+| 3 | `AAK-MCP-001` | `br.com.signdocs/mcp-server` | **FALSE POSITIVE** | Authenticates with `X-SignDocs-Client-Id` + `X-SignDocs-Client-Secret` — an OAuth client-credentials pair. Neither `-id` nor `-secret` is in the recognised family. |
+| 4 | `AAK-MCP-001` | `co.curie/commerce` | **FALSE POSITIVE** | The server *is* authenticated: remote 1 (`/api/mcp/{shop_id}`) declares `Authorization` with `isSecret: true`. Verified live at the same version (1.0.0). The scanned config is remote 0 only — see root cause B. |
+| 5 | `AAK-MCP-001` | `co.huggingface/hf-mcp-server` | **FALSE POSITIVE** | Same shape: remote 1 declares `Authorization` (`isSecret: true`); remote 0 is the `?login` OAuth entry point. Verified live at the same version (0.2.33). |
+| 6 | `AAK-MCP-001` | `app.thoughtspot/mcp-server` | **AMBIGUOUS** | The snapshot records `auth_mode: static-credential` at v1.0.1, which requires some remote to declare a secret header. The live registry has since moved to v0.5.0, where neither remote declares one, so the July record cannot be re-verified. Not counted as a false positive. |
+
+### Tally
+
+- False positives: **4**.
+- True positives: **1**.
+- Ambiguous: **1** (counts in the denominator, not as a false positive).
+- **Benign-slice HIGH/CRITICAL false-positive rate = 4 / 6 = 66.7%** (Wilson 95% CI **[30.0%, 90.3%]**).
+
+### Two root causes, and only one of them is the scanner
+
+**A. Scanner gap — the `#475` header family, one step out (findings 2, 3).**
+`#475` extended `AAK-MCP-001` from `Authorization`/`Bearer` to the `X-*-Key` /
+`*-API-Key` family. Real vendors also authenticate with `-Token`, `-Secret`, and
+client-credential *pairs* (`-Client-Id` + `-Client-Secret`). The 2026-07 fix
+generalised one suffix and stopped. This is AAK's defect and is fixed in the
+tuning commit that follows this one.
+
+**B. Benchmark gap — first-remote-only conversion (findings 4, 5, and probably 6).**
+`fetch_registry._to_config()` synthesises the scannable config from
+`remotes[0]`. When a server publishes an anonymous or login entry point first
+and its credentialled endpoint second, the converted config drops the auth the
+server actually declares, and AAK is then correct about the config it was handed
+and wrong about the server. `RESULTS.md` has listed this under Limitations since
+2026-07-20; these are the first findings it has actually produced. The finding
+text makes a claim about the *server*, so these count as false positives rather
+than being excused — but the fix belongs in the corpus builder, not the rule.
+
+### Follow-up
+
+Root cause A is fixed in the next commit (header family extended, with the
+untuned number already published above). Root cause B is fixed in
+`fetch_registry._to_config()` so future refreshes carry the credentialled
+remote's headers; the committed manifest predates that fix, so findings 4-6
+persist until the next `make corpus` refresh. That is stated rather than
+smoothed over, because a rate that improves because the corpus was quietly
+regenerated is not a rate anyone should trust.
