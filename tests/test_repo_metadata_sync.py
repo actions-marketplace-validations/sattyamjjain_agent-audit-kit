@@ -187,3 +187,45 @@ def test_readme_per_category_anchors_match_registry() -> None:
         f"Per-category anchors sum to {anchor_sum} but live registry has "
         f"{sum(live_counts.values())}. Run `python scripts/sync_rule_count.py`."
     )
+
+
+# ---------------------------------------------------------------------------
+# Dated artifacts keep the version they documented
+# ---------------------------------------------------------------------------
+
+
+def test_frozen_docs_are_excluded_from_the_version_rewrite() -> None:
+    """The module docstring's principle, implemented for more than one filename.
+
+    `sync_repo_metadata.py` has always said historical artifacts "should pin the
+    version they documented", but enforced it only for `release-notes-v*.md`. So
+    every release silently rewrote `@vX.Y.Z` inside dated launch collateral and
+    preset docs — editing a published social thread to quote a version it never
+    quoted. `scripts/check_counts.py` already treats those same paths as frozen,
+    so the two guards disagreed about what "frozen" meant.
+    """
+    from pathlib import Path
+
+    from scripts.sync_repo_metadata import _is_frozen, _iter_docs
+
+    frozen = [
+        Path("docs/launch/x-thread.md"),
+        Path("docs/launch/release-notes-v0.3.1.md"),
+        Path("docs/presets/mcp-ox-2026-04.md"),
+        Path("docs/changelog/archive/CHANGELOG.md"),
+    ]
+    for path in frozen:
+        assert _is_frozen(path), f"{path} must keep the version it documented"
+
+    live = [
+        Path("docs/ci-cd.md"),
+        Path("docs/getting-started.md"),
+        Path("docs/index.md"),
+    ]
+    for path in live:
+        assert not _is_frozen(path), f"{path} is live docs and must track the release"
+
+    # And the selector actually applies it, rather than the predicate being unused.
+    selected = {p.as_posix() for p in _iter_docs()}
+    assert not any("docs/launch/" in p for p in selected)
+    assert not any("docs/presets/" in p for p in selected)

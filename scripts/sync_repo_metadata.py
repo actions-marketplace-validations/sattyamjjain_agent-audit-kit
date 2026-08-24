@@ -62,17 +62,34 @@ def _read_rule_count() -> int:
     return int(m.group(1))
 
 
+# Directories whose files are dated artifacts: they record what was true at a
+# named point and must keep pinning the version they documented.
+#
+# The module docstring has always stated that principle, but it was implemented
+# for exactly one filename pattern (`release-notes-v*.md`), so every release
+# quietly rewrote `@vX.Y.Z` inside launch collateral and dated preset docs --
+# editing a published social thread to quote a version it never quoted.
+# `scripts/check_counts.py` already treats these same paths as frozen; the two
+# guards now agree instead of one freezing a file the other rewrites.
+_FROZEN_DIR_PARTS: tuple[str, ...] = (
+    "changelog/archive/",  # frozen changelog history
+    "presets/",            # "shipped in vX" dated preset facts
+    "launch/",             # dated launch collateral (threads, posts, blog drafts)
+)
+
+
+def _is_frozen(path: Path) -> bool:
+    """Dated artifacts keep the version they documented."""
+    if _HISTORY_STEM_RE.search(path.stem):
+        return True
+    posix = path.as_posix()
+    return any(part in posix for part in _FROZEN_DIR_PARTS)
+
+
 def _iter_docs() -> list[Path]:
     out: list[Path] = [README] if README.is_file() else []
     if DOCS_DIR.is_dir():
-        for path in DOCS_DIR.rglob("*.md"):
-            if _HISTORY_STEM_RE.search(path.stem):
-                continue
-            # Frozen changelog archive: historical entries pin the version they
-            # documented, same rationale as the release-notes exclusion above.
-            if "changelog/archive/" in path.as_posix():
-                continue
-            out.append(path)
+        out.extend(p for p in DOCS_DIR.rglob("*.md") if not _is_frozen(p))
     return out
 
 

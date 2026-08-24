@@ -29,7 +29,7 @@ Security scanner for MCP-connected AI agent pipelines. Finds misconfigurations, 
 **What we measured across the public MCP ecosystem** ([State of MCP Security 2026, v1.0](research/state-of-mcp-2026/REPORT.md) — [how to cite](research/state-of-mcp-2026/REPORT.md#how-to-cite-this-report)):
 
 - **<!-- report:corpus -->2,303<!-- /report --> distinct public MCP configs scanned**, of which **<!-- report:rfc9728-n -->0<!-- /report --> serve RFC 9728** Protected-Resource-Metadata discovery.
-- **<!-- report:noauth-pct -->52.3<!-- /report -->% (<!-- report:noauth-n -->1,205<!-- /report -->)** declare a remote server with **no authentication**.
+- **<!-- report:noauth-pct -->52.2<!-- /report -->% (<!-- report:noauth-n -->1,203<!-- /report -->)** declare a remote server with **no authentication**.
 - **<!-- report:inline-auth-pct -->100<!-- /report -->% (<!-- report:inline-auth-n -->421<!-- /report -->/<!-- report:inline-auth-d -->421<!-- /report -->)** of inline-auth remote configs **hardcode a static credential**.
 
 These are regenerated from `research/state-of-mcp-2026/results.json` by `scripts/sync_rule_count.py` and asserted by `tests/test_report_headline_numbers.py`, so they cannot drift from the report.
@@ -84,7 +84,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - uses: sattyamjjain/agent-audit-kit@v0.3.87
+      - uses: sattyamjjain/agent-audit-kit@v0.3.88
         id: scan
         with:
           fail-on: high
@@ -114,7 +114,7 @@ aak scan .
 # .pre-commit-config.yaml
 repos:
   - repo: https://github.com/sattyamjjain/agent-audit-kit
-    rev: v0.3.87
+    rev: v0.3.88
     hooks:
       - id: agent-audit-kit
 ```
@@ -306,7 +306,7 @@ permissions:
 
 steps:
   - uses: actions/checkout@v4
-  - uses: sattyamjjain/agent-audit-kit@v0.3.87
+  - uses: sattyamjjain/agent-audit-kit@v0.3.88
     id: scan
     with:
       fail-on: high
@@ -611,8 +611,11 @@ auth-posture distribution (no-auth / bearer / OAuth 2.1 / unknown), the transpor
 distribution, the per-rule HIGH/CRITICAL hit counts, and the benign-slice
 false-positive rate with its denominator — tamper-evident under
 **SHA-256 `320b43072d930edbc18f050795939dbee3831e4da2f88b3483ea12ec7bb6551f`**. It
-is the **pre-2026-07-28-spec** reference; the re-measure is scheduled for
-**2026-08-11** and is one command:
+is the **pre-2026-07-28-spec** reference. It is a fixed point to compare against,
+not a promise of a next edition: the comparison is one command, runs offline
+against the current corpus, and is the reason no re-measure date is advertised
+here — a date would expire, this does not. Last run 2026-08-24, and it reports
+real movement on every axis, corpus size and `AAK-MCP-001` hit count included:
 
 ```bash
 python research/state-of-mcp-2026/baseline.py \
@@ -652,7 +655,7 @@ agent-audit-kit verify-bundle rules.json --signature rules.json.sigstore
 git clone https://github.com/sattyamjjain/agent-audit-kit
 cd agent-audit-kit
 pip install -e ".[dev]"
-pytest -v                          # <!-- test-count:total -->1,923<!-- /test-count --> test functions
+pytest -v                          # <!-- test-count:total -->1,924<!-- /test-count --> test functions
 ruff check .                       # Lint
 mypy agent_audit_kit/              # Type check
 agent-audit-kit scan .             # Self-scan

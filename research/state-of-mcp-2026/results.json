@@ -10,18 +10,18 @@
   "duplicates_removed": 85,
   "unparseable_removed": 1,
   "grade_distribution": {
-    "A": 632,
-    "B": 1426,
+    "A": 634,
+    "B": 1424,
     "C": 111,
     "D": 49,
     "F": 85
   },
-  "configs_with_critical": 1217,
+  "configs_with_critical": 1215,
   "configs_with_critical_pct": 52.8,
   "configs_with_high": 165,
   "configs_with_high_pct": 7.2,
   "severity_totals": {
-    "critical": 1338,
+    "critical": 1336,
     "high": 319,
     "medium": 4426,
     "low": 1221,
@@ -133,9 +133,9 @@
   },
   "auth_profile_2026_07_28": {
     "no_authentication": {
-      "n": 1205,
+      "n": 1203,
       "denominator": 2303,
-      "pct": 52.3
+      "pct": 52.2
     },
     "rfc9728_prm_discovery": {
       "n": 0,
@@ -168,8 +168,8 @@
       "rule_id": "AAK-MCP-001",
       "title": "Remote MCP server without authentication",
       "severity": "critical",
-      "configs": 1205,
-      "config_pct": 52.3
+      "configs": 1203,
+      "config_pct": 52.2
     },
     {
       "rule_id": "AAK-MCP-005",
