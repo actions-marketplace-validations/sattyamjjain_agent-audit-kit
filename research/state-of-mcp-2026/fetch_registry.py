@@ -79,7 +79,18 @@ def _to_config(server: dict[str, Any]) -> dict[str, Any] | None:
     key = name.split("/")[-1].replace(".", "_") or "server"
     remotes = server.get("remotes") or []
     if remotes:
-        r = remotes[0]
+        # Prefer the first remote that DECLARES headers, not simply the first
+        # remote. `_auth_mode` already looks across every remote, so taking
+        # `remotes[0]` unconditionally could label a server `static-credential`
+        # while handing the scanner a config with no auth on it at all.
+        #
+        # That is not hypothetical. It cost two false positives in the
+        # 2026-08-24 benign-slice measurement: `co.huggingface/hf-mcp-server`
+        # publishes its `?login` OAuth entry point first and its
+        # `Authorization`-bearing endpoint second, and `co.curie/commerce` does
+        # the same. Both were reported "without authentication" because the
+        # conversion dropped the half of the record that carried the auth.
+        r = next((x for x in remotes if x.get("headers")), remotes[0])
         ttype = (r.get("type") or "").lower()
         entry: dict[str, Any] = {
             "type": "http" if "http" in ttype else "sse",

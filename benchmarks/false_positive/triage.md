@@ -120,3 +120,52 @@ remote's headers; the committed manifest predates that fix, so findings 4-6
 persist until the next `make corpus` refresh. That is stated rather than
 smoothed over, because a rate that improves because the corpus was quietly
 regenerated is not a rate anyone should trust.
+
+## Adjudication — 2026-08-24 re-run (post-fix, n = 4 HIGH/CRITICAL), TUNED
+
+Root cause A fixed: `AAK-MCP-001`'s credential-header family now covers the
+`-token` and `-secret` suffixes as well as `-key`, so a vendor token header
+(`X-Velarion-Agent-Token`) and an OAuth client-credentials pair
+(`X-SignDocs-Client-Id` + `X-SignDocs-Client-Secret`) read as declared auth.
+
+Measured across the whole 1,641-config corpus, the change silences **exactly
+those 2 configs and nothing else** — 1,046 → 1,044 firing, 0 newly firing. A
+widening that had silenced anything further would have been trading false
+positives for false negatives, which on a CRITICAL rule is the worse trade.
+
+Two negatives keep it honest and are pinned in
+`tests/test_mcp_auth_header_family.py`: a bare `X-SignDocs-Client-Id` is still
+*not* auth (a `client_id` is a public identifier — the pair is recognised because
+of its secret half), and `X-CSRF-Token` / `X-XSRF-Token` are still not auth
+despite the `-token` suffix, because they prove request provenance rather than
+caller identity.
+
+| # | Rule ID | Config | Verdict | One-line reason |
+|--:|---------|--------|:-------:|-----------------|
+| 1 | `AAK-MCP-001` | `ai.spala/public-mcp` | **TRUE POSITIVE** | Sole header is `Accept`; genuinely unauthenticated. Unchanged across all four runs. |
+| 2 | `AAK-MCP-001` | `co.curie/commerce` | **FALSE POSITIVE** | Root cause B, unfixed in the committed data: `Authorization` (`isSecret`) is on remote 1, and the snapshot converted remote 0. |
+| 3 | `AAK-MCP-001` | `co.huggingface/hf-mcp-server` | **FALSE POSITIVE** | Root cause B: `Authorization` on remote 1; remote 0 is the `?login` entry point. |
+| 4 | `AAK-MCP-001` | `app.thoughtspot/mcp-server` | **AMBIGUOUS** | Live registry has moved to v0.5.0; the v1.0.1 record in the snapshot cannot be re-verified. |
+
+### Tally (post-fix)
+
+- False positives: **2** (both root cause B — the corpus, not the rule).
+- True positives: **1**.
+- Ambiguous: **1**.
+- **Benign-slice HIGH/CRITICAL false-positive rate = 2 / 4 = 50.0%** (Wilson 95% CI **[15.0%, 85.0%]**).
+
+### Why the rate did not fall further, stated plainly
+
+`fetch_registry._to_config()` is fixed — it now converts the first remote that
+*declares headers* rather than `remotes[0]` unconditionally — but the committed
+manifest was fetched on 2026-07-26 and predates that fix. Findings 2 and 3 clear
+on the next `make corpus` refresh, which is a networked step that also rewrites
+all 1,641 server records and would perturb the State of MCP report. Bundling a
+corpus regeneration into a precision fix would make the improvement unauditable:
+the number would move for two reasons at once and nobody could say which.
+
+Note also what the ratio does here. The scanner fix removed 2 findings from both
+the numerator and the denominator, so the *rate* fell only 66.7% → 50.0% while
+the absolute count of wrong findings fell 4 → 2. On a denominator this small the
+ratio is the less informative of the two figures, which is why the badge now
+leads with the slice size and shows the raw counts.

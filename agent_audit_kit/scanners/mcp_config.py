@@ -39,18 +39,36 @@ INTERNAL_URL_PATTERNS = re.compile(
 # a secret-exposure concern (AAK-MCP-003 / AAK-SECRET-*), not "no authentication".
 _KNOWN_AUTH_HEADERS = frozenset({"authorization", "bearer", "x-api-key", "api-key"})
 
-# Custom credential / access-control header family: vendor-prefixed API keys
-# (X-<Vendor>-Key, *-API-Key, *-API-Token, *-Access-Key), bare apikey / token
-# header variants, and the x402 `X-PAYMENT` pay-to-access header (access control,
-# not identity auth, but the endpoint is not openly reachable). Recognizing this
-# family is the #475 fix: servers authenticating with a vendor key header were
-# wrongly reported as "without authentication".
+# Headers that carry a *token* but are not authentication. `X-CSRF-Token` and
+# `X-XSRF-Token` prove the request came from your own page, not that the caller
+# is anyone in particular, so a server whose only header is one of these really
+# is unauthenticated. Checked before the family below, which would otherwise
+# swallow them via the `-token` suffix.
+_NON_AUTH_TOKEN_HEADERS = re.compile(r"^x-(?:csrf|xsrf)-token$", re.IGNORECASE)
+
+# Custom credential / access-control header family: vendor-prefixed secrets
+# (X-<Vendor>-Key / -Token / -Secret, *-API-Key, *-API-Token, *-Access-Key), bare
+# apikey / token header variants, and the x402 `X-PAYMENT` pay-to-access header
+# (access control, not identity auth, but the endpoint is not openly reachable).
+#
+# #475 introduced this family for the `-key` suffix after two benign-slice false
+# positives. The 2026-08-24 re-measurement produced two more from the same root
+# cause one step out — `X-Velarion-Agent-Token` and `X-SignDocs-Client-Secret` —
+# because that fix generalised exactly one suffix and stopped. The suffix
+# alternation below is the generalisation it should have been.
+#
+# `-id` is deliberately NOT in the family. A bare `client_id` is a public
+# identifier, not a credential; `X-SignDocs-Client-Id` is recognized only because
+# its companion `X-SignDocs-Client-Secret` is. Adding `-id` would also swallow
+# `X-Request-Id` / `X-Trace-Id` / `X-Correlation-Id`, which authenticate nothing.
 _CUSTOM_AUTH_HEADER_RE = re.compile(
     r"^(?:"
-    r"x-[a-z0-9]+(?:-[a-z0-9]+)*-key"    # X-Nefesh-Key, X-Goog-Api-Key, x-ref-api-key
+    # X-Nefesh-Key, X-Goog-Api-Key, X-Velarion-Agent-Token, X-SignDocs-Client-Secret
+    r"x-[a-z0-9]+(?:-[a-z0-9]+)*-(?:key|token|secret)"
     r"|[a-z0-9-]+-api-key"               # *-api-key
     r"|[a-z0-9-]+-api-token"             # *-api-token
     r"|[a-z0-9-]+-access-key"            # *-access-key
+    r"|[a-z0-9-]+-client-secret"         # OAuth client-credentials pair
     r"|apikey|x-auth-token|x-access-token"
     r"|x-payment"                        # x402 pay-to-access gate
     r")$",
@@ -95,6 +113,8 @@ def _server_declares_auth(headers: Any) -> bool:
         lname = str(name).lower()
         if lname in _KNOWN_AUTH_HEADERS:
             return True
+        if _NON_AUTH_TOKEN_HEADERS.match(lname):
+            continue
         if _CUSTOM_AUTH_HEADER_RE.match(lname) and _is_credential_reference(str(value)):
             return True
     return False
