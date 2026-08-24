@@ -19,7 +19,7 @@ file an issue and we will correct it (best-effort — no fixed clock).
 | Signed rule bundle | Yes (Sigstore) | Partial (SLSA provenance on releases) | No (proprietary) | No | No |
 | Deterministic (reproducible CI) | **Yes** | Yes (sub-ms policy enforcement) | No (multi-model analysis) | Partial | No |
 | Public CVE-to-rule ledger | **Yes** (CHANGELOG.cves.md) | No (internal cadence) | No | No | No |
-| MCP Security Index / leaderboard | **Yes** (weekly, 500+ servers) | No | No | No | No |
+| MCP Security Index / leaderboard | **Yes** (147 servers graded; last snapshot 2026-08-24 — [dates, not a cadence promise](../README.md#mcp-security-index)) | No | No | No | No |
 | Pin + drift verification of tool surface | **Yes** | Yes (via Agent Runtime rings) | No | No | No |
 | OWASP Agentic Top 10 coverage | 10/10 | 10/10 | Partial | Partial | Partial |
 

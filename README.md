@@ -50,7 +50,7 @@ These are regenerated from `research/state-of-mcp-2026/results.json` by `scripts
 - **OWASP coverage**: Agentic Top 10 (10/10), MCP Top 10 (10/10), Adversa AI Top 25
 - **Compliance mapping** (12 frameworks): EU AI Act Art. 15 + 55, SOC 2, ISO 27001, ISO/IEC 42001, HIPAA, NIST AI RMF, **NSA MCP Security CSI (U/OO/6030316-26, May 2026)**, Singapore Agentic AI, India DPDP 2023, **Alabama Personal Data Protection Act (HB 351, 2026)**, **Tennessee SB 1580 Health Care AI (PRA)** — PDF reports via `agent-audit-kit report --format pdf --framework <name>`; plus `agent-audit-kit scan . --compliance mcp-2026-roadmap` for **MCP 2026 Roadmap (May 2026)** conformance (a scan-time mapping, not a PDF evidence pack)
 - **Supply chain**: deterministic rule bundle (`export-rules`), Sigstore-signed releases, CycloneDX + SPDX SBOM (`sbom`)
-- **MCP Security Index**: public leaderboard at [sattyamjjain.github.io/agent-audit-kit](https://sattyamjjain.github.io/agent-audit-kit/) ([snapshot cadence is currently interrupted](#mcp-security-index)) — per-server grade cards (A–F), 90-day [disclosure policy](docs/disclosure-policy.md)
+- **MCP Security Index**: public leaderboard at [sattyamjjain.github.io/agent-audit-kit](https://sattyamjjain.github.io/agent-audit-kit/) ([snapshot dates](#mcp-security-index)) — per-server grade cards (A–F), 90-day [disclosure policy](docs/disclosure-policy.md)
 - **CVE coverage**: newly disclosed MCP CVEs are triaged and turned into rules as they land — surfaced automatically by the NVD watcher ([`cve-watcher.yml`](.github/workflows/cve-watcher.yml)) and logged in [CHANGELOG.cves.md](CHANGELOG.cves.md)
 - **OAuth / spec coverage**: the **2026-07-28 final auth profile** as a one-command check — `agent-audit-kit scan . --profile mcp-2026-07-28` runs RFC 9207 `iss` validation (`AAK-OAUTH-006`), RFC 8707 resource indicators (`AAK-OAUTH-007`), and RFC 9728 Protected-Resource-Metadata discovery (`AAK-OAUTH-008`). We scanned 2,303 distinct public MCP configs: **0 use RFC 9728 discovery; 52.3% (1,205) declare a remote server with no authentication; 100% (421/421) of inline-auth remote configs hardcode a static credential** — see the [State of MCP Security 2026](research/state-of-mcp-2026/REPORT.md) report, v1.0, [citable](research/state-of-mcp-2026/REPORT.md#how-to-cite-this-report) (the earlier dated [2026-07-18 748-config readiness scan](docs/reports/mcp-2026-07-28-readiness.md) is a separate point-in-time artifact). The July 2026-07-28 deprecation/stateless pack stays labelled **release candidate** (the spec ratifies 2026-07-28); every cited SEP was re-verified in the [ratification reconciliation](CHANGELOG.cves.md)
 - **Spec-ahead coverage + standards crosswalk**: the two wedges a free hosted scanner can't match are **offline determinism** and **standards-provenance compliance evidence** — and AAK ships coverage for the **2026-07-28 MCP spec surface before it ratifies**. The spec-ahead pack (all static, deterministic, no LLM): `Mcp-Method`/`Mcp-Name` routable-header ↔ body desync (`AAK-MCP-ROUTING-DESYNC-001`, **SEP-2243**), MCP Apps UI iframe rendered without sandbox / sanitization (`AAK-MCP-APPS-001/002`, **SEP-1865**), and unbounded MCP Tasks with no quota/concurrency bound → task-flood DoS (`AAK-TASKS-004`, **SEP-2663**). Every rule is mapped, rule by rule, to the **NSA MCP Security CSI** control it evidences and its **OWASP Agentic Top-10 (2026)** item in the [standards crosswalk](docs/crosswalk/nsa-csi-owasp-agentic.md) — regenerate it any time with `agent-audit-kit report --framework standards-crosswalk`.
@@ -536,26 +536,27 @@ Provides inline diagnostics on file save with quick-fix suggestions.
 Public leaderboard of MCP servers, published at
 **[sattyamjjain.github.io/agent-audit-kit](https://sattyamjjain.github.io/agent-audit-kit/)**.
 
-> **The cadence is not yet weekly.** Two faults were fixed in v0.3.86; one is
-> verified, one is not.
+<!-- index-cadence -->Last published snapshot: **2026-08-24** (3 snapshots in [`history.json`](https://sattyamjjain.github.io/agent-audit-kit/data/history.json)). The build fails if this date falls more than 10 days behind, so a stalled index reports itself.<!-- /index-cadence -->
+
+> **On the schedule.** The Monday crawl was dying on `HTTP 429` — the status the
+> GitHub Search API returns for a secondary rate limit, and the one its retry path
+> did not handle — so every scheduled run from 2026-06-15 failed except 2026-07-20.
+> Two months passed unnoticed because a failing scheduled run notified nobody.
+> Fixed in v0.3.86: it backs off on 429, keeps a partial crawl under a wall-clock
+> budget rather than being killed with nothing, records `partial` and the reason in
+> the artifact, and files an issue when a scheduled run fails. The trend chart was
+> a second, separate fault — the site build removed its output directory before
+> reading the previous `history.json`, so every published history in this project's
+> life had held exactly one snapshot and "need >= 2" was unsatisfiable by
+> construction.
 >
-> **Fixed and verified:** the trend chart. The site build removed its output
-> directory before reading the previous `history.json`, and the workflow fetched
-> the prior published state only afterwards, so every run appended one entry to
-> an empty list — every published history in this project's life had held exactly
-> one snapshot, and "need >= 2" was unsatisfiable by construction. The prior
-> history is now seeded into the build. Two consecutive runs on 2026-08-21
-> produced a two-entry history and the chart renders.
->
-> **Fixed, not yet verified:** the schedule. The Monday crawl was dying on
-> `HTTP 429`, the status the GitHub Search API returns for a secondary rate limit
-> and the one its retry path did not handle, so every scheduled run from
-> 2026-06-15 failed except 2026-07-20. It now backs off on 429, keeps a partial
-> crawl under a wall-clock budget rather than being killed with nothing, records
-> `partial` and the reason in the artifact, and files an issue when a scheduled
-> run fails — the absence of that last part is why two months passed unnoticed.
-> Both verifying runs were manual. No scheduled run has landed yet, so "weekly"
-> stays off this page until consecutive Mondays actually do.
+> Both are now verified by real runs rather than by manual dispatch: the scheduled
+> run on **2026-08-24** landed and published, and the history holds enough
+> snapshots for the chart to render. That is one scheduled success since the fix,
+> not a demonstrated cadence, so this page states the last snapshot date above
+> rather than promising a frequency — and `scripts/index_cadence.py --check` fails
+> the build if that date falls more than 10 days behind, which is one tolerated
+> miss and no more.
 
 - Per-server grade cards (A–F)
 - Snapshots at [`history.json`](https://sattyamjjain.github.io/agent-audit-kit/data/history.json) on the published index site (generated by `benchmarks/index_builder.py`; not a path in this repository). A snapshot cut short by the API budget is recorded with `partial: true` and the reason, so a short week is never read as a full one
@@ -651,7 +652,7 @@ agent-audit-kit verify-bundle rules.json --signature rules.json.sigstore
 git clone https://github.com/sattyamjjain/agent-audit-kit
 cd agent-audit-kit
 pip install -e ".[dev]"
-pytest -v                          # <!-- test-count:total -->1,912<!-- /test-count --> test functions
+pytest -v                          # <!-- test-count:total -->1,917<!-- /test-count --> test functions
 ruff check .                       # Lint
 mypy agent_audit_kit/              # Type check
 agent-audit-kit scan .             # Self-scan

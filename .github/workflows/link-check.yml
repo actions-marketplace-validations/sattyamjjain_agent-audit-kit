@@ -6,6 +6,12 @@ name: Link check
 # fails a build. `mailto:` links are excluded on purpose: security@agentauditkit.io
 # is an aspirational contact whose domain is not registered yet, and we do not
 # want the contact address to block docs builds.
+#
+# The MCP Security Index staleness guard lives here too, for the same reason: it
+# is a claim in README.md that only the network can settle, and it decays
+# silently. The index schedule failed every Monday from 2026-06-15 to 2026-08-21
+# and nobody noticed for two months, because nothing failed when it stopped
+# publishing.
 
 on:
   pull_request:
@@ -19,7 +25,6 @@ on:
     paths:
       - '**/*.md'
       - 'docs/**'
-      - 'mkdocs.yml'
   schedule:
     - cron: '23 6 * * 1'  # Mondays 06:23 UTC
 
@@ -68,3 +73,20 @@ jobs:
       #
       # --timeout stays at 30 regardless: it is a reasonable default for the
       # remaining hosts and costs nothing.
+
+  index-cadence:
+    name: MCP Security Index is still publishing
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7.0.1
+
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.12'
+
+      # Two failures, one command. The rendered "last published snapshot" date in
+      # README.md must match the live history, AND that date must be at most 10
+      # days old. On a Monday schedule 10 days tolerates exactly one missed week:
+      # two consecutive misses fail the build instead of waiting to be noticed.
+      - name: Check index cadence
+        run: python scripts/index_cadence.py --check
