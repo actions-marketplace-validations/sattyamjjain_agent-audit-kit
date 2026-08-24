@@ -10,7 +10,10 @@ hook). Most surfaces are anchor-pinned. **One surface is not** — see §3.
 - Bump `pyproject.toml` `version`.
 - Bump `agent_audit_kit/__init__.py` `__version__` (and re-Read after the bump
   per the v0.3.11 lesson — the on-disk grep is the authoritative pin).
-- Bump `tests/test_phase5.py` version assertion.
+- ~~Bump `tests/test_phase5.py` version assertion.~~ **No longer needed** (v0.3.88):
+  it derives from `pyproject.toml`. It used to be a hardcoded literal, so every
+  release hand-edited a test file — and the assertion could only disagree with a
+  bump that had already happened, never catch a missed one.
 - Run `python3 scripts/sync_rule_count.py --regenerate`.
 - Run `python3 scripts/sync_scanner_count.py`.
 - Run `python3 scripts/sync_repo_metadata.py --write`.
