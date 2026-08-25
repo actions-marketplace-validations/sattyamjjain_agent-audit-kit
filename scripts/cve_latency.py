@@ -43,7 +43,14 @@ NVD_API = "https://services.nvd.nist.gov/rest/json/cves/2.0?cveId="
 # NVD allows 5 requests per rolling 30s without an API key.
 NVD_SLEEP_SECONDS = 6.5
 
-_SECTION_RE = re.compile(r"^##\s+(\d{4}-\d{2}-\d{2})\s*\(([^)]*)\)")
+# A ledger section heading. The parenthesised label is OPTIONAL, because the
+# ledger uses both forms: "## 2026-08-21 (v0.3.83): ..." and plain
+# "## 2026-08-22: ...". Requiring the parens meant a plain heading did not
+# match at all, so the previous parenthesised section kept ownership of every
+# row beneath it and those CVEs were dated to the wrong day. Found when a new
+# "(later)" section at the top of the file silently backdated three sections
+# of rows onto its own date and moved the published p90.
+_SECTION_RE = re.compile(r"^##\s+(\d{4}-\d{2}-\d{2})\s*(?:\(([^)]*)\))?")
 _ROW_RE = re.compile(r"^\|\s*(CVE-\d{4}-\d{4,7})")
 # The leading CVE id(s) of a row, before the description opens. Handles a row
 # that covers several CVEs at once ("CVE-A / CVE-B (desc)").
@@ -98,7 +105,7 @@ def parse_ledger(text: str) -> tuple[dict[str, tuple[date, str]], set[str]]:
         section = _SECTION_RE.match(line)
         if section:
             section_date = _parse_iso_date(section.group(1))
-            label = section.group(2).strip()
+            label = (section.group(2) or "").strip()
             version = label.split(",")[0].strip()
             if _VERSION_RE.match(version):
                 section_release = version

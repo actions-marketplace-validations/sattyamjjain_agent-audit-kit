@@ -16,6 +16,26 @@ open.
 > issue. The per-CVE latency figures in the tables are **measurements recorded at
 > the time**, kept as dated facts, not a standing promise.
 
+## 2026-08-25 (later): a real MCP server, and a bug that is not in it
+
+The interesting row this week. Every quick reason to dismiss this one is wrong, and
+the reason that closes it is narrow.
+
+The product is named "... Affiliate Link Manager **& MCP**", which reads like the
+Splunkbase name-collision shape — a familiar acronym bolted onto a product title.
+It is not. The plugin ships a genuine MCP implementation: `includes/Mcp/Mcp_Server.php`,
+`Mcp_Tools.php`, `Mcp_OAuth.php`, `Mcp_Pairing.php`, `Mcp_Rate_Limiter.php`,
+`Mcp_Self_Test.php`. Dismissing it as branding would have been wrong, and would have
+set up a future reader to wave off a genuine MCP CVE in this plugin.
+
+What actually closes it is that **the vulnerability is not in that surface**. Recorded
+so the distinction survives: a product having an MCP server does not make every CVE in
+it an MCP CVE, and the deciding question is which code the advisory points at.
+
+| CVE | Reference | AAK rule / disposition | Triaged |
+|---|---|---|---|
+| CVE-2026-19801 (BetterLinks for WordPress <= 3.1.0, CWE-862, CVSS 3.1 4.3 - the `wp_ajax_betterlinks__{create,check,update}_fbs_link` handlers gate on `check_ajax_referer` (a nonce, which proves session origin) and `defined('FLUENT_BOARDS')` (which proves a companion plugin is active), and on nothing that authorizes the caller, while sibling handlers in the same file call `current_user_can('manage_options')`. The `betterlinks_admin_nonce` is emitted on every frontend page via `wp_localize_script`, so any subscriber-level user holds it and can create short URLs with attacker-chosen slugs and redirect targets) | [NVD](https://nvd.nist.gov/vuln/detail/CVE-2026-19801) · [Wordfence](https://www.wordfence.com/threat-intel/vulnerabilities/id/faf44730-b975-4057-96dc-7284775500f9?source=cve) | **Out of scope** - and *not* for the reason the name suggests. The plugin ships a real MCP server (`includes/Mcp/Mcp_Server.php` and siblings), so this is not a name collision. But the advisory points at `includes/Admin/Ajax.php` and `betterlinks.php`: the defect is in WordPress `wp_ajax_*` admin-ajax handlers, and nothing under `includes/Mcp/` references them. Three boundaries close it, each checkable: the artifact is a wordpress.org plugin and `betterlinks` resolves on neither npm nor PyPI (both 404), so no file `_CANDIDATE_NAMES` opens carries its version; AgentAuditKit has no PHP semantic analysis and no WordPress awareness (the only `.php` in the package is an extension in a source-type list in `stainless_lineage.py`); and the vulnerable path is not an MCP path, so even a PHP-reading MCP scanner would not be looking at it. **Fixed in 3.1.1**, established by diffing the plugin zips rather than inferred from the advisory's "up to and including 3.1.0": 3.1.0 contains zero occurrences of the guard, 3.1.1 adds `current_user_can_manage_fbs_link()` at `Ajax.php:133` and calls it from all three handlers. Worth repeating upstream's own reasoning rather than flattening it — they deliberately did **not** gate on `manage_options`, because FluentBoards board membership is orthogonal to the WordPress role and that gate would lock out the low-role board members the feature exists for; the fix defers to FluentBoards' `PermissionManager`, scoped to the board owning the task. Revisit if PHP analysis or a WordPress manifest reader ever lands, and note separately that this plugin's MCP server is an unassessed surface in its own right. (#634) | 2026-08-25 |
+
 ## 2026-08-25: a tool handler, not a launcher
 
 The first CVE in a while whose surface is the *request path*. Every command-injection

@@ -22,6 +22,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   Both are CRITICAL and both matched the same line, which reported one defect twice.
 - scripts/build_coverage_page.py takes --check, and main() no longer reads sys.argv
   when called from Python. It parsed pytest's own flags and exited.
+- cve_latency.py recognises every dated ledger heading. It required parentheses, so
+  the nine most recent `## DATE: title` sections never matched and their rows
+  inherited the date of the parenthesised heading above them. Published p90 over the
+  trailing 90 days: 4 days -> 2 days, n=47.
+
+### Triaged
+
+- CVE-2026-19801 (BetterLinks for WordPress) closed as out of scope. The plugin ships
+  a real MCP server under includes/Mcp/, so this is not a name collision, but the
+  vulnerability is in WordPress wp_ajax_* handlers in includes/Admin/Ajax.php and
+  nothing under includes/Mcp/ references them. Fixed upstream in 3.1.1.
 
 ## [0.3.88] - 2026-08-24
 

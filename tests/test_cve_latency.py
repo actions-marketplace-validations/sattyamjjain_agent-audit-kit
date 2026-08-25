@@ -9,6 +9,7 @@ mentioned in passing.
 from __future__ import annotations
 
 import importlib.util
+import re
 import sys
 from datetime import date
 from pathlib import Path
@@ -348,3 +349,80 @@ def test_real_doc_separates_the_populations() -> None:
     summary = text.split("## Summary")[1].split("## Coverage")[0]
     assert "Response to newly disclosed CVEs" in summary
     assert "not response times" in summary
+
+
+# ---------------------------------------------------------------------------
+# Section headings: every dated heading owns its own rows
+# ---------------------------------------------------------------------------
+
+
+def test_every_dated_heading_is_recognised_as_a_section() -> None:
+    """The ledger uses three heading forms; the parser must read all of them.
+
+    `## 2026-08-15 (v0.3.77)`      -- parens, no colon
+    `## 2026-08-17 — one pin ...`  -- em dash, no parens
+    `## 2026-08-22: one new pin`   -- colon, no parens
+
+    The original pattern required parentheses, so the third form never matched
+    and its rows silently inherited the date of whichever parenthesised heading
+    sat above them. Nine dated sections -- roughly the two most recent weeks --
+    were affected, which moved the published p90.
+    """
+    from scripts.cve_latency import _SECTION_RE, LEDGER  # noqa: PLC0415
+
+    headings = [
+        line
+        for line in LEDGER.read_text(encoding="utf-8").splitlines()
+        if line.startswith("## ")
+    ]
+    dated = [h for h in headings if re.match(r"^##\s+\d{4}-\d{2}-\d{2}", h)]
+    assert dated, "ledger has no dated headings"
+    unmatched = [h for h in dated if not _SECTION_RE.match(h)]
+    assert not unmatched, f"dated headings the parser cannot see: {unmatched}"
+
+
+def test_undated_headings_are_not_treated_as_sections() -> None:
+    """`## Older CVE ledger` is a pointer, not a section."""
+    from scripts.cve_latency import _SECTION_RE  # noqa: PLC0415
+
+    assert not _SECTION_RE.match("## Older CVE ledger")
+    assert not _SECTION_RE.match("## Format")
+
+
+def test_each_cve_is_dated_to_its_own_section() -> None:
+    """End-to-end: no row inherits a neighbouring section's date.
+
+    Ground truth is an independent walk over every dated heading, so this fails
+    if the parser and the file's own structure ever disagree again -- including
+    if a future heading introduces a fourth format.
+    """
+    from scripts.cve_latency import (  # noqa: PLC0415
+        _CVE_RE,
+        _OUT_OF_SCOPE_RE,
+        _SUBJECT_RE,
+        LEDGER,
+        parse_ledger,
+    )
+
+    text = LEDGER.read_text(encoding="utf-8")
+    truth: dict[str, str] = {}
+    current: str | None = None
+    for line in text.splitlines():
+        heading = re.match(r"^##\s+(\d{4}-\d{2}-\d{2})", line)
+        if heading:
+            current = heading.group(1)
+            continue
+        subject = _SUBJECT_RE.match(line)
+        if subject and current and not _OUT_OF_SCOPE_RE.search(line):
+            for cve in _CVE_RE.findall(subject.group(1)):
+                # parse_ledger keeps the EARLIEST section that carried coverage.
+                if cve not in truth or current < truth[cve]:
+                    truth[cve] = current
+
+    shipped, _ = parse_ledger(text)
+    mismatches = {
+        cve: (str(value[0]), truth[cve])
+        for cve, value in shipped.items()
+        if cve in truth and str(value[0]) != truth[cve]
+    }
+    assert not mismatches, f"CVEs dated to the wrong section: {mismatches}"
