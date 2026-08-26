@@ -7,6 +7,54 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.3.90] - 2026-08-26
+
+### Fixed
+
+- The State of MCP report's headline number was published two ways and one was wrong.
+  `results.json` says 52.2% (1,203) no-auth; README:55, README:571,
+  docs/DISTRIBUTION-CHECKLIST.md (four places, including the Show HN title and the
+  Reddit drafts), docs/STATE-OF-MCP-SECURITY-2026.md, PREVALENCE.md (four places)
+  and CITATION.cff still said 52.3% (1,205). PREVALENCE.md and the distribution copy
+  also said 1,217 configs with a critical finding where results.json says 1,215.
+- The `report:` marker generator now covers README.md,
+  docs/STATE-OF-MCP-SECURITY-2026.md and PREVALENCE.md rather than README alone, and
+  gained `critical-n` / `critical-pct` keys.
+- CITATION.cff and docs/DISTRIBUTION-CHECKLIST.md are corrected but deliberately
+  carry no markers: the first states its figures in a YAML block scalar that renders
+  into the citation abstract, and the second is copy a human pastes into a comment
+  box. Both are asserted against results.json in the test instead.
+- `tests/test_report_headline_numbers.py` was a three-way lock on README + REPORT.md,
+  which is why the other five surfaces rotted. It now checks every marker occurrence
+  on every marker file, asserts the prose surfaces, requires the file list to match
+  the generator's, and fails if a marker appears in the paste copy.
+- The README comparison table's "A2A protocol scanning | 13 rules" was unguarded.
+  The number was correct; it is now a per-category anchor.
+- `test_readme_per_category_anchors_match_registry` summed every anchor occurrence
+  and compared that to the rule total, which only held while each category appeared
+  once. It now asserts what was intended — that no category is missing — and that
+  two anchors for one category agree.
+- Two source comments still asserted the retired 48h CVE-to-rule SLA:
+  `mcp_middleware.py` justified a design decision by it, and `supply_chain.py`
+  recorded "48h SLA met" beside a latency of 72 hours. Both reworded, and a test now
+  fails if the claim reappears in source.
+
+### Added
+
+- Five rules for the 2026-08-26 CVE wave: `AAK-MCP-QWED-CVE-2026-55546-001`,
+  `AAK-MCP-NEXTCLOUD-CVE-2026-55640-001`, `AAK-MCP-BROWSEMCP-CVE-2026-55557-001`,
+  `AAK-MCP-GENIEACS-CVE-2026-55637-001`, `AAK-MCP-SUBLINEAR-CVE-2026-55609-001`.
+  Rule count 321 -> 326.
+- Three PraisonAI CVEs (CVE-2026-55532, CVE-2026-55529, CVE-2026-55531) recorded on
+  the existing `AAK-MCP-PRAISONAI-CVE-2026-61427-001`, whose 4.6.78 floor already
+  sits above their 4.6.58 fix. No second pin: two pins on one package report one
+  dependency twice.
+- Five CVEs closed out of scope with written reasons: three mcp-shell advisories
+  (Go; the same-named npm and PyPI packages are different projects and never reach
+  the 0.6.0 fix), Coroot (Go binary, on neither registry) and the MCP PHP SDK
+  (Composer).
+
+
 ## [0.3.89] - 2026-08-25
 
 ### Added

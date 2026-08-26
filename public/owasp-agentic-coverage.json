@@ -1,8 +1,8 @@
 {
   "schema_version": "1",
-  "last_updated": "2026-08-25T11:23:13Z",
-  "aak_version": "0.3.89",
-  "rule_count": 321,
+  "last_updated": "2026-08-26T13:58:38Z",
+  "aak_version": "0.3.90",
+  "rule_count": 326,
   "coverage": [
     {
       "asi_id": "ASI01",
@@ -641,7 +641,7 @@
     {
       "asi_id": "ASI03",
       "title": "Memory Poisoning",
-      "rule_density": 70,
+      "rule_density": 72,
       "rules": [
         {
           "id": "AAK-A2A-005",
@@ -882,6 +882,17 @@
           "aicm_references": []
         },
         {
+          "id": "AAK-MCP-GENIEACS-CVE-2026-55637-001",
+          "severity": "high",
+          "cve_references": [
+            "CVE-2026-55637"
+          ],
+          "aicm_references": [
+            "IAM-01",
+            "STA-08"
+          ]
+        },
+        {
           "id": "AAK-MCP-HTTP-NOAUTH-SERVER-001",
           "severity": "high",
           "cve_references": [
@@ -914,6 +925,17 @@
           "aicm_references": [
             "IAM-01",
             "IAM-16",
+            "STA-08"
+          ]
+        },
+        {
+          "id": "AAK-MCP-NEXTCLOUD-CVE-2026-55640-001",
+          "severity": "critical",
+          "cve_references": [
+            "CVE-2026-55640"
+          ],
+          "aicm_references": [
+            "IAM-01",
             "STA-08"
           ]
         },
@@ -1653,6 +1675,9 @@
           "cve_references": [
             "CVE-2026-47394",
             "CVE-2026-48168",
+            "CVE-2026-55529",
+            "CVE-2026-55531",
+            "CVE-2026-55532",
             "CVE-2026-61427"
           ],
           "aicm_references": [
@@ -1884,7 +1909,7 @@
     {
       "asi_id": "ASI05",
       "title": "Cascading Failures",
-      "rule_density": 50,
+      "rule_density": 53,
       "rules": [
         {
           "id": "AAK-AGENT-TRUST-001",
@@ -2121,6 +2146,17 @@
           "aicm_references": []
         },
         {
+          "id": "AAK-MCP-BROWSEMCP-CVE-2026-55557-001",
+          "severity": "high",
+          "cve_references": [
+            "CVE-2026-55557"
+          ],
+          "aicm_references": [
+            "IVS-04",
+            "STA-08"
+          ]
+        },
+        {
           "id": "AAK-MCP-FRONTMCP-CVE-2026-67531-001",
           "severity": "high",
           "cve_references": [
@@ -2168,6 +2204,18 @@
           ]
         },
         {
+          "id": "AAK-MCP-QWED-CVE-2026-55546-001",
+          "severity": "critical",
+          "cve_references": [
+            "CVE-2026-55546"
+          ],
+          "aicm_references": [
+            "AIS-08",
+            "IVS-04",
+            "STA-08"
+          ]
+        },
+        {
           "id": "AAK-MCP-SIDECAR-NOAUTH-001",
           "severity": "high",
           "cve_references": [
@@ -2193,6 +2241,17 @@
             "CVE-2026-40933"
           ],
           "aicm_references": []
+        },
+        {
+          "id": "AAK-MCP-SUBLINEAR-CVE-2026-55609-001",
+          "severity": "high",
+          "cve_references": [
+            "CVE-2026-55609"
+          ],
+          "aicm_references": [
+            "IVS-04",
+            "STA-08"
+          ]
         },
         {
           "id": "AAK-MCP-TOOL-ARG-OSCMD-001",

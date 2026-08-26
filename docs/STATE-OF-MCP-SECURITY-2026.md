@@ -5,7 +5,7 @@
 > is stubbed and cross-links the live data run. Regenerate with
 > `python -c "from agent_audit_kit.output.coverage_map import render_json; open('docs/coverage.json','w').write(render_json())"`.
 
-AgentAuditKit ships **<!-- rule-count:total -->321<!-- /rule-count --> deterministic rules**,
+AgentAuditKit ships **<!-- rule-count:total -->326<!-- /rule-count --> deterministic rules**,
 each mapped — rule by rule — to the framework control it evidences. The full,
 machine-readable crosswalk is [`docs/coverage.json`](coverage.json); the live
 per-framework counts (severity, OWASP MCP Top-10, OWASP Agentic Top-10 2026, NSA
@@ -32,7 +32,7 @@ A reproducible, offline data run over **2,303 distinct public MCP server configs
 content) already exists — see
 [`research/state-of-mcp-2026/REPORT.md`](../research/state-of-mcp-2026/REPORT.md)
 and the raw [`results.json`](../research/state-of-mcp-2026/results.json). Headline
-from that run: **52.3% (1,205/2,303) declare a remote server with no authentication,
+from that run: **<!-- report:noauth-pct -->52.2<!-- /report -->% (<!-- report:noauth-n -->1,203<!-- /report -->/2,303) declare a remote server with no authentication,
 0% use RFC 9728 Protected-Resource-Metadata discovery, and 100% (421/421) of
 inline-auth remote configs hardcode a static credential.**
 

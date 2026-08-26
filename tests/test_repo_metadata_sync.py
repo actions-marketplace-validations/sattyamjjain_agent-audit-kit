@@ -181,11 +181,40 @@ def test_readme_per_category_anchors_match_registry() -> None:
             f"{claimed}, registry has {actual}. "
             "Run `python scripts/sync_rule_count.py` and commit."
         )
-    # Sum of per-category anchors must match the total RULE_COUNT.
-    anchor_sum = sum(int(c) for _, c in matches)
+    # Completeness: every category the registry knows about is anchored somewhere,
+    # and the anchored categories account for the whole registry.
+    #
+    # This used to sum every anchor occurrence and compare that to RULE_COUNT, which
+    # only worked while each category appeared exactly once. It does not any more:
+    # the comparison table's "A2A protocol scanning | 13 rules" row was hand-written
+    # and unguarded, and anchoring it put a second A2A_PROTOCOL anchor in the file.
+    # Summing occurrences read that as 13 extra rules. Counting distinct categories
+    # asserts the property that was actually intended — no category is missing — and
+    # says so directly rather than inferring it from an arithmetic coincidence.
+    anchored = {name: int(value) for name, value in matches}
+    missing = sorted(set(live_counts) - set(anchored))
+    assert not missing, (
+        f"README anchors no count for categor(y/ies) {missing}; the What It Scans "
+        "table is incomplete. Run `python scripts/sync_rule_count.py`."
+    )
+    anchor_sum = sum(anchored.values())
     assert anchor_sum == sum(live_counts.values()), (
         f"Per-category anchors sum to {anchor_sum} but live registry has "
         f"{sum(live_counts.values())}. Run `python scripts/sync_rule_count.py`."
+    )
+
+    # A category stated in two places must state the same number in both. The
+    # per-anchor loop above already compares each to the registry, so this only
+    # fails if that loop is ever relaxed — cheap insurance on a file where the
+    # same figure now genuinely appears twice.
+    from collections import defaultdict
+
+    seen: dict[str, set[str]] = defaultdict(set)
+    for name, value in matches:
+        seen[name].add(value)
+    disagreeing = {k: sorted(v) for k, v in seen.items() if len(v) > 1}
+    assert not disagreeing, (
+        f"README states two different counts for the same categor(y/ies): {disagreeing}"
     )
 
 

@@ -177,3 +177,53 @@ def test_window_stats_returns_none_on_an_empty_window() -> None:
     from scripts.cve_latency import window_stats  # noqa: PLC0415
 
     assert window_stats(90, today=date(1990, 1, 1)) is None
+
+
+# ---------------------------------------------------------------------------
+# The retired SLA must not come back anywhere in the tree
+# ---------------------------------------------------------------------------
+
+
+def test_no_source_file_asserts_the_retired_sla() -> None:
+    """The 48-hour CVE-to-rule commitment was withdrawn in PR #432.
+
+    It survived in two source comments for months after the public claims were
+    retired — `mcp_middleware.py` justified a design decision by it, and
+    `supply_chain.py` recorded "48h SLA met" next to a latency of 72 hours, which
+    was self-contradicting as well as withdrawn. Nothing detected either, because
+    the retirement swept documentation and left comments alone.
+
+    Describing the SLA as *retired* is fine and expected; asserting it as current
+    is not. The distinction is what this test encodes.
+    """
+    import re as _re
+
+    roots = ("agent_audit_kit", "scripts", "tests")
+    # Phrasings that assert the commitment rather than describe its withdrawal.
+    claim = _re.compile(
+        r"(?:meet|meets|met|within|under|guarantee[sd]?)\s+(?:the\s+)?48\s*-?\s*h"
+        r"|48\s*-?\s*h(?:our)?\s+SLA\s+met"
+        r"|sla-48h",
+        _re.IGNORECASE,
+    )
+    # "retired", "withdrawn", "no ... SLA" nearby means the line is describing history.
+    describes_retirement = _re.compile(
+        r"retire|withdraw|no longer|publishes no|does not commit|must not come back",
+        _re.IGNORECASE,
+    )
+
+    offenders = []
+    for root in roots:
+        for path in (REPO_ROOT / root).rglob("*.py"):
+            if path.name == Path(__file__).name:
+                continue
+            for lineno, line in enumerate(
+                path.read_text(encoding="utf-8", errors="ignore").splitlines(), 1
+            ):
+                if claim.search(line) and not describes_retirement.search(line):
+                    offenders.append(f"{path.relative_to(REPO_ROOT)}:{lineno}: {line.strip()}")
+    assert not offenders, (
+        "source still asserts the retired 48-hour CVE-response SLA:\n  "
+        + "\n  ".join(offenders)
+        + "\nSee the note at the top of CHANGELOG.cves.md."
+    )

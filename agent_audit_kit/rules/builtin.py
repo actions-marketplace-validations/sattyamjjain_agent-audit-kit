@@ -159,6 +159,11 @@ _AICM_TAGS: dict[str, list[str]] = {
     "AAK-MCP-ASTRBOT-CVE-2026-15501-001": ["IVS-04", "STA-08"],
     "AAK-MCP-HEALTHLAKE-CVE-2026-15643-001": ["IVS-04", "STA-08"],
     "AAK-MCP-PRAISONAI-CVE-2026-61427-001": ["IAM-01", "STA-08"],
+    "AAK-MCP-QWED-CVE-2026-55546-001": ["AIS-08", "IVS-04", "STA-08"],
+    "AAK-MCP-NEXTCLOUD-CVE-2026-55640-001": ["IAM-01", "STA-08"],
+    "AAK-MCP-BROWSEMCP-CVE-2026-55557-001": ["IVS-04", "STA-08"],
+    "AAK-MCP-GENIEACS-CVE-2026-55637-001": ["IAM-01", "STA-08"],
+    "AAK-MCP-SUBLINEAR-CVE-2026-55609-001": ["IVS-04", "STA-08"],
     "AAK-MCP-APPIUM-CVE-2026-58500-001": ["AIS-07", "STA-08"],
     "AAK-MCP-PENPOT-CVE-2026-45805-001": ["IAM-01", "AIS-07", "STA-08"],
     "AAK-MCP-OPENCLAW-CVE-2026-62195-001": ["IAM-01", "STA-08"],
@@ -6317,7 +6322,14 @@ _r(
     "the HTTP-stream transport and never bind it to a non-loopback interface "
     "without authentication.",
     sarif_name="PraisonAiMcpNoAuthDefault",
-    cve_references=["CVE-2026-61427", "CVE-2026-47394", "CVE-2026-48168"],
+    cve_references=[
+        "CVE-2026-61427", "CVE-2026-47394", "CVE-2026-48168",
+        # 2026-08-26: three more advisories against praisonai, all fixed in
+        # 4.6.58 -- below this rule's 4.6.78 floor, so every version they
+        # affect already fires. Recorded here rather than given their own
+        # pins: two pins on one package report one dependency twice.
+        "CVE-2026-55532", "CVE-2026-55529", "CVE-2026-55531",
+    ],
     owasp_mcp_references=["MCP01:2025"],
     owasp_agentic_references=["ASI04"],
     adversa_references=["ADV-AUTH-01"],
@@ -7773,6 +7785,139 @@ _r(
     owasp_mcp_references=["MCP06:2025"],
     owasp_agentic_references=["ASI03"],
     adversa_references=["ADV-INJECT-01"],
+)
+
+
+# ---------------------------------------------------------------------------
+# 2026-08-26 wave. Thirteen watcher-filed CVEs triaged; five resolve to an
+# artifact published where the pin detector looks. The rest are recorded out of
+# scope or already covered in CHANGELOG.cves.md.
+# ---------------------------------------------------------------------------
+
+_r(
+    "AAK-MCP-QWED-CVE-2026-55546-001",
+    "QWED-MCP evaluates a tool argument through SymPy parse_expr (< 0.2.1)",
+    "QWED-MCP, a deterministic verification gateway for MCP, before 0.2.1 passes "
+    "the attacker-controlled `expression` and `claimed_result` arguments of "
+    "`verify_math_expression()` (`src/qwed_mcp/engines/math_engine.py`) straight "
+    "into SymPy's `parse_expr()` after only rewriting `^` to `**`. No "
+    "`global_dict`/`local_dict` pinning, no removal of builtins and no AST "
+    "validation, and `parse_expr()` evaluates through `eval()`, so a tool call "
+    "reaches arbitrary code execution with the server's privileges "
+    "(CVE-2026-55546, CWE-94, CVSS 3.1 9.8). Fixed in 0.2.1. The *source shape* "
+    "of this defect is already reported by `AAK-MCP-TOOL-UNSAFE-EVAL-001`, which "
+    "names unpinned `parse_expr` explicitly and fires on this handler; this pin "
+    "adds the dependency surface, so a project that consumes the package without "
+    "vendoring its source is covered too.",
+    Severity.CRITICAL,
+    Category.SUPPLY_CHAIN,
+    "Upgrade `qwed-mcp` to >= 0.2.1 and pin it. If you maintain a comparable "
+    "verifier, do not reach for a denylist of dangerous names: call "
+    "`parse_expr(expr, global_dict={}, local_dict=<allowed symbols>, "
+    "evaluate=True)` with an explicit symbol allow-list, and bound input length "
+    "and character set before parsing.",
+    sarif_name="QwedMcpParseExprRce",
+    cve_references=["CVE-2026-55546"],
+    owasp_mcp_references=["MCP01:2025", "MCP05:2025"],
+    owasp_agentic_references=["ASI05"],
+    adversa_references=["ADV-RCE-04"],
+)
+
+_r(
+    "AAK-MCP-NEXTCLOUD-CVE-2026-55640-001",
+    "Nextcloud MCP Server webhook endpoint is unauthenticated by default (< 0.117.2)",
+    "Nextcloud MCP Server before 0.117.2 exposes `POST /webhooks/nextcloud` "
+    "(`nextcloud_mcp_server/vector/webhook_receiver.py`) with no authentication "
+    "unless an operator sets one: `WEBHOOK_SECRET` defaults to `None` and startup "
+    "validation does not require it, so `handle_nextcloud_webhook()` accepts "
+    "unauthenticated requests in a default deployment (CVE-2026-55640, CWE-306, "
+    "CVSS 3.1 9.1). This is the fail-open-by-default shape rather than a missing "
+    "check: the code has a secret, and the default value disables it.",
+    Severity.CRITICAL,
+    Category.SUPPLY_CHAIN,
+    "Upgrade `nextcloud-mcp-server` to >= 0.117.2 and pin it. Until then set "
+    "`WEBHOOK_SECRET` explicitly and keep the webhook path off any untrusted "
+    "network. The durable fix in your own servers is to fail startup when a "
+    "required secret is unset rather than defaulting it to `None` -- an optional "
+    "secret is an optional control.",
+    sarif_name="NextcloudMcpWebhookNoAuth",
+    cve_references=["CVE-2026-55640"],
+    owasp_mcp_references=["MCP01:2025"],
+    owasp_agentic_references=["ASI03"],
+    adversa_references=["ADV-AUTH-01"],
+)
+
+_r(
+    "AAK-MCP-BROWSEMCP-CVE-2026-55557-001",
+    "browse-mcp writes fetched content to a caller-controlled path (< 0.8.2)",
+    "browse-mcp, a Playwright-based headless-browser MCP server, before 0.8.2 has "
+    "`browser_download` write a fetched response body to `join(save_dir, filename)` "
+    "without validating the caller-supplied `save_dir`, while `browser_save_state` "
+    "and `browser_load_state` honour a caller-supplied path unchanged "
+    "(CVE-2026-55557). An MCP client -- or an autonomous agent steered by indirect "
+    "prompt injection, which is the realistic path -- writes outside the intended "
+    "directory. Fixed in 0.8.2. The pinned artifact is the **npm** package "
+    "(`That1Drifter/browse-mcp`); PyPI carries an unrelated `browse-mcp` (an "
+    "academic-paper search server) whose 0.1.x line never approaches this floor.",
+    Severity.HIGH,
+    Category.SUPPLY_CHAIN,
+    "Upgrade `browse-mcp` to >= 0.8.2 and pin it. For a comparable download tool, "
+    "resolve the destination and require it to stay under a fixed root "
+    "(`os.path.realpath` / `Path.resolve()` then a containment check) rather than "
+    "filtering the path string -- and treat the filename as untrusted too.",
+    sarif_name="BrowseMcpPathTraversal",
+    cve_references=["CVE-2026-55557"],
+    owasp_mcp_references=["MCP04:2025"],
+    owasp_agentic_references=["ASI05"],
+    adversa_references=["ADV-INJECT-04"],
+)
+
+_r(
+    "AAK-MCP-GENIEACS-CVE-2026-55637-001",
+    "genieacs-mcp serves an unauthenticated /mcp listener open to DNS rebinding (< 0.3.2)",
+    "genieacs-mcp before 0.3.2 starts an unauthenticated Streamable-HTTP `/mcp` "
+    "listener (`cmd/server/main.go`) on the default `MCP_LISTEN_ADDR` of "
+    "`127.0.0.1:8080` whenever `MCP_AUTH_TOKEN` is unset, and the "
+    "`httpSrv.Start(addr)` path validates neither `Host` nor `Origin` "
+    "(CVE-2026-55637). Binding to loopback is not the boundary it looks like: a "
+    "malicious website resolves its own name to 127.0.0.1 and the browser sends "
+    "same-origin-looking requests to the local server, so DNS rebinding reaches "
+    "the tool surface of a TR-069 ACS bridge. Fixed in 0.3.2.",
+    Severity.HIGH,
+    Category.SUPPLY_CHAIN,
+    "Upgrade `genieacs-mcp` to >= 0.3.2 and pin it, and set `MCP_AUTH_TOKEN` "
+    "regardless. Loopback binding does not authenticate a browser: validate "
+    "`Origin` and `Host` against an allow-list on any local HTTP MCP listener.",
+    sarif_name="GenieacsMcpDnsRebind",
+    cve_references=["CVE-2026-55637"],
+    owasp_mcp_references=["MCP01:2025"],
+    owasp_agentic_references=["ASI03"],
+    adversa_references=["ADV-AUTH-01"],
+)
+
+_r(
+    "AAK-MCP-SUBLINEAR-CVE-2026-55609-001",
+    "consciousness-explorer state tools accept a caller-controlled path "
+    "(sublinear-time-solver < 1.6.0, consciousness-explorer < 1.1.2)",
+    "The `export_state` and `import_state` tools in "
+    "`src/consciousness-explorer/mcp/server.js` pass the caller-controlled "
+    "`filepath` parameter to filesystem operations without restricting the "
+    "destination (CVE-2026-55609), so an MCP client reads or writes outside the "
+    "intended directory. One advisory, two npm packages, and they carry different "
+    "floors: `sublinear-time-solver` fixes it in 1.6.0 and "
+    "`consciousness-explorer` in 1.1.2, so both are pinned under this rule and "
+    "whichever a project depends on fires below its own floor.",
+    Severity.HIGH,
+    Category.SUPPLY_CHAIN,
+    "Upgrade `sublinear-time-solver` to >= 1.6.0 and/or `consciousness-explorer` "
+    "to >= 1.1.2 and pin them. For a state-persistence tool, do not take a path "
+    "from the caller at all: derive it from a server-side root plus a validated "
+    "identifier, and resolve-and-contain before opening.",
+    sarif_name="ConsciousnessExplorerStatePathTraversal",
+    cve_references=["CVE-2026-55609"],
+    owasp_mcp_references=["MCP04:2025"],
+    owasp_agentic_references=["ASI05"],
+    adversa_references=["ADV-INJECT-04"],
 )
 
 

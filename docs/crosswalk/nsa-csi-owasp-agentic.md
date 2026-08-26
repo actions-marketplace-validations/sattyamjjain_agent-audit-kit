@@ -1,6 +1,6 @@
 # AgentAuditKit standards crosswalk
 
-Every AgentAuditKit rule (321 total; 308 mapped) against two agentic-security standards. Static and deterministic — generated from the committed rule registry and compliance mappings, no scan required.
+Every AgentAuditKit rule (326 total; 313 mapped) against two agentic-security standards. Static and deterministic — generated from the committed rule registry and compliance mappings, no scan required.
 
 **Standards**
 
@@ -151,6 +151,7 @@ Every AgentAuditKit rule (321 total; 308 mapped) against two agentic-security st
 | `AAK-MCP-AUTHFETCH-CVE-2026-49857-001` | high | supply-chain | — | ASI06 Memory & Context Poisoning |
 | `AAK-MCP-AWSAPIMCP-CVE-2026-16584-001` | high | supply-chain | Choose supported MCP projects when possible; Sign and verify MCP messages; Track and patch MCP related vulnerabilities; Scan local network for open or vulnerable MCP servers | ASI04 Supply Chain Vulnerabilities |
 | `AAK-MCP-BETTERAUTH-CVE-2026-53512-001` | high | supply-chain | Design for boundaries; Sign and verify MCP messages; Scan local network for open or vulnerable MCP servers | ASI03 Identity & Privilege Abuse |
+| `AAK-MCP-BROWSEMCP-CVE-2026-55557-001` | high | supply-chain | Design for boundaries; Validate parameters; Constrain and sandbox tool execution; Filter and monitor output pipelines and chained execution | ASI05 Unexpected Code Execution |
 | `AAK-MCP-CARD-001` | critical | mcp-server-card | — | ASI06 Memory & Context Poisoning |
 | `AAK-MCP-CARD-002` | high | mcp-server-card | Design for boundaries; Sign and verify MCP messages; Scan local network for open or vulnerable MCP servers | ASI03 Identity & Privilege Abuse |
 | `AAK-MCP-CARD-003` | high | mcp-server-card | — | ASI06 Memory & Context Poisoning |
@@ -173,6 +174,7 @@ Every AgentAuditKit rule (321 total; 308 mapped) against two agentic-security st
 | `AAK-MCP-FRONTMCP-CVE-2026-67531-001` | high | supply-chain | Choose supported MCP projects when possible; Design for boundaries; Validate parameters; Constrain and sandbox tool execution; Sign and verify MCP messages; Filter and monitor output pipelines and chained execution; Track and patch MCP related vulnerabilities; Scan local network for open or vulnerable MCP servers | ASI05 Unexpected Code Execution; ASI04 Supply Chain Vulnerabilities |
 | `AAK-MCP-GATEWAY-REGISTRY-CVE-2026-14471-001` | high | supply-chain | Design for boundaries; Validate parameters; Constrain and sandbox tool execution | ASI02 Tool Misuse |
 | `AAK-MCP-GEMINIBRIDGE-CVE-2026-54785-001` | medium | supply-chain | — | ASI09 Human-Agent Trust Exploitation |
+| `AAK-MCP-GENIEACS-CVE-2026-55637-001` | high | supply-chain | Design for boundaries; Sign and verify MCP messages; Scan local network for open or vulnerable MCP servers | ASI03 Identity & Privilege Abuse |
 | `AAK-MCP-GOOGLESEARCH-CVE-2026-19337-001` | medium | supply-chain | — | ASI06 Memory & Context Poisoning |
 | `AAK-MCP-GRAFANA-CVE-2026-19516-001` | critical | supply-chain | — | ASI06 Memory & Context Poisoning |
 | `AAK-MCP-HEALTHLAKE-CVE-2026-15643-001` | high | supply-chain | — | ASI06 Memory & Context Poisoning |
@@ -197,6 +199,7 @@ Every AgentAuditKit rule (321 total; 308 mapped) against two agentic-security st
 | `AAK-MCP-N8N-CVE-2026-72768-001` | high | supply-chain | Design for boundaries; Validate parameters; Constrain and sandbox tool execution; Filter and monitor output pipelines and chained execution | ASI06 Memory & Context Poisoning; ASI05 Unexpected Code Execution |
 | `AAK-MCP-N8NMCP-CVE-2026-54052-001` | critical | supply-chain | Choose supported MCP projects when possible; Sign and verify MCP messages; Track and patch MCP related vulnerabilities; Scan local network for open or vulnerable MCP servers | ASI04 Supply Chain Vulnerabilities |
 | `AAK-MCP-NEOMJS-CVE-2026-18482-001` | high | supply-chain | Design for boundaries; Validate parameters; Constrain and sandbox tool execution; Filter and monitor output pipelines and chained execution | ASI05 Unexpected Code Execution |
+| `AAK-MCP-NEXTCLOUD-CVE-2026-55640-001` | critical | supply-chain | Design for boundaries; Sign and verify MCP messages; Scan local network for open or vulnerable MCP servers | ASI03 Identity & Privilege Abuse |
 | `AAK-MCP-NOAUTH-DEFAULT` | high | mcp-config | Design for boundaries; Sign and verify MCP messages; Scan local network for open or vulnerable MCP servers | ASI03 Identity & Privilege Abuse |
 | `AAK-MCP-OMNIGENT-CVE-2026-62674-001` | critical | supply-chain | Design for boundaries; Sign and verify MCP messages; Scan local network for open or vulnerable MCP servers | ASI03 Identity & Privilege Abuse |
 | `AAK-MCP-OPENAPI-BLOATED-PARAMS-001` | low | tool-poisoning | Filter and monitor output pipelines and chained execution | — |
@@ -205,6 +208,7 @@ Every AgentAuditKit rule (321 total; 308 mapped) against two agentic-security st
 | `AAK-MCP-OPENCLAW-CVE-2026-62195-001` | high | supply-chain | Design for boundaries; Sign and verify MCP messages; Scan local network for open or vulnerable MCP servers | ASI03 Identity & Privilege Abuse |
 | `AAK-MCP-PENPOT-CVE-2026-45805-001` | critical | supply-chain | Choose supported MCP projects when possible; Sign and verify MCP messages; Track and patch MCP related vulnerabilities; Scan local network for open or vulnerable MCP servers | ASI04 Supply Chain Vulnerabilities |
 | `AAK-MCP-PRAISONAI-CVE-2026-61427-001` | high | supply-chain | Choose supported MCP projects when possible; Sign and verify MCP messages; Track and patch MCP related vulnerabilities; Scan local network for open or vulnerable MCP servers | ASI04 Supply Chain Vulnerabilities |
+| `AAK-MCP-QWED-CVE-2026-55546-001` | critical | supply-chain | Design for boundaries; Validate parameters; Constrain and sandbox tool execution; Filter and monitor output pipelines and chained execution | ASI05 Unexpected Code Execution |
 | `AAK-MCP-REPOMIX-CVE-2026-49988-001` | medium | supply-chain | Choose supported MCP projects when possible; Sign and verify MCP messages; Track and patch MCP related vulnerabilities; Scan local network for open or vulnerable MCP servers | ASI04 Supply Chain Vulnerabilities |
 | `AAK-MCP-ROUTING-DESYNC-001` | high | transport-security | Design for boundaries; Validate parameters; Sign and verify MCP messages; Scan local network for open or vulnerable MCP servers | ASI03 Identity & Privilege Abuse |
 | `AAK-MCP-RUFLO-CVE-2026-59726-001` | critical | supply-chain | Choose supported MCP projects when possible; Sign and verify MCP messages; Track and patch MCP related vulnerabilities; Scan local network for open or vulnerable MCP servers | ASI04 Supply Chain Vulnerabilities |
@@ -225,6 +229,7 @@ Every AgentAuditKit rule (321 total; 308 mapped) against two agentic-security st
 | `AAK-MCP-STDIO-CMD-INJ-003` | critical | supply-chain | Design for boundaries; Validate parameters; Constrain and sandbox tool execution; Instrument for logging and detection | ASI02 Tool Misuse; ASI10 Rogue Agents |
 | `AAK-MCP-STDIO-CMD-INJ-004` | critical | supply-chain | Design for boundaries; Validate parameters; Constrain and sandbox tool execution; Instrument for logging and detection | ASI02 Tool Misuse; ASI10 Rogue Agents |
 | `AAK-MCP-STDIO-LAUNCHER-INJECT-001` | high | mcp-config | Design for boundaries; Validate parameters; Constrain and sandbox tool execution; Filter and monitor output pipelines and chained execution | ASI05 Unexpected Code Execution; ASI02 Tool Misuse |
+| `AAK-MCP-SUBLINEAR-CVE-2026-55609-001` | high | supply-chain | Design for boundaries; Validate parameters; Constrain and sandbox tool execution; Filter and monitor output pipelines and chained execution | ASI05 Unexpected Code Execution |
 | `AAK-MCP-TEXTEDITOR-CVE-2026-15138-001` | medium | supply-chain | — | ASI09 Human-Agent Trust Exploitation |
 | `AAK-MCP-TOOL-ARG-OSCMD-001` | critical | tool-poisoning | Design for boundaries; Validate parameters; Constrain and sandbox tool execution; Filter and monitor output pipelines and chained execution | ASI05 Unexpected Code Execution |
 | `AAK-MCP-TOOL-UNSAFE-EVAL-001` | critical | tool-poisoning | Design for boundaries; Validate parameters; Constrain and sandbox tool execution; Filter and monitor output pipelines and chained execution | ASI02 Tool Misuse; ASI05 Unexpected Code Execution |

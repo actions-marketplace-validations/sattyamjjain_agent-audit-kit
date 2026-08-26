@@ -161,6 +161,13 @@ _LANGBOT_RE = re.compile(r"(?<![\w./-])langbot(?![\w-])" + _VER_OPT, re.IGNORECA
 _CLINE_RE = re.compile(r"(?<![\w./-])cline(?![\w-])" + _VER_OPT, re.IGNORECASE)
 # `n8n` fixed to exclude the distinct `n8n-mcp` package (right boundary).
 _N8N_RE = re.compile(r"(?<![\w./-])n8n(?![\w-])" + _VER_OPT, re.IGNORECASE)
+# `browse-mcp` (npm, That1Drifter). PyPI carries an unrelated `browse-mcp` -- an
+# academic-paper search server (LinXueyuanStdio) whose line is 0.1.8/0.1.9 and
+# never approaches the 0.8.2 fix, which is what shows the two are different
+# projects. The floor sits above every version that project has published, so a
+# manifest depending on it stays quiet; the bounded form keeps this off
+# `browse-mcp-client`-style siblings.
+_BROWSE_MCP_RE = re.compile(r"(?<![\w./-])browse-mcp(?![\w-])" + _VER_OPT, re.IGNORECASE)
 
 
 @dataclass(frozen=True)
@@ -549,6 +556,24 @@ _PINS: tuple[_Pin, ...] = (
          fix_label="no fixed release — restrict who may configure STDIO MCP servers "
                    "rather than waiting for a version bump",
          regexes=(_LANGBOT_RE,)),
+    # --- 2026-08-26 wave ---
+    # Five of thirteen watcher-filed CVEs that resolve to a real artifact on a
+    # registry this detector reads. The other eight are recorded out of scope or
+    # already covered in CHANGELOG.cves.md; the deciding question was never
+    # severity, it was whether the vulnerable thing is published where we look.
+    _Pin("AAK-MCP-QWED-CVE-2026-55546-001", "qwed-mcp", ("qwed-mcp",), (0, 2, 1),
+         fix_label="0.2.1"),
+    _Pin("AAK-MCP-NEXTCLOUD-CVE-2026-55640-001", "nextcloud-mcp-server",
+         ("nextcloud-mcp-server",), (0, 117, 2), fix_label="0.117.2"),
+    _Pin("AAK-MCP-BROWSEMCP-CVE-2026-55557-001", "browse-mcp", ("browse-mcp",),
+         (0, 8, 2), fix_label="0.8.2", regexes=(_BROWSE_MCP_RE,)),
+    _Pin("AAK-MCP-GENIEACS-CVE-2026-55637-001", "genieacs-mcp", ("genieacs-mcp",),
+         (0, 3, 2), fix_label="0.3.2"),
+    # One CVE, two npm packages, different floors — the @agenticmail shape.
+    _Pin("AAK-MCP-SUBLINEAR-CVE-2026-55609-001", "sublinear-time-solver",
+         ("sublinear-time-solver",), (1, 6, 0), fix_label="1.6.0"),
+    _Pin("AAK-MCP-SUBLINEAR-CVE-2026-55609-001", "consciousness-explorer",
+         ("consciousness-explorer",), (1, 1, 2), fix_label="1.1.2"),
 )
 
 _CANDIDATE_NAMES = (

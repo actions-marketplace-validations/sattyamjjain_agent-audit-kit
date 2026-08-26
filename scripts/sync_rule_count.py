@@ -94,7 +94,68 @@ def report_headline_numbers() -> dict[str, str]:
         "inline-auth-pct": f"{auth['remote_auth_static_credential']['pct']:g}",
         "inline-auth-n": _n(auth["remote_auth_static_credential"]["n"]),
         "inline-auth-d": _n(auth["remote_auth_static_credential"]["denominator"]),
+        # The second headline. PREVALENCE.md and the distribution copy both lead
+        # with it, and both sat at 1,217 after the AAK-MCP-001 fix moved it to
+        # 1,215 -- the same drift as the no-auth figure, one metric over.
+        "critical-pct": f"{data['configs_with_critical_pct']:g}",
+        "critical-n": _n(data["configs_with_critical"]),
     }
+
+
+# Every file that carries `report:` markers. The README was the only one for a
+# while, and five other surfaces went on stating 52.3% / 1,205 for a week after
+# results.json moved to 52.2% / 1,203 -- including the Show HN title and the
+# Reddit drafts, i.e. copy pasted in public. A number quoted outside the
+# generator's reach is a number that rots.
+#
+# Two surfaces are deliberately NOT here, because a marker in either would be
+# visible to a human rather than invisible in rendered markdown:
+#   CITATION.cff                    figures live in a YAML block scalar, so the
+#                                   comment renders into the citation abstract.
+#   docs/DISTRIBUTION-CHECKLIST.md  the Show HN body and Reddit drafts are copy
+#                                   somebody pastes into a comment box.
+# Both are asserted against results.json in tests/test_report_headline_numbers.py
+# instead, so drift fails CI without putting machinery into text that leaves the
+# repository.
+_REPORT_MARKER_FILES = (
+    "README.md",
+    "docs/STATE-OF-MCP-SECURITY-2026.md",
+    "research/state-of-mcp-2026/PREVALENCE.md",
+)
+
+
+def _apply_report_markers(text: str, rel: str) -> str:
+    """Rewrite every ``report:<key>`` marker in ``text`` from results.json.
+
+    Shared by the README pass and the per-document pass so there is one place
+    that decides what a marker means and one error path for an unknown key.
+    """
+    values = report_headline_numbers()
+
+    def _sub(match: "re.Match[str]") -> str:
+        key = match.group(2)
+        if key not in values:
+            raise SystemExit(
+                f"sync_rule_count: {rel} references unknown report marker `{key}` — "
+                f"valid keys: {sorted(values)}"
+            )
+        return f"{match.group(1)}{values[key]}{match.group(4)}"
+
+    return _README_REPORT_RE.sub(_sub, text)
+
+
+def _update_report_marker_doc(rel: str, *, check: bool) -> bool:
+    """Sync one non-README document's report markers. Returns True if it changed."""
+    path = REPO_ROOT / rel
+    if not path.is_file():
+        return False
+    text = path.read_text(encoding="utf-8")
+    updated = _apply_report_markers(text, rel)
+    if updated == text:
+        return False
+    if not check:
+        path.write_text(updated, encoding="utf-8")
+    return True
 
 
 # Fix-recipe coverage (issue #607). Driven from the registry for the same reason the
@@ -267,19 +328,9 @@ def _update_readme(count: int, *, check: bool) -> bool:
         lambda m: f"{m.group(1)}{test_count:,}{m.group(3)}", text
     )
 
-    # Report headline numbers — see report_headline_numbers() above.
-    report_values = report_headline_numbers()
-
-    def _sub_report(match: "re.Match") -> str:
-        key = match.group(2)
-        if key not in report_values:
-            raise SystemExit(
-                f"sync_rule_count: README references unknown report marker `{key}` — "
-                f"valid keys: {sorted(report_values)}"
-            )
-        return f"{match.group(1)}{report_values[key]}{match.group(4)}"
-
-    text = _README_REPORT_RE.sub(_sub_report, text)
+    # Report headline numbers — see report_headline_numbers() above. Shared with
+    # the other marker-bearing documents so one place decides what a key means.
+    text = _apply_report_markers(text, "README.md")
 
     if text == original:
         return False
@@ -415,9 +466,21 @@ def main() -> int:
         _update_total_anchor_doc(rel, count, check=args.check)
         for rel in _TOTAL_ANCHOR_DOCS
     ]
+    changed_report = [
+        _update_report_marker_doc(rel, check=args.check)
+        for rel in _REPORT_MARKER_FILES
+        if rel != "README.md"  # already handled by _update_readme
+    ]
 
     changed = any(
-        (changed_readme, changed_action, changed_init, changed_rules_md, *changed_docs)
+        (
+            changed_readme,
+            changed_action,
+            changed_init,
+            changed_rules_md,
+            *changed_docs,
+            *changed_report,
+        )
     )
     if args.check and changed:
         sys.stderr.write(

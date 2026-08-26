@@ -13,10 +13,10 @@ isn't" — across three stacks:
   `app.post("/mcp_message", h)`.
 
 The detection is pragmatic (regex, not full AST): the shape is shallow
-and the upside of shipping today to meet the 48h SLA outweighs a tree-
-sitter pass. False-positive rate stays low because we only fire when
-two routes matching the MCP endpoint pattern live in the same file and
-one has a recognised auth marker while the other doesn't.
+enough that a tree-sitter pass would buy little. False-positive rate
+stays low because we only fire when two routes matching the MCP endpoint
+pattern live in the same file and one has a recognised auth marker while
+the other doesn't.
 
 References:
 - NVD: https://nvd.nist.gov/vuln/detail/CVE-2026-33032

@@ -1504,8 +1504,11 @@ def _check_mcp_calculate_server_pin(project_root: Path, scanned_files: set[str])
 # for AAK — we don't currently scan NuGet manifests; only the Python
 # pin shape is actionable here.
 #
-# MSRC disclosure: 2026-05-07. AAK rule shipped: 2026-05-10 (within
-# 72h of disclosure → 48h SLA met for the Python SDK arm).
+# MSRC disclosure: 2026-05-07. AAK rule shipped: 2026-05-10 — three days
+# for the Python SDK arm. A dated measurement, not a service level: this
+# project publishes no CVE-response SLA (retired in PR #432; see the note
+# at the top of CHANGELOG.cves.md). Current latency is published, and
+# recomputed, on the coverage page.
 # ---------------------------------------------------------------------------
 
 _SEMANTIC_KERNEL_PATCHED = (1, 39, 4)
