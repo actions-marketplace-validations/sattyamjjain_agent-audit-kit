@@ -7,6 +7,54 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.3.91] - 2026-08-31
+
+### Added
+
+- `AAK-MCP-TRANSPORT-SESSION-UNAUTH-001` (critical, transport-security) for
+  CVE-2026-82456 — argocd-mcp 0.8.0, CVSS 10.0 on both 3.1 and 4.0. Rules 326 → 327,
+  scanners 94 → 95. A family rule keyed on the conjunction rather than the package:
+  an MCP HTTP transport, an any-interface bind, and a credential that points outward.
+  Nothing in the rule text names argocd, and a test asserts that.
+- `scanners/mcp_transport_session_unauth.py`, and `CVE-2026-82456` in the ledger with
+  its 2-day disclosure-to-rule latency (published 2026-08-29, shipped 2026-08-31).
+
+### Fixed
+
+- The project's own no-auth rule read a CVSS 10.0 as authenticated.
+  `AAK-MCP-HTTP-NOAUTH-SERVER-001` asks whether a file holds any auth marker, and
+  `_AUTH_MARKER_RE` counts a bare `Authorization:` — which an **outbound** header
+  satisfies. Per GHSA-rp45-5x3v-48mr: "The environment variable is an outbound Argo
+  CD credential. It does not authenticate the caller." Verified before the rule was
+  written: on the advisory's own snippet the engine reported only
+  `AAK-DNS-REBIND-001`, and fixing just that leaves the server exploitable from the
+  LAN.
+- The same rule could not see the bind either. It needs a literal `0.0.0.0`/`::`;
+  argocd-mcp has neither, because `app.listen(port)` binds every interface by
+  omitting the host. That implicit bind is now detected — for JS/TS only, since
+  `uvicorn.run` and `Flask.run` default to loopback and inferring it there would
+  invent findings.
+- `CLAUDE.md` claimed "97 .py files on disk" while `scanners/` held 96. The phrasing
+  was not in `check_counts.PATTERNS`, so `make count-check` never looked at it — a
+  count wrong in the file that tells the next reader the counts are guarded. Added
+  `scanner_files` as its own canonical entry and pattern.
+
+### Changed
+
+- Dependabot: `actions/setup-python` 6 → 7 (#669, also normalising `@v7.0.0` → `@v7`)
+  and `github/codeql-action/{init,autobuild,analyze,upload-sarif}` 4.37.7 → 4.37.9;
+  `click` 8.4.2 → 8.5.0 (#668). No `setup-python@v6` remains in `.github/`.
+
+### Notes
+
+- SARIF `security-severity` for the new rule is **9.5**, the repo's CRITICAL band
+  constant — scores are derived from the severity band for all rules and there is no
+  per-rule CVSS field, so the advisory's 10.0 lives in `cve_references` and the
+  ledger rather than in the SARIF property.
+- The new rule fires zero times on the 536-server benign slice (`make fp-check`), so
+  the published false-positive figure is unchanged and needed no re-adjudication.
+
+
 ## [0.3.90] - 2026-08-26
 
 ### Fixed
