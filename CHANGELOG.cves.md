@@ -16,6 +16,39 @@ open.
 > issue. The per-CVE latency figures in the tables are **measurements recorded at
 > the time**, kept as dated facts, not a standing promise.
 
+## 2026-08-31: the credential that points the wrong way
+
+A CVSS 10.0 that the project's own no-auth rule read as authenticated.
+
+`AAK-MCP-HTTP-NOAUTH-SERVER-001` asks whether a file contains any authentication
+marker, and `_AUTH_MARKER_RE` counts a bare `Authorization:`. An MCP server that
+attaches an operator token to its **upstream** calls satisfies that test while
+authenticating nobody inbound, so the generic rule stands down on exactly the
+shape that matters. The advisory says it in one line: *"The environment variable
+is an outbound Argo CD credential. It does not authenticate the caller."*
+
+The second half is the bind. The generic rule needs a literal `0.0.0.0` or `::`;
+argocd-mcp has neither. `app.listen(port)` at `src/server/transport.ts:166` binds
+every interface **because the host argument is absent** — a Node semantic, and
+one that leaves no string for a grep to find. That asymmetry is now written into
+the scanner: the implicit bind is inferred for JS/TS only, because `uvicorn.run`
+and `Flask.run` default to loopback and inferring it in Python would invent
+findings.
+
+Both halves were checked before the rule was written rather than asserted: on the
+advisory's own snippet the engine reported only `AAK-DNS-REBIND-001`, and an
+operator who fixed just that would still have been fully exploitable from the LAN.
+
+Keyed on the conjunction, not the package. Nothing in the rule text says argocd,
+and `tests/test_cve_2026_82456_transport_session_unauth.py` asserts it — so the
+next server of this shape needs no new rule and no pin. The two rules are disjoint
+by construction: this one stands down wherever the generic rule would fire itself,
+which is also under test.
+
+| CVE | Reference | AAK rule / disposition | Triaged |
+|---|---|---|---|
+| CVE-2026-82456 (`argocd-mcp` 0.8.0, CWE-1327 + CWE-306 + CWE-346, CVSS 3.1 and 4.0 both **10.0** - the HTTP transport binds every interface and creates MCP sessions with no caller credential; `src/server/transport.ts:73-91` reads `req.headers['x-argocd-api-token'] \|\| process.env.ARGOCD_API_TOKEN \|\| ''`, so a caller who sends nothing is served with the operator's token and can `create_application` against an attacker repository then `sync_application` it onto the destination cluster) | [NVD](https://nvd.nist.gov/vuln/detail/CVE-2026-82456) · [GHSA-rp45-5x3v-48mr](https://github.com/argoproj-labs/mcp-for-argocd/security/advisories/GHSA-rp45-5x3v-48mr) | **In scope, rule shipped** `AAK-MCP-TRANSPORT-SESSION-UNAUTH-001` (TRANSPORT_SECURITY, **CRITICAL**). A family rule, not a pin: it fires on the conjunction of an MCP HTTP transport, an any-interface bind (explicit `0.0.0.0`/`::`, **or** a JS/TS `.listen(port)` with the host omitted), and a credential that points outward — either an environment token spent on upstream requests with no inbound check, or the published fallback chain, where an inbound header read is optional at runtime. **Detection is a single-file source pattern, not data flow**: it does not prove the environment value reaches the outbound call, and an inbound check applied from a separate middleware module is not seen. Both limits are on the rule's `limitations` field, so they reach a SARIF reader. Deliberately disjoint from `AAK-MCP-HTTP-NOAUTH-SERVER-001`, which keeps the no-credential-at-all case; `AAK-DNS-REBIND-001` fires alongside and should, since a missing Host allow-list and a missing inbound credential are different defects with different fixes. No version pin: `argocd-mcp` is fixed in 0.9.0 and a pin would cover one package, where the conjunction covers the shape. SARIF `security-severity` is **9.5**, the repo's CRITICAL band constant — AAK derives that score from the severity band for all rules and carries no per-rule CVSS field, so the advisory's 10.0 is recorded here and in `cve_references` rather than in the SARIF property. Zero hits on the 536-server benign slice (`make fp-check`). Positive and negative fixtures in `tests/test_cve_2026_82456_transport_session_unauth.py`; the negative is the same file with `app.listen(port, "127.0.0.1")`. (#667) | 2026-08-31 |
+
 ## 2026-08-26: thirteen open issues, and severity decided none of them
 
 Thirteen `cve-response` issues had accumulated. An open-CVE backlog on the public

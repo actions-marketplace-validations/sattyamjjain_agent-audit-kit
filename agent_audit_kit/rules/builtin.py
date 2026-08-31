@@ -8192,6 +8192,51 @@ _r(
 
 
 # ---------------------------------------------------------------------------
+# The credential that points the wrong way (2026-08 wave)
+#
+# An MCP HTTP transport that binds every interface while its only credential is
+# spent on *upstream* calls. Every reader sees a token and concludes the server
+# is authenticated; no caller is ever challenged. CVE-2026-82456 (argocd-mcp
+# 0.8.0, CVSS 10.0) is the anchor, not the identity — the rule is keyed on the
+# conjunction, so the next package of this shape needs no pin. See
+# scanners/mcp_transport_session_unauth.py for why the generic no-auth rule
+# cannot see this shape, and for the two detections that can.
+# ---------------------------------------------------------------------------
+
+_r(
+    "AAK-MCP-TRANSPORT-SESSION-UNAUTH-001",
+    "MCP HTTP transport binds every interface and authenticates no caller",
+    "An MCP server exposes an HTTP/SSE transport on every network interface and "
+    "creates sessions without requiring a caller credential. A credential is "
+    "present \u2014 read from the environment and attached to the server's own "
+    "upstream requests \u2014 but it authenticates the server to its backend, not "
+    "the caller to the server, so any host that can reach the listener invokes "
+    "the full tool surface with the operator's stored token. The bind is often "
+    "implicit: in Node, `.listen(port)` with the host argument omitted binds "
+    "every interface with no 0.0.0.0 literal anywhere in the source.",
+    Severity.CRITICAL,
+    Category.TRANSPORT_SECURITY,
+    "Require a separate inbound credential for network transports, and treat "
+    "environment tokens as outbound-only \u2014 never as proof of a caller's "
+    "identity. Bind 127.0.0.1 by default, and set "
+    "`enableDnsRebindingProtection: true` with `allowedHosts` / `allowedOrigins` "
+    "on each transport (or use the SDK's `hostHeaderValidation()` middleware).",
+    sarif_name="McpTransportSessionUnauth",
+    cve_references=["CVE-2026-82456"],
+    owasp_mcp_references=["MCP07:2025"],
+    owasp_agentic_references=["ASI03"],
+    adversa_references=["ADV-AUTH-01"],
+    incident_references=["GHSA-rp45-5x3v-48mr"],
+    limitations=(
+        "Reads one file at a time, so an inbound check applied from a separate "
+        "middleware module is not seen. The implicit all-interfaces bind is "
+        "inferred for JS/TS only, where Node's listen() defaults to every "
+        "interface; Python servers default to loopback and are never inferred."
+    ),
+)
+
+
+# ---------------------------------------------------------------------------
 # Public API
 # ---------------------------------------------------------------------------
 

@@ -101,6 +101,13 @@ PATTERNS: tuple[tuple[re.Pattern[str], str], ...] = (
     # "9 of 11 security categories" in a case study -- three statements about
     # different things that a guard would have "fixed" into being false.
     (re.compile(r"rules\*{0,2}\s+across\s+(\d+)\s+(?:security\s+)?categor(?:y|ies)", re.I), "categories"),
+    # "(97 .py files on disk - the registry is authoritative)" in CLAUDE.md. This
+    # phrasing was unguarded and had drifted to 97 while the directory held 96 --
+    # a count wrong in the one file that tells the next reader the counts are
+    # guarded. It is a different number from `scanners` (which counts what the
+    # engine registers), so it needs its own canonical entry rather than reusing
+    # one.
+    (re.compile(r"\b(\d+)\s+\.py files on disk\b", re.I), "scanner_files"),
 )
 
 
@@ -119,6 +126,12 @@ def canonical_counts() -> dict[str, int]:
         "frameworks": len(pdf_report._FRAMEWORK_TITLES),
         "platforms": len(discovery.AGENT_CONFIGS),
         "categories": len(list(Category)),
+        # Non-private modules in scanners/: registered scanners plus the
+        # back-compat shims. scanners.json states the same invariant.
+        "scanner_files": len([
+            p for p in (REPO_ROOT / "agent_audit_kit" / "scanners").glob("*.py")
+            if not p.stem.startswith("_")
+        ]),
     }
 
 

@@ -14,13 +14,13 @@
 | Hook Injection | 17 |
 | Trust Boundaries | 15 |
 | Taint Analysis | 14 |
+| Transport Security | 14 |
 | A2A Protocol | 13 |
-| Transport Security | 13 |
 | Legal Compliance | 12 |
 | MCP Server Card | 4 |
 | Agentic Skills (AST10) | 3 |
 | Composition | 3 |
-| **Total** | **326** |
+| **Total** | **327** |
 
 <!-- END rules-summary -->
 

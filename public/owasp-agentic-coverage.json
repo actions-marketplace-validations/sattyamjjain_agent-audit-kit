@@ -1,8 +1,8 @@
 {
   "schema_version": "1",
-  "last_updated": "2026-08-26T13:58:38Z",
+  "last_updated": "2026-08-31T08:12:27Z",
   "aak_version": "0.3.90",
-  "rule_count": 326,
+  "rule_count": 327,
   "coverage": [
     {
       "asi_id": "ASI01",
@@ -641,7 +641,7 @@
     {
       "asi_id": "ASI03",
       "title": "Memory Poisoning",
-      "rule_density": 72,
+      "rule_density": 73,
       "rules": [
         {
           "id": "AAK-A2A-005",
@@ -1010,6 +1010,14 @@
             "AIS-08",
             "IAM-01"
           ]
+        },
+        {
+          "id": "AAK-MCP-TRANSPORT-SESSION-UNAUTH-001",
+          "severity": "critical",
+          "cve_references": [
+            "CVE-2026-82456"
+          ],
+          "aicm_references": []
         },
         {
           "id": "AAK-MCP-TUNNEL-002",
