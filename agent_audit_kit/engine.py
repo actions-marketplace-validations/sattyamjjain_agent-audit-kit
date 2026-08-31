@@ -40,12 +40,81 @@ _OPTIONAL_SCANNERS: list[tuple[str, str, list[str]]] = [
     ("ssrf_patterns", "SSRF patterns", []),
     ("oauth_misconfig", "OAuth 2.1 misconfig", []),
     ("hook_rce", "Hook RCE", []),
+    ("ide_task_rce", "VS Code IDE task/launch folder-open RCE", []),
+    ("agent_trust_surface", "Agent config/skill auto-trust (headless -p in CI)", []),
+    ("skill_composition", "Skill-set capability-union composition (AAK-AGENT-COMPOSE-001)", []),
+    ("composition", "Capability-graph composition (AAK-COMPOSE-001/002/003)", []),
+    ("agentic_skills", "OWASP Agentic Skills Top 10 (AAK-AST02/04/10)", []),
+    ("session_splice", "Session-scoped tool-call argument splicing (AAK-AGENT-COMPOSE-002)", []),
     ("langchain_vuln", "LangChain vulnerabilities", []),
     ("routines", "Claude Code routines", []),
     ("mcp_tasks", "MCP Tasks leakage", []),
     ("india_pii", "India PII", []),
     ("healthcare_ai", "Healthcare AI legal triggers", []),
     ("state_privacy", "US state consumer privacy", []),
+    ("stdio_injection", "Ox MCP STDIO command-injection", []),
+    ("neo4j_cve", "mcp-neo4j-cypher CVE-2026-35402", []),
+    ("log_injection", "MCP tool log-injection (CVE-2026-6494)", []),
+    ("mcp_middleware", "MCPwn twin-route middleware asymmetry (CVE-2026-33032)", []),
+    ("oauth_surface", "Third-party OAuth surface (VERCEL-2026-04-19)", []),
+    ("transport_limits", "Transport body-size limits (CVE-2026-39313)", []),
+    ("mcp_sdk_hardening", "Upstream MCP SDK STDIO hardening (OX-MCP-2026-04-15)", []),
+    ("dns_rebind", "MCP SDK DNS-rebinding (CVE-2025-66414/66416, CVE-2026-35568/35577)", []),
+    ("gha_hardening", "GitHub Actions SHA-pin / Immutable Action policy", []),
+    ("log_token_leak", "Token-shaped values in log sinks (CVE-2026-20205)", []),
+    ("ssrf_redirect", "SSRF: validate-then-fetch with redirects (CVE-2026-41481)", []),
+    ("ssrf_toctou", "SSRF: validate-then-fetch DNS-rebind / TOCTOU (CVE-2026-41488)", []),
+    ("toxic_flow", "Toxic-flow source/sink pair scoring", []),
+    ("mcp_stdio_params", "MCP StdioServerParameters config-to-spawn taint (OX-MCP-2026-04-25)", []),
+    ("mcp_marketplace_fetch", "MCP marketplace-fetch → StdioServerParameters", []),
+    ("mcp_server_auth", "MCP server-author missing auth (Azure MCP, CVE-2026-32211)", []),
+    ("splunk_mcp_config", "splunk-mcp-server config-side token-leak (CVE-2026-20205)", []),
+    ("prtitle_ipi", "PR-title indirect prompt injection (Comment-and-Control 2026-04-25)", []),
+    ("mcp_fhi", "MCP function-hijacking adversarial tool descriptions (arXiv 2604.20994)", []),
+    ("mcp_atlassian", "Atlassian MCP RCE chain (CVE-2026-27825/27826)", []),
+    ("ipi_wild_corpus", "Wild IPI payload corpus (2026-04-24)", []),
+    ("mcp_inspector_cve", "MCPJam Inspector vendored fork (CVE-2026-23744)", []),
+    ("project_deal_drift", "Project Deal economic-drift (Anthropic 2026-04-26)", []),
+    ("langgraph_toolnode", "LangGraph ToolNode positional-list regression (1.0.11)", []),
+    ("deepseek_v4_tool_injection", "DeepSeek V4 MoE-routed tool injection", []),
+    ("social_agent_hijack", "Social-agent auto-reply hijack (BHASIA 2026)", []),
+    ("crewai_rce_chain", "CrewAI four-CVE chain (CERT/CC VU#221883)", []),
+    ("langchain_prompt_loader", "LangChain load_prompt path traversal (CVE-2026-34070)", []),
+    ("openclaw_privesc", "OpenClaw missing-role privesc (provisional)", []),
+    ("docsgpt_transport_flip", "DocsGPT MCP transport-flip MITM (OX-MCP-2026-05-01)", []),
+    ("gpt_researcher_transport_flip", "GPT-Researcher MCP transport-flip MITM (OX-MCP-2026-05-01)", []),
+    ("mcp_tool_unsafe_eval", "Unsafe eval/exec inside @mcp.tool handler (CVE-2026-44717 class)", []),
+    ("openapi_smells", "OpenAPI smells for MCP-on-REST (Hermes paper, arXiv:2605.14312)", []),
+    ("metis_pomdp", "Metis POMDP closed-loop reasoning defense (arXiv:2605.10067)", []),
+    ("stainless_lineage", "Stainless-generator provenance (Anthropic acquisition 2026-05-18)", []),
+    ("skill_lifecycle_attribution", "Skill lifecycle outcome-attribution (SkillsVote, arXiv:2605.18401)", []),
+    ("agent_harness_shared_state", "Multi-agent shared-state lock (Code-as-Harness, arXiv:2605.18747)", []),
+    ("mcp_sampling_capability", "MCP `sampling` capability consent guard (MCP07:2025)", []),
+    ("mcp_stateless_migration", "MCP 2026-07-28 stateless-migration smells (SEP-2567/1442/2575)", []),
+    ("eu_ai_act_art15_locale", "EU AI Act Art. 15 multilingual-eval coverage (advisory)", []),
+    ("mcp_tunnel", "MCP Tunnels gateway config + credential exposure (Anthropic 2026-05-19 research preview)", []),
+    ("sandbox_self_disable", "Tool-schema sandbox self-disable parameter (CVE-2026-42074)", []),
+    ("shared_resource_authz", "Shared/multi-agent resource missing per-actor authz (CVE-2026-44654)", []),
+    ("mcp_stdio_launcher", "MCP stdio launcher-injection config (CVE-2026-40933)", []),
+    ("mcp_toolgate_asymmetry", "MCP tool-gate list-vs-call enforcement asymmetry (CVE-2026-46519)", []),
+    ("mcp_env_placeholder_exfil", "MCP ${VAR} env-placeholder secret exfiltration (CVE-2026-32625)", []),
+    ("mcp_http_noauth_server", "Unauthenticated MCP HTTP/SSE server on 0.0.0.0 / wildcard CORS", []),
+    ("mcp_transport_session_unauth", "MCP HTTP transport on every interface with no caller credential (CVE-2026-82456)", []),
+    ("ufo_mobile_mcp", "Microsoft UFO mobile MCP servers unauthenticated on 8020/8021 (CVE-2026-73296)", []),
+    ("policy_truncation", "Deny policy evaluated on a truncated copy of the executed value (CVE-2026-73614 class)", []),
+    ("mcp_sidecar_http", "MCP server binds an unauthenticated sidecar dashboard on loopback (2026-08 wave)", []),
+    ("quoted_shell_interp", "Tool argument interpolated into a shell command despite quoting (CVE-2026-55157 class)", []),
+    ("llm_sql_rce", "LLM-generated SQL on an RCE-capable DB role (CVE-2026-25879)", []),
+    ("skill_untrusted_exec_path", "Untrusted-search-path exec override in skill/install flow (CVE-2026-53819)", []),
+    ("argv_toctou", "Argv rebuilt after allowlist approval before spawn (CVE-2026-53822)", []),
+    ("mcp_noauth_default", "MCP server unauthenticated-by-default / fail-open auth (CVE-2026-48814)", []),
+    ("mcp_auth_pathtraversal", "MCP bearer-token joined into session file path (CVE-2026-52830)", []),
+    ("mcp_server_card", "MCP Server Card static audit (SEP-1649 /.well-known/mcp/server-card.json)", []),
+    ("mcp_ssrf_toolarg", "MCP tool-arg URL SSRF (CVE-2026-14748)", []),
+    ("mcp_deprecated_features", "MCP 2026-07-28 deprecated features roots/sampling/logging (SEP-2577/2596)", []),
+    ("mcp_routing_desync", "MCP 2026-07-28 routable-header ↔ body desync (SEP-2243)", []),
+    ("mcp_apps_ui", "MCP Apps UI iframe sandbox / sanitization (SEP-1865)", []),
+    ("mcp_cve_pins_2026_07", "MCP/agent CVE version-pins — 2026-07 disclosure wave", []),
 ]
 
 
@@ -82,18 +151,38 @@ def _build_registry(strict_loading: bool = False) -> list[ScannerRegistration]:
 
 def reset_registry() -> None:
     """Clear the cached scanner registry (for tests that toggle strict_loading)."""
-    global _REGISTRY
-    _REGISTRY = None
+    _REGISTRY.clear()
 
 
-_REGISTRY: list[ScannerRegistration] | None = None
+# Keyed by ``strict_loading``. A single shared slot would bake the first
+# caller's mode in permanently: ``scanner_manifest()`` (strict_loading=False)
+# running before ``run_scan(strict_loading=True)`` left the strict caller
+# reading a lenient registry, so a scanner that failed to import was silently
+# skipped instead of raising ScannerLoadError.
+_REGISTRY: dict[bool, list[ScannerRegistration]] = {}
 
 
 def _get_registry(strict_loading: bool = False) -> list[ScannerRegistration]:
-    global _REGISTRY
-    if _REGISTRY is None:
-        _REGISTRY = _build_registry(strict_loading=strict_loading)
-    return _REGISTRY
+    if strict_loading not in _REGISTRY:
+        _REGISTRY[strict_loading] = _build_registry(strict_loading=strict_loading)
+    return _REGISTRY[strict_loading]
+
+
+def scanner_manifest() -> list[dict[str, str]]:
+    """The scanner modules the engine actually runs, as sorted ``{module, name}``.
+
+    This is the authoritative source for the scanner count and for
+    ``scanners.json``: it lists exactly what ``run_scan`` dispatches to, so it
+    cannot drift from behaviour the way a directory listing can. Back-compat
+    shims (e.g. ``typescript_scan``, which only re-exports the registered
+    ``typescript_pattern_scan``) are not in the registry and are not counted —
+    they add no detection. Reproduce it with ``agent-audit-kit scanners --json``.
+    """
+    seen: dict[str, str] = {}
+    for reg in _get_registry():
+        module = reg.scan_fn.__module__.rsplit(".", 1)[-1]
+        seen.setdefault(module, reg.name)
+    return [{"module": m, "name": n} for m, n in sorted(seen.items())]
 
 
 def _scanner_fail_finding(scanner_name: str, exc: BaseException) -> Finding:
@@ -158,12 +247,93 @@ def run_scan(
         all_scanned_files.update(files)
         _log(f"  {reg.name}: {len(files)} files, {len(findings)} findings")
 
+    # Apply global ignore_paths filter. Historically ignore_paths was
+    # threaded only into secret_exposure (the only scanner that took
+    # the kwarg); other scanners surfaced findings from explicitly
+    # excluded directories. Centralising here means every scanner
+    # honours the flag without each one re-implementing the path check.
+    ignore_path_prefixes = tuple(p.rstrip("/") for p in (ignore_paths or []) if p)
+
+    def _is_ignored(file_path: str) -> bool:
+        if not ignore_path_prefixes:
+            return False
+        # Normalise leading "./" so callers can pass either form.
+        normalised = file_path[2:] if file_path.startswith("./") else file_path
+        return any(
+            normalised == prefix or normalised.startswith(prefix + "/")
+            for prefix in ignore_path_prefixes
+        )
+
+    kept: list[Finding] = []
     for finding in all_findings:
-        if finding.rule_id in active_rules or finding.rule_id == "AAK-INTERNAL-SCANNER-FAIL":
-            result.findings.append(finding)
+        if finding.rule_id not in active_rules and finding.rule_id != "AAK-INTERNAL-SCANNER-FAIL":
+            continue
+        if _is_ignored(finding.file_path or ""):
+            continue
+        kept.append(finding)
+
+    result.findings.extend(_drop_covered_composition_findings(kept))
 
     result.files_scanned = len(all_scanned_files)
     result.scan_duration_ms = (time.monotonic() - start) * 1000
     _log(f"Scan complete: {result.files_scanned} files, {len(result.findings)} findings in {result.scan_duration_ms:.0f}ms")
 
     return result
+
+
+def _drop_covered_composition_findings(findings: list[Finding]) -> list[Finding]:
+    """Stand a composition finding down when another rule already covers a component.
+
+    `AAK-COMPOSE-001` only earns its place by reporting a chain whose components
+    each pass every rule that inspects them alone. The moment one of those
+    components is independently reported at the same priority, the chain is no
+    longer invisible, and reporting it again turns one problem into two entries
+    pointing at the same files. A composition pass that double-reports is worse
+    than no composition pass at all.
+
+    This runs on the assembled finding list because that is the only place the
+    answer exists: a scanner sees `(project_root)` and nothing of what its peers
+    found, and re-deriving every rule's predicate inside the composition scanner
+    would be a second copy of the whole registry.
+
+    Suppression is by severity, not by presence. "Any finding at all on the node"
+    is the tempting rule and it is wrong: `AAK-MCP-ATTEST-001` (MEDIUM) fires on
+    virtually every MCP config, so presence-suppression would make every
+    MCP-server chain permanently unreportable while the guard still looked
+    correct. A component is treated as already covered only when it carries a
+    finding at or above the composition finding's own severity -- which is what
+    `AAK-MCP-001` (CRITICAL), `AAK-AGENT-COMPOSE-001` (HIGH) and
+    `AAK-TOXICFLOW-001` (HIGH) do, and what attestation and OAuth-metadata
+    hygiene do not. Component identity comes from `composition.suppression_keys`,
+    which knows a `SKILL.md` is one artifact while an MCP config holds many.
+    """
+    composition = [f for f in findings if f.category is Category.COMPOSITION]
+    if not composition:
+        return findings
+
+    try:
+        from agent_audit_kit.scanners.composition import covering_keys, suppression_keys
+    except ImportError:  # pragma: no cover - scanner is optional
+        return findings
+
+    # key -> highest severity any non-composition rule reported on it
+    covered: dict[str, int] = {}
+    for f in findings:
+        if f.category is Category.COMPOSITION:
+            continue
+        rank = f.severity.numeric()
+        for key in covering_keys(f.file_path or "", f.line_number):
+            if rank > covered.get(key, 0):
+                covered[key] = rank
+
+    if not covered:
+        return findings
+
+    def _is_covered(finding: Finding) -> bool:
+        own = finding.severity.numeric()
+        return any(covered.get(k, 0) >= own for k in suppression_keys(finding))
+
+    return [
+        f for f in findings
+        if f.category is not Category.COMPOSITION or not _is_covered(f)
+    ]

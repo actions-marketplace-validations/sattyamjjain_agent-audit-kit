@@ -1,7 +1,18 @@
 from __future__ import annotations
 
+import re
+
 from agent_audit_kit.models import Finding
 from agent_audit_kit.rules.builtin import get_rule
+
+# Interpolation of a caller-controlled variable into a command / shell string.
+# Shared by hook_rce and ide_task_rce so there is exactly ONE definition of the
+# "user input reaches a command string" signature (promoted here from
+# hook_rce.py, which now imports it).
+INTERPOLATION_RE = re.compile(
+    r"""(?:["']\s*\+\s*|\$\{|%\{|{{\s*|\$\(|`)\s*(?:input|args|event|payload|user|argv|request)""",
+    re.IGNORECASE,
+)
 
 SKIP_DIRS = frozenset({
     "node_modules", ".git", "dist", "build", "__pycache__",
@@ -23,6 +34,7 @@ def make_finding(
     file_path: str,
     evidence: str,
     line_number: int | None = None,
+    related_locations: list[dict] | None = None,
 ) -> Finding:
     rule = get_rule(rule_id)
     return Finding(
@@ -39,4 +51,8 @@ def make_finding(
         owasp_mcp_references=rule.owasp_mcp_references,
         owasp_agentic_references=rule.owasp_agentic_references,
         adversa_references=rule.adversa_references,
+        incident_references=rule.incident_references,
+        aicm_references=rule.aicm_references,
+        owasp_ast_references=rule.owasp_ast_references,
+        related_locations=related_locations or [],
     )

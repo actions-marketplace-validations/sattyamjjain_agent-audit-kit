@@ -1,5 +1,7 @@
 # We Scanned 47 Public MCP Server Configs on GitHub. Here's What We Found.
 
+> _Note (2026-08-10): this post documents a specific AgentAuditKit v0.3.x run — 225 rules across 79 scanner modules over 47 configs. Those figures are kept as the measurement they describe and are not bumped; the current build ships 289 rules across 86 scanner modules (see README.md)._
+
 > **TL;DR**: We used AgentAuditKit to scan 47 real `.mcp.json` files from public GitHub repositories. We found **258 security findings** across them — 13 critical, 87 high severity. The #1 issue? **Every single config using npx/uvx had unpinned packages** — a supply chain attack waiting to happen.
 
 ---
@@ -18,7 +20,7 @@ We used AgentAuditKit's built-in benchmark crawler (`benchmarks/crawler.py`) to:
 
 1. Search the GitHub API for public `.mcp.json` files containing `mcpServers`
 2. Download 47 valid JSON configs from distinct repositories (3 were non-JSON templates)
-3. Run all 77 rules across 13 scanner modules against each config
+3. Run all 225 rules across 79 scanner modules against each config
 4. Aggregate the findings by severity and category
 
 The scan ran fully offline — zero network calls during analysis.
@@ -148,4 +150,4 @@ GitHub: [sattyamjjain/agent-audit-kit](https://github.com/sattyamjjain/agent-aud
 
 ---
 
-*AgentAuditKit is MIT licensed, runs fully offline, and the only runtime dependencies are click and pyyaml. 77 rules, 13 scanners, 452 tests at 90% coverage.*
+*AgentAuditKit is MIT licensed, runs fully offline, and the only runtime dependencies are click and pyyaml. 225 rules, 79 scanners, 1,100+ tests.*

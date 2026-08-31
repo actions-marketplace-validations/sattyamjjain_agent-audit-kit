@@ -114,13 +114,33 @@ def _apply_config_defaults(
 @click.group(invoke_without_command=True)
 @click.pass_context
 @click.version_option(version=__version__)
-def cli(ctx: click.Context) -> None:
+@click.option(
+    "--emit-coverage",
+    is_flag=True,
+    default=False,
+    help="Emit the per-rule framework coverage crosswalk (id, severity, CVEs, "
+         "OWASP MCP, OWASP Agentic, NSA MCP CSI, EU AI Act) and exit.",
+)
+@click.option(
+    "--format",
+    "coverage_format",
+    type=click.Choice(["json", "md"]),
+    default="md",
+    help="Output format for --emit-coverage (default: md).",
+)
+def cli(ctx: click.Context, emit_coverage: bool, coverage_format: str) -> None:
     """AgentAuditKit -- Security scanner for MCP-connected AI agent pipelines."""
+    if emit_coverage:
+        from agent_audit_kit.output.coverage_map import render_json, render_markdown
+
+        click.echo((render_json() if coverage_format == "json" else render_markdown()), nl=False)
+        ctx.exit(0)
     if ctx.invoked_subcommand is None:
         ctx.invoke(scan_cmd)
 
 
 @cli.command("scan")
+@click.version_option(version=__version__)
 @click.argument("path", default=".", type=click.Path(exists=True, file_okay=False, resolve_path=True))
 @click.option("--format", "output_format", type=click.Choice(["console", "json", "sarif"]), default="console", help="Output format.")
 @click.option("--severity", "min_severity", type=click.Choice(["critical", "high", "medium", "low", "info"]), default="low", help="Minimum severity to report.")
@@ -129,6 +149,25 @@ def cli(ctx: click.Context) -> None:
 @click.option("--ignore-paths", default=None, help="Comma-separated paths to skip.")
 @click.option("--rules", default=None, help="Comma-separated rule IDs to run (default: all).")
 @click.option("--exclude-rules", default=None, help="Comma-separated rule IDs to skip.")
+@click.option(
+    "--preset",
+    "preset",
+    default=None,
+    help=(
+        "Activate a curated rule preset (yaml under agent_audit_kit/presets/). "
+        "Equivalent to passing --rules with the preset's rule list. "
+        "Example: --preset mcp-ox-2026-04."
+    ),
+)
+@click.option(
+    "--profile",
+    "profile",
+    default=None,
+    help=(
+        "Alias for --preset — a curated readiness profile. "
+        "Example: --profile mcp-2026-07-28 (the 07-28 final auth-profile check)."
+    ),
+)
 @click.option(
     "--fail-on",
     type=click.Choice(FAIL_ON_CHOICES),
@@ -151,10 +190,21 @@ def cli(ctx: click.Context) -> None:
 @click.option("--verbose", "-v", is_flag=True, default=False, help="Show detailed scan progress.")
 @click.option("--score", "show_score", is_flag=True, default=False, help="Show security score and grade.")
 @click.option("--owasp-report", is_flag=True, default=False, help="Show OWASP coverage matrix.")
-@click.option("--compliance", default=None, help="Compliance framework: eu-ai-act, soc2, iso27001, hipaa, nist-ai-rmf.")
+@click.option("--compliance", default=None, help="Compliance framework: eu-ai-act, soc2, iso27001, iso42001, hipaa, nist-ai-rmf, nsa-mcp-csi-2026 (NSA AISC MCP Security CSI, U/OO/6030316-26), aicm (CSA AI Controls Matrix, CSV output), mcp-2026-roadmap (MCP 2026 Roadmap conformance).")
 @click.option("--verify-secrets", is_flag=True, default=False, help="Actively verify if detected secrets are live (makes network calls).")
 @click.option("--diff", "diff_base", default=None, help="Only report findings in files changed since BASE_REF (e.g., HEAD~1, main).")
 @click.option("--llm-scan", is_flag=True, default=False, help="Run LLM semantic analysis on tool descriptions (opt-in).")
+@click.option(
+    "--sessions",
+    default=None,
+    type=click.Path(exists=True),
+    help=(
+        "Session transcript file or directory to run the session-scoped rules over "
+        "(AAK-AGENT-COMPOSE-002). Reads OpenAI Agents SDK run traces, LangGraph "
+        "checkpoint/thread state, raw JSONL of {tool, args, ts}, and AAK's own "
+        "*.session.json."
+    ),
+)
 @click.option(
     "--llm",
     "llm_model",
@@ -184,6 +234,33 @@ def cli(ctx: click.Context) -> None:
     default=False,
     help="With --advisories, preview the advisory payloads without creating them.",
 )
+@click.option(
+    "--step-summary/--no-step-summary",
+    "step_summary",
+    default=True,
+    help="Append a Markdown findings table to $GITHUB_STEP_SUMMARY when running inside GitHub Actions. Default: on.",
+)
+@click.option(
+    "--pr-summary-out",
+    "pr_summary_out",
+    type=click.Path(),
+    default=None,
+    help="Also write the Markdown PR-comment body to this path (used by the Docker action).",
+)
+@click.option(
+    "--fingerprint-strategy",
+    "fingerprint_strategy",
+    type=click.Choice(["auto", "line-hash", "disabled"]),
+    default="auto",
+    help="SARIF fingerprint mode. 'auto' (default) emits content-hash when source is co-located, else location-hash — matches GitHub Code Scanning's de-dup expectation. 'line-hash' forces the content-hash code path; 'disabled' emits none.",
+)
+@click.option(
+    "--quiet",
+    "-q",
+    is_flag=True,
+    default=False,
+    help="With --format console, suppress header / summary / tips and only print findings (closes #13).",
+)
 def scan_cmd(
     path: str,
     output_format: str,
@@ -193,6 +270,8 @@ def scan_cmd(
     ignore_paths: str | None,
     rules: str | None,
     exclude_rules: str | None,
+    preset: str | None,
+    profile: str | None,
     fail_on: str,
     config_path: str | None,
     ci: bool,
@@ -203,13 +282,32 @@ def scan_cmd(
     verify_secrets: bool,
     diff_base: str | None,
     llm_scan: bool,
+    sessions: str | None,
     llm_model: str,
     strict_loading: bool,
     advisories_repo: str | None,
     advisories_dry_run: bool,
+    step_summary: bool,
+    pr_summary_out: str | None,
+    fingerprint_strategy: str,
+    quiet: bool,
 ) -> None:
     """Scan a project for MCP agent security vulnerabilities."""
     try:
+        # Preset/profile → rules expansion. A preset (or its --profile alias)
+        # narrows the rule set to a curated list; combining with --rules unions
+        # both. --profile is a synonym for --preset; if both are given, their
+        # rule lists union.
+        preset_names = [p for p in (preset, profile) if p]
+        if preset_names:
+            from agent_audit_kit.presets import load_preset
+            preset_rules: set[str] = set()
+            for name in preset_names:
+                preset_rules.update(load_preset(name))
+            if rules:
+                rules = ",".join(sorted(set(rules.split(",")) | preset_rules))
+            else:
+                rules = ",".join(sorted(preset_rules))
         _run_scan(
             path=path,
             output_format=output_format,
@@ -229,10 +327,15 @@ def scan_cmd(
             verify_secrets=verify_secrets,
             diff_base=diff_base,
             llm_scan=llm_scan,
+            sessions=sessions,
             llm_model=llm_model,
             strict_loading=strict_loading,
             advisories_repo=advisories_repo,
             advisories_dry_run=advisories_dry_run,
+            step_summary=step_summary,
+            pr_summary_out=pr_summary_out,
+            fingerprint_strategy=fingerprint_strategy,
+            quiet=quiet,
         )
     except Exception as exc:
         click.echo(f"Error: {exc}", err=True)
@@ -261,8 +364,13 @@ def _run_scan(
     llm_scan: bool,
     llm_model: str,
     strict_loading: bool,
+    sessions: str | None = None,
     advisories_repo: str | None = None,
     advisories_dry_run: bool = False,
+    step_summary: bool = True,
+    pr_summary_out: str | None = None,
+    quiet: bool = False,
+    fingerprint_strategy: str = "auto",
 ) -> None:
     """Core scan logic, separated for clean exit-code handling."""
     from agent_audit_kit.output import console, json_report, sarif
@@ -358,6 +466,29 @@ def _run_scan(
         except Exception as e:
             click.echo(f"LLM scan failed: {e}", err=True)
 
+    # Session-transcript ingest. The session-scoped rules only discover
+    # *.session.json / .aak/sessions/ inside the project root, which no agent
+    # framework writes. --sessions normalises real transcripts (OpenAI Agents
+    # SDK traces, LangGraph checkpoints, raw JSONL) into that shape and runs the
+    # same rule over them, unchanged.
+    if sessions:
+        from agent_audit_kit.sessions.adapters import load_transcripts, scan_sessions
+
+        sessions_path = Path(sessions)
+        transcripts = load_transcripts(sessions_path)
+        if verbose:
+            for tpath, fmt, calls in transcripts:
+                click.echo(f"session: {tpath} ({fmt}, {len(calls)} calls)", err=True)
+        if not transcripts:
+            click.echo(
+                f"Warning: no readable session transcript found at {sessions} "
+                f"(supported: OpenAI Agents SDK traces, LangGraph checkpoint/thread "
+                f"state, JSONL of {{tool, args, ts}}, AAK *.session.json).",
+                err=True,
+            )
+        else:
+            result.findings.extend(scan_sessions(sessions_path, config_root=project_root))
+
     # RUGPULL / pin-drift detection now lives in the scanners/pin_drift.py
     # scanner and runs as part of run_scan() above.
 
@@ -372,6 +503,10 @@ def _run_scan(
         from agent_audit_kit.output.owasp_report import format_results as fmt_owasp
 
         output = fmt_owasp(result)
+    elif compliance == "aicm":
+        from agent_audit_kit.output.aicm import format_results as fmt_aicm
+
+        output = fmt_aicm(result)
     elif compliance:
         from agent_audit_kit.output.compliance import format_results as fmt_compliance
 
@@ -379,9 +514,14 @@ def _run_scan(
     elif output_format == "json":
         output = json_report.format_results(result, severity)
     elif output_format == "sarif":
-        output = sarif.format_results(result, severity)
+        output = sarif.format_results(
+            result,
+            severity,
+            project_root=project_root,
+            fingerprint_strategy=fingerprint_strategy,
+        )
     else:
-        output = console.format_results(result, severity, show_score=show_score)
+        output = console.format_results(result, severity, show_score=show_score, quiet=quiet)
 
     if output_file:
         Path(output_file).write_text(output, encoding="utf-8")
@@ -389,6 +529,18 @@ def _run_scan(
             click.echo(f"Report written to {output_file}", err=True)
     else:
         click.echo(output)
+
+    # --- PR-comment markdown: $GITHUB_STEP_SUMMARY + optional explicit path ---
+    if step_summary or pr_summary_out:
+        from agent_audit_kit.output.pr_summary import render_markdown, write_step_summary
+
+        body = render_markdown(result)
+        if pr_summary_out:
+            Path(pr_summary_out).write_text(body, encoding="utf-8")
+            if verbose:
+                click.echo(f"pr-summary written to {pr_summary_out}", err=True)
+        if step_summary:
+            write_step_summary(result)
 
     # --- Optional: open GitHub Security Advisories for CRITICAL findings ---
     if advisories_repo:
@@ -430,12 +582,33 @@ def _run_scan(
 
 
 @cli.command("discover")
+@click.version_option(version=__version__)
 @click.option("--verbose", "-v", is_flag=True, default=False)
-def discover_cmd(verbose: bool) -> None:
+@click.option(
+    "--format",
+    "output_format",
+    type=click.Choice(["console", "json"]),
+    default="console",
+    help="Output format. JSON emits a stable schema for programmatic use.",
+)
+def discover_cmd(verbose: bool, output_format: str) -> None:
     """Discover all AI agent configurations on this machine."""
+    from dataclasses import asdict
+    import json as _json
+
     from agent_audit_kit.discovery import discover_agents
 
     agents = discover_agents(verbose=verbose)
+
+    if output_format == "json":
+        # Stable schema: {"count": int, "agents": [{...DiscoveredAgent}]}
+        payload = {
+            "count": len(agents),
+            "agents": [asdict(a) for a in agents],
+        }
+        click.echo(_json.dumps(payload, indent=2, default=str))
+        return
+
     if not agents:
         click.echo("No AI agent configurations found.")
         return
@@ -450,6 +623,7 @@ def discover_cmd(verbose: bool) -> None:
 
 
 @cli.command("pin")
+@click.version_option(version=__version__)
 @click.argument("path", default=".", type=click.Path(exists=True, file_okay=False, resolve_path=True))
 def pin_cmd(path: str) -> None:
     """Pin current MCP tool definitions for rug pull detection."""
@@ -461,6 +635,7 @@ def pin_cmd(path: str) -> None:
 
 
 @cli.command("verify")
+@click.version_option(version=__version__)
 @click.argument("path", default=".", type=click.Path(exists=True, file_okay=False, resolve_path=True))
 def verify_cmd(path: str) -> None:
     """Verify MCP tool definitions against pinned hashes."""
@@ -477,6 +652,7 @@ def verify_cmd(path: str) -> None:
 
 
 @cli.command("fix")
+@click.version_option(version=__version__)
 @click.argument("path", default=".", type=click.Path(exists=True, file_okay=False, resolve_path=True))
 @click.option("--dry-run", is_flag=True, default=False, help="Preview fixes without applying.")
 @click.option(
@@ -508,17 +684,59 @@ def fix_cmd(path: str, dry_run: bool, cve_only: bool) -> None:
 
 
 @cli.command("score")
-@click.argument("path", default=".", type=click.Path(exists=True, file_okay=False, resolve_path=True))
-@click.option("--badge", is_flag=True, default=False, help="Generate SVG badge.")
+@click.version_option(version=__version__)
+@click.argument("path", default=".", type=click.Path(exists=True, file_okay=True, dir_okay=True, resolve_path=True))
+@click.option("--badge", is_flag=True, default=False, help="Generate SVG badge (project-score mode only).")
+@click.option("--aivss", is_flag=True, default=False, help="Annotate a SARIF file with AIVSS v0.8 scores.")
 @click.option("--output", "-o", "output_file", type=click.Path(), default=None)
-def score_cmd(path: str, badge: bool, output_file: str | None) -> None:
-    """Show security score and grade for a project."""
+def score_cmd(path: str, badge: bool, aivss: bool, output_file: str | None) -> None:
+    """Score a project (legacy AAK letter grade) OR annotate a SARIF
+    file with AIVSS v0.8 scores via --aivss."""
+    import json
+
     from agent_audit_kit.scoring import compute_score, generate_badge
 
-    project_root = Path(path)
-    result = run_scan(project_root=project_root)
+    target = Path(path)
+
+    # SARIF mode: --aivss + a file path → annotate SARIF.
+    if aivss:
+        if target.is_dir():
+            click.echo("--aivss expects a SARIF file path, not a directory.", err=True)
+            sys.exit(EXIT_ERROR)
+        from agent_audit_kit.rules.builtin import get_rule
+        from agent_audit_kit.scoring.aivss import annotate_sarif
+
+        sarif = json.loads(target.read_text(encoding="utf-8"))
+        annotated = annotate_sarif(sarif, get_rule)
+        text = json.dumps(annotated, indent=2)
+        if output_file:
+            Path(output_file).write_text(text, encoding="utf-8")
+            click.echo(f"wrote {output_file}", err=True)
+        else:
+            click.echo(text)
+        return
+
+    # Legacy project-score mode.
+    if target.is_file():
+        click.echo(
+            "score: pass a project directory, or pass a SARIF file with --aivss.",
+            err=True,
+        )
+        sys.exit(EXIT_ERROR)
+    result = run_scan(project_root=target)
     compute_score(result)
-    click.echo(f"\nSecurity Score: {result.score}/100  Grade: {result.grade}\n")
+    grade = result.grade or "F"
+    # Closes #14: ANSI-color the grade per band.
+    grade_color = {
+        "A": "green",
+        "B": "green",
+        "C": "yellow",
+        "D": "red",
+        "F": "red",
+    }.get(grade.upper(), "white")
+    score_text = click.style(f"{result.score}/100", bold=True)
+    grade_text = click.style(grade, fg=grade_color, bold=True)
+    click.echo(f"\nSecurity Score: {score_text}  Grade: {grade_text}\n")
     if badge:
         svg = generate_badge(result.score or 0, result.grade or "F")
         if output_file:
@@ -529,6 +747,7 @@ def score_cmd(path: str, badge: bool, output_file: str | None) -> None:
 
 
 @cli.command("update")
+@click.version_option(version=__version__)
 def update_cmd() -> None:
     """Update the vulnerability database."""
     from agent_audit_kit.vuln_db import update_database
@@ -541,6 +760,7 @@ def update_cmd() -> None:
 
 
 @cli.command("proxy")
+@click.version_option(version=__version__)
 @click.option("--port", default=8765, help="Port to listen on.")
 @click.option("--target", required=True, help="Target MCP server URL to proxy.")
 def proxy_cmd(port: int, target: str) -> None:
@@ -553,6 +773,7 @@ def proxy_cmd(port: int, target: str) -> None:
 
 
 @cli.command("kill")
+@click.version_option(version=__version__)
 def kill_cmd() -> None:
     """Terminate any running MCP proxy connections."""
     import os
@@ -572,7 +793,229 @@ def kill_cmd() -> None:
         click.echo("No running proxy found.")
 
 
+@cli.group("corpus")
+def corpus_cmd() -> None:
+    """Refresh threat-corpus data files (IPI payloads, FHI suffixes, ...)."""
+
+
+@corpus_cmd.command("update")
+@click.option("--ipi", "update_ipi", is_flag=True, default=False, help="Update the wild IPI payload corpus.")
+@click.option("--fhi", "update_fhi", is_flag=True, default=False, help="Update the FHI universal-suffix corpus.")
+@click.option("--all", "update_all", is_flag=True, default=False, help="Update every corpus listed in the manifest.")
+@click.option("--manifest", "manifest_url", default=None, help="Override the manifest URL (default: gh-pages).")
+def corpus_update_cmd(
+    update_ipi: bool, update_fhi: bool, update_all: bool, manifest_url: str | None
+) -> None:
+    """Pull a signed corpus manifest and refresh local data files."""
+    from agent_audit_kit.corpus.manifest import (
+        CorpusVerificationError,
+        fetch_and_verify,
+        load_manifest,
+        write_corpus,
+    )
+
+    if not (update_ipi or update_fhi or update_all):
+        click.echo("Error: pass at least one of --ipi / --fhi / --all", err=True)
+        sys.exit(EXIT_ERROR)
+
+    selected_ids: set[str] = set()
+    if update_all:
+        selected_ids = {"ipi_wild_2026_04", "fhi_universal_suffixes"}
+    if update_ipi:
+        selected_ids.add("ipi_wild_2026_04")
+    if update_fhi:
+        selected_ids.add("fhi_universal_suffixes")
+
+    try:
+        entries = load_manifest(manifest_url)
+    except Exception as exc:  # noqa: BLE001
+        click.echo(f"Error: failed to load manifest: {exc}", err=True)
+        sys.exit(EXIT_ERROR)
+
+    failures = 0
+    for entry in entries:
+        if entry.id not in selected_ids:
+            continue
+        try:
+            body = fetch_and_verify(entry)
+        except CorpusVerificationError as exc:
+            click.echo(f"  {entry.id}: VERIFY FAILED — {exc}", err=True)
+            failures += 1
+            continue
+        except Exception as exc:  # noqa: BLE001
+            click.echo(f"  {entry.id}: fetch failed — {exc}", err=True)
+            failures += 1
+            continue
+        write_corpus(entry, body)
+        click.echo(f"  {entry.id}: refreshed -> {entry.target_path}")
+    if failures:
+        sys.exit(EXIT_ERROR)
+
+
+@cli.command("diff")
+@click.version_option(version=__version__)
+@click.option(
+    "--baseline", "baseline_path",
+    type=click.Path(exists=True, file_okay=True, dir_okay=False),
+    required=True,
+    help="Path to the prior SARIF file to diff against.",
+)
+@click.option(
+    "--current", "current_path",
+    type=click.Path(exists=True, file_okay=True, dir_okay=False),
+    required=True,
+    help="Path to the current SARIF file.",
+)
+@click.option(
+    "--output", "-o", "output_path",
+    type=click.Path(),
+    default=None,
+    help="Write the diff SARIF here. Default: stdout.",
+)
+@click.option(
+    "--fail-on-new",
+    is_flag=True,
+    default=False,
+    help="Exit 1 if any results are tagged `newly_introduced`.",
+)
+def diff_cmd(
+    baseline_path: str, current_path: str, output_path: str | None, fail_on_new: bool
+) -> None:
+    """Diff two SARIF files: tag every result with newly_introduced /
+    newly_resolved / still_present."""
+    from agent_audit_kit.sarif.diff import diff_sarif, dump_sarif, load_sarif
+
+    baseline = load_sarif(Path(baseline_path).read_text(encoding="utf-8"))
+    current = load_sarif(Path(current_path).read_text(encoding="utf-8"))
+    out = diff_sarif(baseline, current)
+    body = dump_sarif(out)
+    if output_path:
+        Path(output_path).write_text(body, encoding="utf-8")
+    else:
+        click.echo(body)
+
+    summary = (
+        out.get("runs", [{}])[0]
+        .get("properties", {})
+        .get("aak_diff_summary", {})
+    )
+    click.echo(
+        f"diff: {summary.get('newly_introduced', 0)} new, "
+        f"{summary.get('newly_resolved', 0)} resolved, "
+        f"{summary.get('still_present', 0)} still present.",
+        err=True,
+    )
+    if fail_on_new and summary.get("newly_introduced", 0) > 0:
+        sys.exit(EXIT_FINDINGS)
+
+
+@cli.command("suggest")
+@click.version_option(version=__version__)
+@click.argument("sarif_path", type=click.Path(exists=True, file_okay=True, dir_okay=False))
+@click.option(
+    "--pr", "pr_mode", is_flag=True, default=False,
+    help="Emit a Markdown PR body suitable for `gh pr create --body-file -`.",
+)
+@click.option(
+    "--apply-trivial", is_flag=True, default=False,
+    help="Apply the mechanically-safe fixes in-place, for rules marked auto-fixable. "
+         "Writes a log to .agent-audit-kit/fix-log.json. Same engine as `agent-audit-kit fix`.",
+)
+@click.option(
+    "--project", "project_path", default=".",
+    type=click.Path(exists=True, file_okay=False, resolve_path=True),
+    help="Project root to apply fixes to with --apply-trivial (default: current directory). "
+         "The SARIF argument says what was found; this says where to fix it.",
+)
+@click.option(
+    "--dry-run", is_flag=True, default=False,
+    help="With --apply-trivial or --auto-pr, report what would change without writing.",
+)
+@click.option(
+    "--auto-pr", "auto_pr", is_flag=True, default=False,
+    help="Apply allow-listed mechanical fixes on a new branch and open a DRAFT PR "
+         "via the `gh` CLI. Off by default. Refuses if any pending fix is for a "
+         "rule outside the auto-PR allow-list, or if the working tree is dirty. "
+         "AAK never handles a token: delivery runs under your own `gh auth`.",
+)
+@click.option(
+    "--output", "-o", "output_path",
+    type=click.Path(),
+    default=None,
+    help="Write the Markdown body here. Default: stdout.",
+)
+def suggest_cmd(
+    sarif_path: str, pr_mode: bool, apply_trivial: bool, project_path: str,
+    dry_run: bool, auto_pr: bool, output_path: str | None
+) -> None:
+    """Generate per-finding remediation hints from a SARIF run."""
+    from agent_audit_kit.remediation.engine import sarif_to_markdown
+
+    sarif_text = Path(sarif_path).read_text(encoding="utf-8")
+    body = sarif_to_markdown(sarif_text, pr_mode=pr_mode)
+    if output_path:
+        Path(output_path).write_text(body, encoding="utf-8")
+    else:
+        click.echo(body)
+
+    if auto_pr:
+        from agent_audit_kit.autopr import AutoPrError, open_auto_pr, plan_auto_pr
+
+        plan = plan_auto_pr(Path(project_path))
+        for fix in plan.fixes:
+            click.echo(f"  + {fix.rule_id}  {fix.file_path}", err=True)
+        for fix in plan.blocked:
+            click.echo(f"  - {fix.rule_id}  {fix.file_path}  (not allow-listed)", err=True)
+        if dry_run:
+            verdict = "would open" if plan.is_runnable else "would refuse"
+            click.echo(
+                f"suggest: {verdict} a draft PR on branch '{plan.branch or '-'}' "
+                f"with {len(plan.fixes)} fix(es).",
+                err=True,
+            )
+            return
+        try:
+            url = open_auto_pr(Path(project_path), plan)
+        except AutoPrError as exc:
+            click.echo(f"suggest --auto-pr: {exc}", err=True)
+            sys.exit(EXIT_ERROR)
+        click.echo(f"suggest: opened draft PR {url}", err=True)
+        return
+
+    if not apply_trivial:
+        return
+
+    # Delegates to the same engine as `agent-audit-kit fix`. The flag shipped in
+    # v0.3.8 printing "not yet implemented (queued for v0.3.9)" and was still
+    # printing it seventy releases later, while `fix` did exactly this the whole
+    # time — so the work was to wire the two together, not to write a fixer.
+    from agent_audit_kit.fix import run_fixes
+
+    fixes = run_fixes(Path(project_path), dry_run=dry_run)
+    if not fixes:
+        click.echo(
+            "suggest: no mechanically-safe fix applies here. Only rules marked "
+            "auto-fixable are applied; everything else in the body above needs a "
+            "human.",
+            err=True,
+        )
+        return
+
+    verb = "would apply" if dry_run else "applied"
+    click.echo(f"suggest: {verb} {len(fixes)} fix(es):", err=True)
+    for fix in fixes:
+        click.echo(f"  {fix.rule_id}  {fix.file_path}", err=True)
+    if not dry_run:
+        click.echo(
+            "suggest: log written to .agent-audit-kit/fix-log.json. Review the "
+            "diff before committing — these are mechanical edits, not reviewed "
+            "changes.",
+            err=True,
+        )
+
+
 @cli.command("watch")
+@click.version_option(version=__version__)
 @click.argument("path", default=".", type=click.Path(exists=True, file_okay=False, resolve_path=True))
 @click.option("--interval", "interval_seconds", type=int, default=300,
               help="Seconds between checks (default 300 = 5 minutes).")
@@ -597,7 +1040,69 @@ def watch_cmd(path: str, interval_seconds: int, webhook_url: str | None, once: b
     )
 
 
+@cli.command("notify")
+@click.version_option(version=__version__)
+@click.argument("path", default=".", type=click.Path(exists=True, file_okay=False, resolve_path=True))
+@click.option(
+    "--config",
+    "config_path",
+    type=click.Path(),
+    default=None,
+    help="Path to .aak-notify.yaml. Default: <path>/.aak-notify.yaml.",
+)
+@click.option(
+    "--dry-run",
+    is_flag=True,
+    default=False,
+    help="Run a scan and print which sinks would have been notified, without making network calls.",
+)
+def notify_cmd(path: str, config_path: str | None, dry_run: bool) -> None:
+    """Run a scan and dispatch findings to configured notification sinks
+    (Slack today; PagerDuty / Linear stubs in v0.4.0). Closes #66."""
+    from agent_audit_kit.integrations import (
+        load_notify_config,
+        run_notify,
+    )
+
+    project_root = Path(path)
+    cfg_path = Path(config_path) if config_path else project_root / ".aak-notify.yaml"
+
+    if not cfg_path.is_file():
+        click.echo(
+            f"notify: no config at {cfg_path}; create one to wire up sinks.",
+            err=True,
+        )
+        sys.exit(EXIT_ERROR)
+
+    cfg = load_notify_config(cfg_path)
+    if not cfg.sinks:
+        click.echo("notify: config has no sinks configured.", err=True)
+        sys.exit(EXIT_ERROR)
+
+    result = run_scan(project_root=project_root)
+
+    if dry_run:
+        for sink in cfg.sinks:
+            gated = [
+                f for f in result.findings
+                if f.severity.value >= sink.min_severity.value
+            ]
+            click.echo(
+                f"  [dry-run] {sink.kind}: would post {len(gated)} finding(s) "
+                f"at or above {sink.min_severity.name}",
+            )
+        return
+
+    sent = run_notify(result, cfg)
+    for kind, count in sent.items():
+        if count == -1:
+            click.echo(f"  {kind}: STUB (NotImplementedError) — not yet shipped")
+        else:
+            click.echo(f"  {kind}: posted {count} finding(s)")
+
+
 @cli.command("install-precommit")
+@click.version_option(version=__version__)
 @click.argument("path", default=".", type=click.Path(exists=True, file_okay=False, resolve_path=True))
 def install_precommit_cmd(path: str) -> None:
     """Add an agent-audit-kit entry to the project's .pre-commit-config.yaml."""
@@ -625,6 +1130,7 @@ def install_precommit_cmd(path: str) -> None:
 
 
 @cli.command("export-rules")
+@click.version_option(version=__version__)
 @click.option("--out", "-o", "output_file", type=click.Path(), required=True,
               help="Path to write the signable rule bundle JSON.")
 def export_rules_cmd(output_file: str) -> None:
@@ -636,7 +1142,32 @@ def export_rules_cmd(output_file: str) -> None:
     click.echo(f"sha256={digest}")
 
 
+@cli.command("scanners")
+@click.version_option(version=__version__)
+@click.option("--json", "as_json", is_flag=True,
+              help="Emit the scanner manifest as JSON (count + module/name list).")
+def scanners_cmd(as_json: bool) -> None:
+    """List the scanner modules the engine runs — reproduces SCANNER_COUNT.
+
+    The count is derived from this list (and the committed `scanners.json`), not
+    asserted, so anyone can check it: `agent-audit-kit scanners --json`.
+    """
+    import json as _json
+
+    from agent_audit_kit.engine import scanner_manifest
+
+    manifest = scanner_manifest()
+    if as_json:
+        click.echo(_json.dumps({"count": len(manifest), "scanners": manifest},
+                               indent=2, sort_keys=True))
+    else:
+        for entry in manifest:
+            click.echo(f"{entry['module']:38s} {entry['name']}")
+        click.echo(f"\n{len(manifest)} scanner modules")
+
+
 @cli.command("verify-bundle")
+@click.version_option(version=__version__)
 @click.argument("bundle", type=click.Path(exists=True, dir_okay=False))
 @click.option("--signature", "-s", "sig_path", type=click.Path(exists=True, dir_okay=False),
               default=None, help="Sigstore signature bundle.")
@@ -651,22 +1182,42 @@ def verify_bundle_cmd(bundle: str, sig_path: str | None) -> None:
 
 
 @cli.command("sbom")
+@click.version_option(version=__version__)
 @click.argument("path", default=".", type=click.Path(exists=True, file_okay=False, resolve_path=True))
 @click.option(
     "--format",
     "sbom_format",
-    type=click.Choice(["cyclonedx", "spdx"]),
+    type=click.Choice(["cyclonedx", "spdx", "aibom"]),
     default="cyclonedx",
-    help="SBOM format.",
+    help=(
+        "SBOM format. `cyclonedx` + `spdx` are standard SBOMs; `aibom` "
+        "emits a CycloneDX 1.5 AI/ML-BOM with machine-learning-model "
+        "components, detected agent-platform SDKs, and rule-bundle "
+        "provenance properties."
+    ),
 )
 @click.option("--output", "-o", "output_file", type=click.Path(), default=None,
               help="Write SBOM to file (defaults to stdout).")
 def sbom_cmd(path: str, sbom_format: str, output_file: str | None) -> None:
-    """Emit a CycloneDX 1.5 or SPDX 2.3 SBOM for the project's MCP dependencies."""
+    """Emit a CycloneDX 1.5 / SPDX 2.3 SBOM or a CycloneDX AI-BOM (`--format aibom`)."""
     from agent_audit_kit.output.sbom import emit_cyclonedx, emit_spdx
 
     project = Path(path)
-    payload = emit_cyclonedx(project) if sbom_format == "cyclonedx" else emit_spdx(project)
+    if sbom_format == "spdx":
+        payload = emit_spdx(project)
+    elif sbom_format == "aibom":
+        # Best-effort: pull the shipped rule-bundle hash if the user has
+        # the file committed locally; don't fail the emit if it's absent.
+        sha256_path = project / "rules.json.sha256"
+        rule_hash: str | None = None
+        if sha256_path.is_file():
+            try:
+                rule_hash = sha256_path.read_text(encoding="utf-8").split()[0]
+            except OSError:
+                rule_hash = None
+        payload = emit_cyclonedx(project, aibom=True, rule_bundle_sha256=rule_hash)
+    else:
+        payload = emit_cyclonedx(project)
     if output_file:
         Path(output_file).write_text(payload, encoding="utf-8")
         click.echo(f"SBOM written to {output_file}", err=True)
@@ -675,6 +1226,7 @@ def sbom_cmd(path: str, sbom_format: str, output_file: str | None) -> None:
 
 
 @cli.command("report")
+@click.version_option(version=__version__)
 @click.argument("path", default=".", type=click.Path(exists=True, file_okay=False, resolve_path=True))
 @click.option(
     "--framework",
@@ -687,12 +1239,15 @@ def sbom_cmd(path: str, sbom_format: str, output_file: str | None) -> None:
         "iso42001",
         "hipaa",
         "nist-ai-rmf",
+        "nsa-mcp-csi-2026",
         "singapore-agentic",
         "india-dpdp",
         "alabama-dppa",
         "tennessee-sb1580",
+        "standards-crosswalk",
     ]),
-    help="Compliance framework to format for.",
+    help="Compliance framework to format for. 'standards-crosswalk' emits the "
+         "static rule → NSA MCP CSI + OWASP Agentic Top-10 mapping (no scan).",
 )
 @click.option(
     "--format",
@@ -704,6 +1259,18 @@ def sbom_cmd(path: str, sbom_format: str, output_file: str | None) -> None:
 @click.option("--output", "-o", "output_file", type=click.Path(), default=None)
 def report_cmd(path: str, framework: str, report_format: str, output_file: str | None) -> None:
     """Produce an auditor-ready compliance report (EU AI Act Article 15 etc.)."""
+    # The standards crosswalk is a static rule→control mapping — no scan needed.
+    if framework == "standards-crosswalk":
+        from agent_audit_kit.output.crosswalk import render_markdown, render_text
+
+        text = render_text() if report_format == "text" else render_markdown()
+        if output_file:
+            Path(output_file).write_text(text, encoding="utf-8")
+            click.echo(f"wrote {output_file}", err=True)
+        else:
+            click.echo(text)
+        return
+
     from agent_audit_kit.output.pdf_report import emit_pdf, _text_report
 
     project = Path(path)
@@ -723,6 +1290,324 @@ def report_cmd(path: str, framework: str, report_format: str, output_file: str |
             click.echo(f"wrote {output_file}", err=True)
         else:
             click.echo(text)
+
+
+# ---------------------------------------------------------------------------
+# v0.3.9 commands: coverage, pipelock import, inspect-ide, parity report
+# ---------------------------------------------------------------------------
+
+
+@cli.command("coverage")
+@click.version_option(version=__version__)
+@click.option(
+    "--source",
+    type=click.Choice(["ox", "prisma-airs"]),
+    default="ox",
+    help="Coverage source to report on.",
+)
+@click.option(
+    "--format",
+    "fmt",
+    type=click.Choice(["json", "text", "badge"]),
+    default="text",
+)
+@click.option("--output", "-o", "output_file", type=click.Path(), default=None)
+@click.option(
+    "--fail-under",
+    type=float,
+    default=None,
+    help="Exit 1 if coverage_pct < threshold (CI use).",
+)
+def coverage_cmd(
+    source: str, fmt: str, output_file: str | None, fail_under: float | None
+) -> None:
+    """Report AAK's coverage of external manifests (OX, Prisma AIRS)."""
+    import json
+
+    def _ox_row(e: dict) -> str:
+        rules = ", ".join(e["rules"]) or "—"
+        mark = "✔" if e["covered"] else "✘"
+        return f"  {mark} {e['cve']}: {e['title']} → {rules}"
+
+    def _airs_row(e: dict) -> str:
+        rules = ", ".join(e["aak_rule_ids"]) or "—"
+        mark = "✔" if e["aak_rule_ids"] else "·"
+        return f"  {mark} {e['airs_attack_id']} [{e['status']}]: {e['title']} → {rules}"
+
+    if source == "ox":
+        from agent_audit_kit.coverage import load_manifest, summarize as ox_summarize
+
+        entries = load_manifest("ox")
+        summary = ox_summarize(entries)
+        label = "OX coverage"
+        total_key = "total"
+        item_renderer = _ox_row
+        header = (
+            f"OX-disclosed CVE coverage: "
+            f"{summary['covered']}/{summary[total_key]} "
+            f"({summary['coverage_pct']}%)"
+        )
+    else:
+        from agent_audit_kit.translators.prisma_airs import summarize as airs_summarize
+
+        summary = airs_summarize()
+        label = "Prisma AIRS coverage"
+        total_key = "total_static"
+        item_renderer = _airs_row
+        header = (
+            f"Prisma AIRS coverage (static-relevant only): "
+            f"{summary['covered']}/{summary[total_key]} "
+            f"({summary['coverage_pct']}%)"
+        )
+
+    if fmt == "json":
+        text = json.dumps(summary, indent=2, sort_keys=True)
+    elif fmt == "badge":
+        pct = summary["coverage_pct"]
+        colour = "green" if pct >= 90 else ("yellow" if pct >= 70 else "red")
+        text = json.dumps(
+            {
+                "schemaVersion": 1,
+                "label": label,
+                "message": f"{pct}%",
+                "color": colour,
+            },
+            indent=2,
+        )
+    else:
+        lines = [header, ""]
+        for entry in summary["entries"]:
+            lines.append(item_renderer(entry))
+        text = "\n".join(lines) + "\n"
+
+    if output_file:
+        Path(output_file).write_text(text, encoding="utf-8")
+        click.echo(f"wrote {output_file}", err=True)
+    else:
+        click.echo(text)
+
+    if fail_under is not None and summary["coverage_pct"] < fail_under:
+        click.echo(
+            f"coverage {summary['coverage_pct']}% < --fail-under {fail_under}%",
+            err=True,
+        )
+        sys.exit(EXIT_FINDINGS)
+
+
+@cli.group("pipelock")
+def pipelock_cmd() -> None:
+    """Pipelock policy DSL bridge (translate to .agent-audit-kit.yml)."""
+
+
+@pipelock_cmd.command("import")
+@click.argument(
+    "policy_path",
+    type=click.Path(exists=True, file_okay=True, dir_okay=False, resolve_path=True),
+)
+@click.option("--output", "-o", "output_file", type=click.Path(), default=None)
+@click.option("--dry-run", is_flag=True, default=False)
+def pipelock_import_cmd(
+    policy_path: str, output_file: str | None, dry_run: bool
+) -> None:
+    """Translate a Pipelock v2.3 YAML policy → .agent-audit-kit.yml."""
+    from agent_audit_kit.translators.pipelock import translate
+
+    policy = Path(policy_path)
+    out_text = translate(policy)
+    if dry_run:
+        click.echo(out_text)
+        return
+    target = Path(output_file or ".agent-audit-kit.yml")
+    target.write_text(out_text, encoding="utf-8")
+    click.echo(f"wrote {target}", err=True)
+
+
+@cli.command("inspect-ide")
+@click.version_option(version=__version__)
+@click.argument(
+    "path", default=".",
+    type=click.Path(exists=True, file_okay=True, dir_okay=True, resolve_path=True),
+)
+@click.option(
+    "--format",
+    "fmt",
+    type=click.Choice(["lsp", "json", "text"]),
+    default="text",
+    help="Output format. 'lsp' emits a single LSP-shape diagnostics array.",
+)
+@click.option(
+    "--serve",
+    is_flag=True,
+    default=False,
+    help="Run a minimal stdio LSP server (advertises diagnostics).",
+)
+def inspect_ide_cmd(path: str, fmt: str, serve: bool) -> None:
+    """Run AAK and emit IDE-shaped diagnostics (LSP / JSON / text)."""
+    if serve:
+        from agent_audit_kit.ide.lsp_diag import serve_stdio
+
+        serve_stdio(Path(path))
+        return
+
+    from agent_audit_kit.ide.lsp_diag import diagnostics_for
+
+    diags = diagnostics_for(Path(path))
+    if fmt == "lsp":
+        import json
+
+        click.echo(json.dumps(diags, indent=2))
+    elif fmt == "json":
+        import json
+
+        click.echo(json.dumps(diags, indent=2))
+    else:
+        if not diags:
+            click.echo("No findings.")
+            return
+        for d in diags:
+            sev = {1: "ERROR", 2: "WARN", 3: "INFO", 4: "HINT"}.get(
+                d.get("severity", 2), "WARN"
+            )
+            uri = d.get("uri", "<unknown>")
+            line = d.get("range", {}).get("start", {}).get("line", 0) + 1
+            click.echo(
+                f"[{sev}] {d.get('code', '?')} {uri}:{line} — {d.get('message', '')}"
+            )
+
+
+@cli.command("parity")
+@click.version_option(version=__version__)
+@click.argument(
+    "subcommand", type=click.Choice(["report"]), default="report"
+)
+@click.option(
+    "--dimension", default="model", help="Bucket key (default: model)."
+)
+@click.option(
+    "--metric", default="price", help="Metric to compare (default: price)."
+)
+@click.option(
+    "--max-drift-pct",
+    type=float,
+    default=1.5,
+    help="Allowed per-bucket drift from overall mean (default 1.5%).",
+)
+@click.option("--window", default=None, help="Rolling window: e.g. 7d, 24h, 60m.")
+def parity_cmd(
+    subcommand: str,
+    dimension: str,
+    metric: str,
+    max_drift_pct: float,
+    window: str | None,
+) -> None:
+    """Report on @aak.parity.check invocations (Project-Deal-class drift)."""
+    import json
+
+    from agent_audit_kit.parity import report
+
+    window_seconds: float | None = None
+    if window:
+        unit = window[-1]
+        try:
+            n = float(window[:-1])
+        except ValueError:
+            click.echo(f"Invalid --window: {window}", err=True)
+            sys.exit(EXIT_ERROR)
+        window_seconds = n * {"d": 86400, "h": 3600, "m": 60, "s": 1}.get(unit, 1)
+
+    try:
+        out = report(
+            dimension=dimension,
+            metric=metric,
+            window_seconds=window_seconds,
+            max_drift_pct=max_drift_pct,
+        )
+    except Exception as exc:  # noqa: BLE001 — surface as exit code 1 with a message
+        click.echo(f"parity {subcommand}: {type(exc).__name__}: {exc}", err=True)
+        sys.exit(EXIT_FINDINGS)
+    click.echo(json.dumps(out, indent=2, default=str))
+
+
+# ---------------------------------------------------------------------------
+# v0.3.10 commands: watch, rule lint  (score gained --aivss above)
+# ---------------------------------------------------------------------------
+
+
+@cli.command("watch-cve")
+@click.version_option(version=__version__)
+@click.option(
+    "--feeds",
+    default="nvd",
+    help="Comma-separated feed IDs. Live: nvd (NVD 2.0 API). Stubbed (no fetcher "
+    "yet): ox, cert-cc, thaicert, ironplate.",
+)
+@click.option(
+    "--online",
+    is_flag=True,
+    default=False,
+    help="Allow the nvd feed to fetch from the network. Off by default so CI and "
+    "offline runs never make a network call; without it the nvd feed reads its "
+    "on-disk cache.",
+)
+@click.option(
+    "--emit",
+    default=None,
+    help="Notification sink: slack://...|webhook://...|github://owner/repo",
+)
+@click.option("--interval-seconds", type=int, default=1800)
+@click.option("--max-iterations", type=int, default=0, help="0 = run forever.")
+@click.option("--dry-run", is_flag=True, default=False)
+def watch_cve_cmd(
+    feeds: str,
+    online: bool,
+    emit: str | None,
+    interval_seconds: int,
+    max_iterations: int,
+    dry_run: bool,
+) -> None:
+    """[experimental] Poll CVE feeds and surface new entries that lack an AAK rule.
+
+    Exactly one feed is live: nvd (the NVD 2.0 API). Its network call is opt-in
+    behind --online; without that flag the feed reads its on-disk cache, so a
+    default run never touches the network. The other feeds (ox, cert-cc, thaicert,
+    ironplate) are unimplemented stubs and print "not implemented"; the command
+    exits non-zero only when every requested feed is a stub, and 0 when at least one
+    live feed polled cleanly. Distinct from `aak watch` (the pin-drift monitor)."""
+    from agent_audit_kit.feeds import run_watch as run_feed_watch
+
+    feed_ids = [f.strip() for f in feeds.split(",") if f.strip()]
+    rc = run_feed_watch(
+        feed_ids=feed_ids,
+        emit=emit,
+        interval_seconds=interval_seconds,
+        max_iterations=max_iterations,
+        dry_run=dry_run,
+        online=online,
+    )
+    sys.exit(rc)
+
+
+@cli.group("rule")
+def rule_cmd() -> None:
+    """Rule-registry hygiene commands."""
+
+
+@rule_cmd.command("lint")
+@click.option("--ci", is_flag=True, default=False, help="Exit 1 on any violation.")
+@click.option("--rule", "rule_filter", default=None, help="Lint only this rule_id.")
+def rule_lint_cmd(ci: bool, rule_filter: str | None) -> None:
+    """Validate the RuleDefinition registry against AAK metadata invariants."""
+    from agent_audit_kit.cli_modules.rule_lint import run_lint
+
+    violations = run_lint(rule_filter=rule_filter)
+    if not violations:
+        click.echo("rule lint: clean.")
+        return
+    for v in violations:
+        click.echo(f"  {v['rule_id']}: {v['message']}", err=True)
+    click.echo(f"rule lint: {len(violations)} violation(s).", err=True)
+    if ci:
+        sys.exit(EXIT_FINDINGS)
 
 
 # Backward compatibility: allow `agent-audit-kit .` without `scan` subcommand

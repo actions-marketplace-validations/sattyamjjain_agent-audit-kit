@@ -22,8 +22,8 @@ Read in order:
 2. `../agent-airlock/ECOSYSTEM_STATE_2026-04.md` — shared ecosystem brief
 3. `ROADMAP_2026.md` — 90-day plan for this repo
 4. `../agent-airlock/LAUNCH_PLAYBOOK_2026.md` — shared growth tactics
-5. `agent_audit_kit/rules/builtin.py` — understand the 77 existing rules
-6. `agent_audit_kit/scanners/*.py` — understand the 13 scanner modules
+5. `agent_audit_kit/rules/builtin.py` — understand the 327 existing rules
+6. `agent_audit_kit/scanners/*.py` — understand the 95 scanner modules
 7. `tests/conftest.py` — fixture patterns
 8. Run `pytest -v` and `agent-audit-kit scan .` on the repo's own fixtures to confirm baseline
 
@@ -36,7 +36,7 @@ If any referenced file is missing, STOP and tell me.
 3. `ruff check . && mypy agent_audit_kit/` — zero errors before you touch anything.
 4. `agent-audit-kit scan tests/fixtures/vulnerable_mcp_project` — confirm rule catalog is firing.
 5. Tag `v0.2.0-pre-april-2026`.
-6. Open a GitHub issue "v0.3.0 — 2026 CVE wave + AAK Response SLA" with a checklist copied from ROADMAP §2.1 and §2.2.
+6. Open a GitHub issue "v0.3.0 — 2026 CVE wave + AAK CVE-response tracking" with a checklist copied from ROADMAP §2.1 and §2.2.
 
 ## 3. Phase 1 — clean up dead weight (Week 0)
 
@@ -68,9 +68,9 @@ For each rule-family PR:
 4. Add fixtures under `tests/fixtures/cves/<rule-id>/vulnerable/` and `.../safe/`.
 5. Update `docs/` with an auto-generated rule-catalog page.
 
-## 5. Phase 3 — AAK Response SLA infrastructure (Week 2–3, parallel)
+## 5. Phase 3 — AAK CVE-response infrastructure (Week 2–3, parallel)
 
-1. **48h CVE-to-rule SLA**: GitHub Action that watches NVD's MCP keyword feed, auto-files an issue tagged `cve-response`, and blocks release until the issue is closed.
+1. **Best-effort CVE-to-rule response** (no guaranteed response clock — a fixed-hours SLA would be a promise a solo maintainer can't always keep; see SECURITY.md): GitHub Action that watches NVD's MCP keyword feed, auto-files an issue tagged `cve-response`, and blocks release until the issue is triaged and closed.
 2. **Sigstore-signed rule bundles**: sign every release with Sigstore. Verify on install via a new `agent-audit-kit verify-bundle` command. Web-search `sigstore.dev` for the current signing flow.
 3. **Auditor-ready PDF compliance reports**: new `agent-audit-kit report --format pdf --framework eu-ai-act|soc2|iso27001|hipaa|nist-ai-rmf`. Generate via ReportLab (OK to add this dep — auditors need PDFs). Include findings → framework-article mapping.
 4. **`agent-audit-kit report --sbom`** — emit CycloneDX and SPDX SBOMs covering the scanned project's MCP servers and versions. Web-search `cyclonedx.org` for the current schema.
@@ -81,7 +81,7 @@ This is the leaderboard-ownership growth play.
 
 1. **Crawler**: discovers MCP servers from `anthropics/claude-plugins-official`, `claudemarketplaces.com`, `aitmpl.com`, `buildwithclaude.com`, and the top 500 GitHub results for `topic:mcp-server`. Store in `benchmarks/crawler/`.
 2. **Scanner runner**: runs the full agent-audit-kit rule catalog against each MCP server weekly.
-3. **Index site**: publish `mcp-security-index.com` (or `index.agentauditkit.dev`) as a static site with per-server grades A–F, rule-hit breakdown, and week-over-week trends. Hosted on Cloudflare Pages.
+3. **Index site**: publish `sattyamjjain.github.io/agent-audit-kit` (or `index.agentauditkit.dev`) as a static site with per-server grades A–F, rule-hit breakdown, and week-over-week trends. Hosted on Cloudflare Pages.
 4. **Disclosure policy**: every discovered vuln goes to the maintainer first with a 90-day disclosure window. Publish the policy at `docs/disclosure-policy.md` before crawling.
 5. **Weekly State of MCP Security** blog post summarizing new findings, trends, and the worst-graded servers. This is the Aider-leaderboard play.
 
@@ -113,7 +113,7 @@ Write `docs/comparisons.md` covering vs Snyk Agent Scan, Checkmarx, Invariant (p
 2. Compliance-evidence PDFs (SOC 2 / EU AI Act / HIPAA mapping) — competitors gate this behind enterprise tiers
 3. Deterministic rule-based (no LLM calls, no data exfil)
 4. Regional: Indian DPDP Act support out of the box
-5. 48h CVE-to-rule SLA — publicly tracked
+5. Best-effort CVE-to-rule response — publicly tracked, no fixed-hours SLA (see SECURITY.md)
 
 Do NOT claim "more accurate than Snyk." Make verifiable claims.
 
@@ -136,7 +136,7 @@ Update `docs/metrics.md` weekly:
 - New CVEs added this week
 - CVE-to-rule latency (hours)
 - External PRs merged
-- Open issue SLA %
+- Open cve-response issue backlog (best-effort triage; no SLA clock)
 
 Target at 90 days: 1,200 stars, 40k PyPI downloads, 500 servers indexed, median CVE-to-rule ≤ 36h.
 

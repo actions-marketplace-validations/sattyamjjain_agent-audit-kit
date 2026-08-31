@@ -13,8 +13,9 @@ set -euo pipefail
 #   $6  = include-user-config (default: "false")
 #   $7  = rules             (default: "")
 #   $8  = exclude-rules     (default: "")
-#   $9  = ignore-paths      (default: "")
-#   $10 = config            (default: "")
+#   $9  = preset            (default: "")
+#   $10 = ignore-paths      (default: "")
+#   $11 = config            (default: "")
 # ---------------------------------------------------------------------------
 
 INPUT_PATH="${1:-.}"
@@ -25,10 +26,14 @@ INPUT_UPLOAD_SARIF="${5:-true}"
 INPUT_INCLUDE_USER_CONFIG="${6:-false}"
 INPUT_RULES="${7:-}"
 INPUT_EXCLUDE_RULES="${8:-}"
-INPUT_IGNORE_PATHS="${9:-}"
-INPUT_CONFIG="${10:-}"
+INPUT_PRESET="${9:-}"
+INPUT_IGNORE_PATHS="${10:-}"
+INPUT_CONFIG="${11:-}"
+INPUT_COMMENT_ON_PR="${12:-true}"
+INPUT_FINGERPRINT_STRATEGY="${13:-auto}"
 
 SARIF_FILE="agent-audit-results.sarif"
+PR_SUMMARY_FILE="agent-audit-pr-summary.md"
 
 # ---------------------------------------------------------------------------
 # Build CLI command
@@ -51,6 +56,10 @@ if [ -n "${INPUT_EXCLUDE_RULES}" ]; then
     CMD+=(--exclude-rules "${INPUT_EXCLUDE_RULES}")
 fi
 
+if [ -n "${INPUT_PRESET}" ]; then
+    CMD+=(--preset "${INPUT_PRESET}")
+fi
+
 if [ -n "${INPUT_IGNORE_PATHS}" ]; then
     CMD+=(--ignore-paths "${INPUT_IGNORE_PATHS}")
 fi
@@ -58,6 +67,12 @@ fi
 if [ -n "${INPUT_CONFIG}" ]; then
     CMD+=(--config "${INPUT_CONFIG}")
 fi
+
+# v0.3.1: always write the PR-summary markdown so the comment step below can use it.
+CMD+=(--pr-summary-out "${PR_SUMMARY_FILE}")
+
+# v0.3.2: thread through the SARIF fingerprint strategy.
+CMD+=(--fingerprint-strategy "${INPUT_FINGERPRINT_STRATEGY}")
 
 # ---------------------------------------------------------------------------
 # Run scan and capture exit code
@@ -139,10 +154,20 @@ if [ -n "${GITHUB_OUTPUT:-}" ]; then
 fi
 
 # ---------------------------------------------------------------------------
-# Copy SARIF to GITHUB_WORKSPACE for upload step
+# Copy SARIF to GITHUB_WORKSPACE for the upload step.
+#
+# This action EMITS SARIF (the `sarif-file` output); it does not upload to Code
+# Scanning itself — that needs the canonical github/codeql-action/upload-sarif
+# step plus `security-events: write`, which a Docker action can't do cleanly.
+# If the caller set upload-sarif=true and expects an upload, say so LOUDLY
+# instead of silently doing nothing.
 # ---------------------------------------------------------------------------
 if [ -f "${SARIF_FILE}" ] && [ -n "${GITHUB_WORKSPACE:-}" ]; then
     cp "${SARIF_FILE}" "${GITHUB_WORKSPACE}/${SARIF_FILE}" 2>/dev/null || true
+fi
+
+if [ "${INPUT_UPLOAD_SARIF}" = "true" ] && [ "${INPUT_FORMAT}" = "sarif" ]; then
+    echo "::notice title=AgentAuditKit SARIF::SARIF written to '${SARIF_FILE}' (output: sarif-file). This action does NOT upload to Code Scanning; add a 'github/codeql-action/upload-sarif' step with sarif_file: \${{ steps.<id>.outputs.sarif-file }} and 'permissions: security-events: write'. See README > SARIF Integration."
 fi
 
 # ---------------------------------------------------------------------------
@@ -190,6 +215,57 @@ if [ -n "${GITHUB_STEP_SUMMARY:-}" ]; then
             echo "**Result: ERROR** (exit code ${SCAN_EXIT})"
         fi
     } >> "${GITHUB_STEP_SUMMARY}"
+fi
+
+# ---------------------------------------------------------------------------
+# v0.3.1: Sticky PR comment.
+#
+# When comment-on-pr=true AND this is a pull_request event AND we have a
+# token, post/update a single sticky comment using the hidden marker
+# `<!-- agent-audit-kit:pr-summary -->` that the renderer embeds. Any
+# failure here is logged but does NOT change the scan exit code — the
+# scan is the source of truth.
+# ---------------------------------------------------------------------------
+if [ "${INPUT_COMMENT_ON_PR}" = "true" ] \
+    && [ -f "${PR_SUMMARY_FILE}" ] \
+    && [ "${GITHUB_EVENT_NAME:-}" = "pull_request" ] \
+    && [ -n "${GITHUB_TOKEN:-}" ]; then
+    REPO="${GITHUB_REPOSITORY:-}"
+    PR_NUMBER=""
+    if [ -f "${GITHUB_EVENT_PATH:-}" ]; then
+        PR_NUMBER=$(python3 -c 'import json,sys,os; d=json.load(open(os.environ["GITHUB_EVENT_PATH"])); print(d.get("pull_request",{}).get("number",""))' || echo "")
+    fi
+
+    if [ -n "${REPO}" ] && [ -n "${PR_NUMBER}" ]; then
+        MARKER="<!-- agent-audit-kit:pr-summary -->"
+        API="https://api.github.com/repos/${REPO}/issues/${PR_NUMBER}/comments"
+        # Find an existing sticky comment.
+        EXISTING=$(curl -fsSL \
+            -H "Authorization: Bearer ${GITHUB_TOKEN}" \
+            -H "Accept: application/vnd.github+json" \
+            "${API}?per_page=100" | python3 -c \
+            'import json,sys; rows=json.load(sys.stdin); m="<!-- agent-audit-kit:pr-summary -->"
+for r in rows:
+    if isinstance(r,dict) and m in (r.get("body") or ""):
+        print(r["id"]); break' || true)
+        BODY_JSON=$(python3 -c 'import json,sys; print(json.dumps({"body": open(sys.argv[1]).read()}))' "${PR_SUMMARY_FILE}")
+        if [ -n "${EXISTING}" ]; then
+            curl -fsSL -X PATCH \
+                -H "Authorization: Bearer ${GITHUB_TOKEN}" \
+                -H "Accept: application/vnd.github+json" \
+                -d "${BODY_JSON}" \
+                "https://api.github.com/repos/${REPO}/issues/comments/${EXISTING}" >/dev/null \
+                || echo "comment-on-pr: PATCH failed (non-fatal)"
+        else
+            curl -fsSL -X POST \
+                -H "Authorization: Bearer ${GITHUB_TOKEN}" \
+                -H "Accept: application/vnd.github+json" \
+                -d "${BODY_JSON}" \
+                "${API}" >/dev/null \
+                || echo "comment-on-pr: POST failed (non-fatal)"
+        fi
+        echo "comment-on-pr: sticky comment updated for PR #${PR_NUMBER}"
+    fi
 fi
 
 exit "${SCAN_EXIT}"

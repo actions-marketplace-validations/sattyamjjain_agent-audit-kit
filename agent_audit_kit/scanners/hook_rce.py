@@ -17,7 +17,12 @@ from pathlib import Path
 from typing import Iterable
 
 from agent_audit_kit.models import Finding
-from agent_audit_kit.scanners._helpers import find_line_number, make_finding, SKIP_DIRS
+from agent_audit_kit.scanners._helpers import (
+    INTERPOLATION_RE,
+    find_line_number,
+    make_finding,
+    SKIP_DIRS,
+)
 
 
 _HOOK_SETTINGS_NAMES = (
@@ -27,15 +32,26 @@ _HOOK_SETTINGS_NAMES = (
 )
 _HOOK_SCRIPT_EXTS = {".sh", ".bash", ".py", ".js", ".ts", ".mjs"}
 
-_INTERPOLATION_RE = re.compile(
-    r"""(?:["']\s*\+\s*|\$\{|%\{|{{\s*|\$\(|`)\s*(?:input|args|event|payload|user|argv|request)""",
-    re.IGNORECASE,
-)
+# _INTERPOLATION_RE now lives in scanners/_helpers.py as INTERPOLATION_RE so
+# hook_rce and ide_task_rce share one definition. Kept as a module alias so the
+# existing references below (and any importer) stay valid.
+_INTERPOLATION_RE = INTERPOLATION_RE
 
 _SHELL_TRUE_RE = re.compile(
     r"""(?:subprocess\.(?:run|call|Popen|check_output)|os\.system|exec\s*\(|child_process\.exec(?:Sync)?|spawnSync|spawn)\s*\([^)]*(?:shell\s*=\s*True|{\s*shell\s*:\s*true)""",
     re.IGNORECASE | re.DOTALL,
 )
+
+# A shell-execution sink. In a .py/.js/.ts hook script, an interpolated string
+# is only an RCE risk if it actually reaches a shell/exec call — otherwise a
+# template literal like a React hook's `` `audit:${event}` `` is just data.
+_SHELL_SINK_RE = re.compile(
+    r"""(?:subprocess\.\w+|os\.system|os\.popen|commands\.getoutput|"""
+    r"""child_process|execSync|spawnSync|\bexeca?\b|\bspawn\s*\(|Deno\.run|"""
+    r"""\bsh\s+-c\b|\bbash\s+-c\b|\bos\.exec)""",
+    re.IGNORECASE,
+)
+_SHELL_LANG_EXTS = {".py", ".js", ".jsx", ".ts", ".tsx", ".mjs"}
 
 
 def _iter_hook_files(project_root: Path) -> Iterable[Path]:
@@ -48,7 +64,16 @@ def _iter_hook_files(project_root: Path) -> Iterable[Path]:
             continue
         if any(part in SKIP_DIRS for part in path.parts):
             continue
-        if path.suffix.lower() in _HOOK_SCRIPT_EXTS and "hooks" in {p.lower() for p in path.parts}:
+        parts_lower = {p.lower() for p in path.parts}
+        # Claude Code hooks live under a `.claude/` tree. Requiring `.claude`
+        # here avoids misclassifying framework hooks — most importantly React
+        # hooks under `src/hooks/` (`use-audit.ts`), whose `` `${event}` ``
+        # template literals collided with the "hook" keyword.
+        if (
+            path.suffix.lower() in _HOOK_SCRIPT_EXTS
+            and "hooks" in parts_lower
+            and ".claude" in parts_lower
+        ):
             yield path
 
 
@@ -119,15 +144,22 @@ def _check_hook_script(path: Path, project_root: Path) -> list[Finding]:
             )
         )
     m_interp = _INTERPOLATION_RE.search(text)
+    # For a script *language* (py/js/ts), an interpolation is only an RCE risk
+    # if it can reach a shell/exec sink; otherwise it's ordinary string
+    # building (e.g. a template literal in a UI helper). Shell scripts
+    # (.sh/.bash) are themselves a shell context, so interpolation alone
+    # remains sufficient there.
+    is_shell_lang = path.suffix.lower() in _SHELL_LANG_EXTS
     if m_interp and path.suffix.lower() in _HOOK_SCRIPT_EXTS:
-        findings.append(
-            make_finding(
-                "AAK-HOOK-RCE-001",
-                rel,
-                f"Hook script interpolates user input into a shell-ish context: {m_interp.group(0)!r}",
-                line_number=find_line_number(text, m_interp.group(0)),
+        if not is_shell_lang or _SHELL_SINK_RE.search(text):
+            findings.append(
+                make_finding(
+                    "AAK-HOOK-RCE-001",
+                    rel,
+                    f"Hook script interpolates user input into a shell-ish context: {m_interp.group(0)!r}",
+                    line_number=find_line_number(text, m_interp.group(0)),
+                )
             )
-        )
     return findings
 
 

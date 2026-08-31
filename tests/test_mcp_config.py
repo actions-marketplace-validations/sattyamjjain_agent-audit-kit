@@ -84,6 +84,82 @@ def test_authenticated_remote_server_not_flagged(tmp_path: Path) -> None:
     assert len(no_auth_findings) == 0
 
 
+# ---------------------------------------------------------------------------
+# #475 — AAK-MCP-001 must recognize custom API-key auth headers (X-*-Key family)
+# ---------------------------------------------------------------------------
+
+
+def test_custom_apikey_header_via_env_not_flagged(tmp_path: Path) -> None:
+    """#475 benign case: a vendor-prefixed API-key header whose value is an env
+    reference IS the server's declared auth scheme — AAK-MCP-001 must not fire.
+    (These were the 2 confirmed benign-slice false positives.)"""
+    import json
+    config = {
+        "mcpServers": {
+            "nefesh": {"type": "http", "url": "https://mcp.nefesh.ai/mcp",
+                       "headers": {"X-Nefesh-Key": "${SECRET}"}},
+            "satoshidata": {"type": "http", "url": "https://satoshidata.ai/mcp/v1/",
+                            "headers": {"X-WR-API-Key": "${SECRET}"}},
+            "google": {"type": "http", "url": "https://mcp.example.com/mcp",
+                       "headers": {"X-Goog-Api-Key": "${GOOGLE_API_KEY}"}},
+            "generic": {"type": "http", "url": "https://api.acme.dev/mcp",
+                        "headers": {"X-Api-Key": "${ACME_API_KEY}"}},
+        }
+    }
+    (tmp_path / ".mcp.json").write_text(json.dumps(config))
+    findings, _ = scan(tmp_path)
+    assert not [f for f in findings if f.rule_id == "AAK-MCP-001"], (
+        "custom X-*-Key auth headers with env values must not fire AAK-MCP-001"
+    )
+
+
+def test_apikey_placeholder_value_not_flagged(tmp_path: Path) -> None:
+    """A placeholder value (YOUR_..._HERE) is a declared-but-unfilled scheme."""
+    import json
+    config = {"mcpServers": {"s": {"type": "http", "url": "https://x/mcp",
+              "headers": {"X-Goog-Api-Key": "YOUR_STITCH_API_KEY_HERE"}}}}
+    (tmp_path / ".mcp.json").write_text(json.dumps(config))
+    findings, _ = scan(tmp_path)
+    assert not [f for f in findings if f.rule_id == "AAK-MCP-001"]
+
+
+def test_x402_payment_header_not_flagged(tmp_path: Path) -> None:
+    """x402 X-PAYMENT gates access (pay-to-access); the endpoint is not openly
+    reachable, so AAK-MCP-001 does not fire. Explicit decision for #475."""
+    import json
+    config = {"mcpServers": {"x402": {"type": "http", "url": "https://api.lattiq.ai/mcp",
+              "headers": {"X-PAYMENT": "${SECRET}"}}}}
+    (tmp_path / ".mcp.json").write_text(json.dumps(config))
+    findings, _ = scan(tmp_path)
+    assert not [f for f in findings if f.rule_id == "AAK-MCP-001"]
+
+
+def test_hardcoded_custom_apikey_literal_still_flagged(tmp_path: Path) -> None:
+    """True positive: a custom auth header carrying a HARDCODED literal secret
+    exposes the credential in the config, so AAK-MCP-001 still fires."""
+    import json
+    config = {"mcpServers": {"leaky": {"type": "http", "url": "https://api.acme.dev/mcp",
+              "headers": {"X-Acme-Key": "sk-live-9f8e7d6c5b4a3210deadbeefcafef00d"}}}}
+    (tmp_path / ".mcp.json").write_text(json.dumps(config))
+    findings, _ = scan(tmp_path)
+    assert [f for f in findings if f.rule_id == "AAK-MCP-001"], (
+        "a hardcoded literal in a custom auth header must still fire AAK-MCP-001"
+    )
+
+
+def test_non_auth_header_only_still_flagged(tmp_path: Path) -> None:
+    """Preserved true positive: a remote server whose only header is a non-auth
+    header (Accept) has no credential and must still fire (the ai.spala shape)."""
+    import json
+    config = {"mcpServers": {"public": {"type": "http", "url": "https://mcp.spala.ai/mcp",
+              "headers": {"Accept": "application/json"}}}}
+    (tmp_path / ".mcp.json").write_text(json.dumps(config))
+    findings, _ = scan(tmp_path)
+    assert [f for f in findings if f.rule_id == "AAK-MCP-001"], (
+        "a non-auth header (Accept) must not suppress AAK-MCP-001"
+    )
+
+
 def test_absolute_path_command_not_flagged(tmp_path: Path) -> None:
     """Commands with absolute paths should not trigger AAK-MCP-006."""
     import json

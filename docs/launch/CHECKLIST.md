@@ -5,7 +5,7 @@ everything else; these steps are for you.
 
 ## Pre-launch (T-48h)
 
-- [ ] Review `docs/launch/release-notes-v0.3.0.md` and approve.
+- [ ] Review the current release's notes and approve.
 - [ ] Review `docs/launch/hn.md`, `reddit.md`, `x-thread.md`,
       `press.md`. Adjust voice if anything sounds too synthetic.
 - [ ] Review `docs/disclosure-policy.md`. Confirm you're comfortable
@@ -17,7 +17,7 @@ everything else; these steps are for you.
 - [ ] Confirm PyPI Trusted Publisher config is set up for the `pypi`
       environment. (GitHub Settings → Environments → `pypi`.)
 - [ ] Decide whether to route the MCP Security Index domain
-      `mcp-security-index.com` through Cloudflare Pages or GitHub Pages.
+      `sattyamjjain.github.io/agent-audit-kit` through Cloudflare Pages or GitHub Pages.
       Either works. For GH Pages: enable Pages, source = `gh-pages`
       branch. For CFP: add a CNAME record pointing at the GH Pages URL.
 - [ ] Send press emails (from `docs/launch/press.md`) with the Tuesday

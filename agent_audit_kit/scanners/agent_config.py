@@ -19,14 +19,20 @@ _AGENT_CONFIG_FILES: list[str] = [
 ]
 
 # ---- AAK-AGENT-001: Shell command directives ----
+# NOTE: no bare `` `...` `` inline-code arm — it matched *every* backtick span
+# in an agent-instruction file (`` `cargo build` ``, `` `make` ``, `` `npx tsc` ``),
+# producing dozens of false positives per CLAUDE.md. A genuinely dangerous
+# backtick-wrapped command (`` `rm -rf /` ``, `` `sh -c ...` ``) still matches
+# through the specific arms below. The `curl|wget ... | sh` arm preserves
+# detection of pipe-to-shell that the catch-all used to cover.
 _SHELL_DIRECTIVE_RE = re.compile(
-    r"sh\s+-c\s|bash\s+-c\s|"
-    r"`[^`]+`|"
+    r"\bsh\s+-c\s|\bbash\s+-c\s|"
     r"\bos\.system\s*\(|"
     r"\bsubprocess\b|"
     r"\bexec\s*\(|"
     r"\beval\s*\(|"
-    r"\brm\s+-rf\b",
+    r"\brm\s+-rf\b|"
+    r"(?:curl|wget)\b[^\n`]*\|\s*(?:sh|bash|zsh)\b",
     re.IGNORECASE,
 )
 
@@ -207,4 +213,47 @@ def scan(project_root: Path) -> tuple[list[Finding], set[str]]:
         scanned_files.add(rel_path)
         findings.extend(_check_content(content, rel_path))
 
+    # AAK-CLAUDE-WIN-001: CVE-2026-35603 Windows ProgramData hijack.
+    # Fires when a managed-settings.json lives under a ProgramData path
+    # without a sibling setup.ps1 that runs icacls hardening.
+    findings.extend(_check_claude_win_programdata(project_root, scanned_files))
+
     return findings, scanned_files
+
+
+def _check_claude_win_programdata(
+    project_root: Path,
+    scanned_files: set[str],
+) -> list[Finding]:
+    """CVE-2026-35603: managed-settings.json under %ProgramData% needs
+    a sibling setup.ps1 that runs `icacls` to harden the ACL. Fires on
+    any `managed-settings.json` whose path contains `programdata`
+    (case-insensitive) and whose directory lacks the hardening script."""
+    import re as _re
+
+    findings: list[Finding] = []
+    for candidate in project_root.rglob("managed-settings.json"):
+        path_lower = str(candidate).lower()
+        if "programdata" not in path_lower:
+            continue
+        rel = str(candidate.relative_to(project_root))
+        scanned_files.add(rel)
+        sibling = candidate.parent / "setup.ps1"
+        if not sibling.is_file():
+            findings.append(make_finding(
+                "AAK-CLAUDE-WIN-001",
+                rel,
+                "managed-settings.json under ProgramData without sibling setup.ps1 ACL hardener",
+            ))
+            continue
+        try:
+            ps1_text = sibling.read_text(encoding="utf-8", errors="replace")
+        except OSError:
+            ps1_text = ""
+        if not _re.search(r"\bicacls\b", ps1_text, _re.IGNORECASE):
+            findings.append(make_finding(
+                "AAK-CLAUDE-WIN-001",
+                rel,
+                f"setup.ps1 next to {rel} does not run icacls to restrict ACLs",
+            ))
+    return findings

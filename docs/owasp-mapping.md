@@ -1,34 +1,21 @@
 # OWASP Mapping
 
-AgentAuditKit maps to three security frameworks:
+> **This page moved.** It used to carry a hand-maintained copy of the OWASP
+> coverage tables, and it drifted badly: every MCP slot understated its real
+> count by roughly four times (MCP01 said 14 against a live 78, MCP05 said 10
+> against 55) and MCP08 was missing altogether. Hand-copying a number the
+> registry already knows is how that happens, so the copy is gone rather than
+> corrected.
 
-## OWASP Agentic Top 10 (ASI01-ASI10)
+Coverage is generated from the live rule registry by `scripts/gen_coverage.py`,
+which CI regenerates and fails on staleness:
 
-| Code | Name | AgentAuditKit Coverage |
-|------|------|----------------------|
-| ASI01 | Agent Goal Hijacking | AAK-AGENT-001 to 005 |
-| ASI02 | Tool Misuse | AAK-MCP-004, AAK-TAINT-005/007/008 |
-| ASI03 | Identity & Privilege Abuse | AAK-SECRET-*, AAK-TRUST-003 |
-| ASI04 | Supply Chain | AAK-SUPPLY-*, AAK-LEGAL-* |
-| ASI05 | Unexpected Code Execution | AAK-HOOK-*, AAK-TAINT-001/002 |
-| ASI06 | Memory & Context Poisoning | AAK-POISON-*, AAK-RUGPULL-* |
-| ASI07 | Insecure Inter-Agent Communication | AAK-A2A-* |
-| ASI08 | Cascading Failures | AAK-TRANSPORT-003 |
-| ASI09 | Human-Agent Trust Exploitation | AAK-TRUST-006 |
-| ASI10 | Rogue Agents | AAK-TRUST-001/002 |
+- **[OWASP Agentic Top 10 (ASI01-ASI10) → AAK rules](coverage/owasp-agentic-top10.md)**
+- **[OWASP MCP Top 10 (MCP01-MCP10) → AAK rules](coverage/owasp-mcp-top10.md)**
+- **[OWASP Agentic Skills Top 10 (AST01-AST10)](../README.md#owasp-agentic-skills-top-10-ast10)** — partial by design; the README states which categories are covered and which are not.
 
-## OWASP MCP Top 10
+For a scan-time view of your own project, run:
 
-| Code | Name | Rules |
-|------|------|-------|
-| MCP01:2025 | Token Mismanagement | 14 rules |
-| MCP02:2025 | Context Over-Sharing | 4 rules |
-| MCP03:2025 | Supply Chain Attacks | 9 rules |
-| MCP04:2025 | Command Injection | 12 rules |
-| MCP05:2025 | Tool Poisoning | 10 rules |
-| MCP06:2025 | Privilege Escalation | 5 rules |
-| MCP07:2025 | Insufficient Auth | 5 rules |
-| MCP09:2025 | SSRF | 3 rules |
-| MCP10:2025 | Package Risks | 6 rules |
-
-Run `agent-audit-kit scan . --owasp-report` for live coverage data.
+```bash
+agent-audit-kit scan . --owasp-report
+```

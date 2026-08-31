@@ -22,7 +22,7 @@ Post same Tuesday as HN, ~1h after HN submission.
 
 > agent-audit-kit — OSS static scanner for MCP-connected AI agents.
 >
-> 124 deterministic rules. SARIF → GitHub Security tab.
+> 327 deterministic rules. SARIF → GitHub Security tab.
 > Compliance evidence for EU AI Act Article 15, SOC 2, ISO 27001/42001,
 > HIPAA, NIST AI RMF.
 >
@@ -47,17 +47,18 @@ Post same Tuesday as HN, ~1h after HN submission.
 >
 > • Per-server grade cards (A–F)
 > • 90-day coordinated disclosure before findings go public
-> • Full data: mcp-security-index.com
+> • Full data: sattyamjjain.github.io/agent-audit-kit
 >
 > Maintainer-fix earlier? We publish the fix the day it lands with
 > credit.
 
 ---
 
-**5/ 48-hour CVE-to-rule SLA**
+**5/ Public CVE-response ledger**
 
-> We publicly commit: every disclosed MCP CVE gets rule coverage
-> within 48h of NVD disclosure. Tracked in CHANGELOG.cves.md.
+> Newly disclosed MCP CVEs are triaged and turned into rules as they
+> land (surfaced by an NVD watcher). Every one we cover is logged with
+> its rule ID and ship date in CHANGELOG.cves.md.
 >
 > Sigstore-signed rule bundles, so enterprise users can pin + verify
 > without a vendor account.
@@ -89,11 +90,11 @@ Post same Tuesday as HN, ~1h after HN submission.
 **8/ Get it**
 
 > • Repo: github.com/sattyamjjain/agent-audit-kit
-> • Leaderboard: mcp-security-index.com
+> • Leaderboard: sattyamjjain.github.io/agent-audit-kit
 > • VS Code Marketplace: agent-audit-kit
-> • GitHub Action: uses: sattyamjjain/agent-audit-kit@v0.3.0
+> • GitHub Action: uses: sattyamjjain/agent-audit-kit@v0.3.87
 >
-> Apache 2.0. No strings.
+> MIT. No strings.
 
 ---
 

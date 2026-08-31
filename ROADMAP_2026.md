@@ -1,9 +1,24 @@
 # agent-audit-kit — Roadmap to Top 1% (April 2026)
 
+> **Historical snapshot — authored 2026-04-12, not updated.** This is the April
+> 2026 plan, kept because the reasoning is still useful and deleting it would be
+> the dishonest version. Read it as a record of what was intended, not as a
+> statement of where the project is.
+>
+> Its headline goal — "1,000+ GitHub stars and reference-implementation status
+> for the OWASP MCP Top 10 project within 90 days" — was not met. Four months on
+> the repo has 13 stars, and no such status was granted. The counts in the
+> opening line (v0.2.0, 77 rules, 11 categories, 13 scanner modules) are the
+> April figures and are deliberately left alone; for current state see
+> [`README.md`](README.md) and [`docs/rules.md`](docs/rules.md).
+>
+> Same treatment as [`DEEP_ANALYSIS.md`](DEEP_ANALYSIS.md), which carries the
+> equivalent banner for v0.2.0.
+
 **Starting point (Apr 2026):** v0.2.0 · 77 rules across 11 categories · 13 scanner modules · SARIF + OWASP + compliance output · GitHub Action ready · single-digit stars.
 **Goal:** 1,000+ GitHub stars and reference-implementation status for the OWASP MCP Top 10 project within 90 days.
 
-Read `ECOSYSTEM_STATE_2026-04.md` first.
+Read [`launch/MARKET-RESEARCH-2026-04-12.md`](launch/MARKET-RESEARCH-2026-04-12.md) first — the April 2026 competitive/ecosystem landscape this roadmap is built on.
 
 ---
 
@@ -27,10 +42,9 @@ The three things `agent-audit-kit` ships that the field does **not** do well:
 
 Carried over from the earlier `DEEP_ANALYSIS.md` plus the new market context:
 
-1. **Retire the three dead RUGPULL rules** (`AAK-RUGPULL-001/002/003`) or wire them into `pinning.verify_pins`. Today they are defined but never fired by any scanner — a static-scanner shipping silent rules is a credibility problem.
-2. **Exception handling around `engine.run_scan`** — today a single bad scanner crashes the whole scan. Add per-scanner try/except that emits an `AAK-INTERNAL-SCANNER-FAIL` INFO finding and continues.
-3. **TypeScript/Rust taint analyzers are regex, not taint flow** — match the marketing. Either (a) rewrite `typescript_scan.py` and `rust_scan.py` using tree-sitter AST traversal, or (b) rename them to `typescript_pattern_scan.py` / `rust_pattern_scan.py` and remove "taint analysis" language from docs. The current state burns credibility when a security researcher reads the source.
-4. **LLM-assisted scanner** (`llm_scan.py`) — today depends on Ollama silently. Wire it into Claude / OpenAI / Gemini with a `--llm claude-haiku-4-5` CLI flag and make it explicit-opt-in, not silent.
+1. **Exception handling around `engine.run_scan`** — today a single bad scanner crashes the whole scan. Add per-scanner try/except that emits an `AAK-INTERNAL-SCANNER-FAIL` INFO finding and continues.
+2. **TypeScript/Rust scanners: rename done, AST rewrite still open** — the two modules were renamed to `typescript_pattern_scan.py` / `rust_pattern_scan.py` (v0.3.0, with back-compat shims) and the docs no longer describe them as "taint analysis", so the source now matches the marketing (they are honest regex pattern scanners). The remaining half — a real tree-sitter AST rewrite that models source→sink reachability for TS/Rust — stays open as **issue #22**; do not restart it here.
+3. **LLM-assisted scanner** (`llm_scan.py`) — today depends on Ollama silently. Wire it into Claude / OpenAI / Gemini with a `--llm claude-haiku-4-5` CLI flag and make it explicit-opt-in, not silent.
 
 ### 2.2 Must-add coverage for 2026 threat landscape
 
@@ -51,7 +65,7 @@ Every one of these rules ships with (a) a fixture under `tests/fixtures/`, (b) a
 
 ### 2.3 Features that widen the moat
 
-1. **CVE-to-rule velocity commitment** — ship rule packs within 48 hours of any MCP CVE disclosure. Document this publicly as the **AAK Response SLA**. Run a public `CHANGELOG.cves.md` showing "CVE-2026-33032 → AAK-MCP-012 shipped 2026-03-16, 17 hours after NVD disclosure". This mirrors `npm audit`'s core value prop.
+1. **Disclosed-CVE rule coverage** — triage newly disclosed MCP CVEs and turn them into rules as they land, surfaced automatically by the NVD watcher (`.github/workflows/cve-watcher.yml`) and logged in a public `CHANGELOG.cves.md` (e.g. "CVE-2026-33032 → AAK-MCP-012, 2026-03-16"). No public deadline is promised — a solo maintainer can't carry an unbounded clock — but the ledger makes actual coverage and timing transparent.
 2. **Compliance-report v2** — today you map to EU AI Act / SOC 2 / ISO 27001 / HIPAA / NIST AI RMF. Add:
    - **ISO/IEC 42001** AI Management System evidence block.
    - **Singapore Agentic AI Governance Framework** (Jan 2026, first national).
@@ -86,7 +100,7 @@ Your honest answer to "why not Snyk Agent Scan?":
 
 - Land the four correctness fixes (dead rules, scanner exception handling, TypeScript/Rust rename or rewrite, explicit LLM flag).
 - Ship the 10 new 2026-CVE rule families as v0.3.0.
-- Publish the **AAK Response SLA** commitment.
+- Publish the public CVE-response ledger (`CHANGELOG.cves.md`) — coverage transparency, no clock commitment.
 - Scan 1,000 public MCP servers and compute the grade distribution. This is a blog post.
 - Run ToxicSkills head-to-head; publish numbers.
 
@@ -127,7 +141,7 @@ Your honest answer to "why not Snyk Agent Scan?":
 | GitHub stars | ~3 | 200 | 2,000 | 10,000 |
 | PyPI downloads/month | <30 | 3,000 | 40,000 | 400,000 |
 | Rules | 77 | 100 | 140 | 200 |
-| CVE-to-rule SLA compliance | n/a | 100% of new MCP CVEs in <48 h | same | same |
+| Disclosed MCP CVEs with rule coverage | n/a | majority covered | same | same |
 | GitHub Action usage | 0 | 20 | 250 | 3,000 |
 | Published MCP Security Index grades | 0 | 1,000 servers | 5,000 | all 10,000+ |
 | Coordinated CVE disclosures | 0 | 1 | 5 | 20 |
@@ -146,4 +160,4 @@ Your honest answer to "why not Snyk Agent Scan?":
 
 ## 6. The CEO-readable one-pager
 
-> *AgentAuditKit* scans your AI-agent pipeline for 100+ security and compliance issues — from tool-poisoning and prompt-injection to insecure MCP configs and missing OAuth 2.1 enforcement. It produces SARIF for GitHub Security, an OWASP MCP Top 10 scorecard, and auditor-ready compliance evidence mapped to EU AI Act Article 15, SOC 2, ISO 27001 / 42001, HIPAA, NIST AI RMF, Singapore Agentic AI Governance, and India DPDP. We publish the MCP Security Index, grading the top 10,000 public MCP servers weekly, and we ship rule coverage for every disclosed MCP CVE within 48 hours. Used by engineering teams that need to show an auditor that their agents are safe — before the EU AI Act high-risk obligations apply on August 2, 2026.
+> *AgentAuditKit* scans your AI-agent pipeline for 100+ security and compliance issues — from tool-poisoning and prompt-injection to insecure MCP configs and missing OAuth 2.1 enforcement. It produces SARIF for GitHub Security, an OWASP MCP Top 10 scorecard, and auditor-ready compliance evidence mapped to EU AI Act Article 15, SOC 2, ISO 27001 / 42001, HIPAA, NIST AI RMF, Singapore Agentic AI Governance, and India DPDP. We publish the MCP Security Index, grading the top 10,000 public MCP servers weekly, and we ship rule coverage for disclosed MCP CVEs. Used by engineering teams that need to show an auditor that their agents are safe — before the EU AI Act high-risk obligations apply on August 2, 2026.

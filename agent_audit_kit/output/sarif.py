@@ -2,10 +2,15 @@ from __future__ import annotations
 
 import hashlib
 import json
+from pathlib import Path
 
 from agent_audit_kit import __version__
 from agent_audit_kit.models import Finding, ScanResult, Severity
 from agent_audit_kit.rules.builtin import RULES
+
+# Public rule-doc URL per finding. Keep this stable — SARIF ingesters
+# cache helpUri and follow it from the GH Security tab.
+_HELP_URI_BASE = "https://agent-audit-kit.dev/rules"
 
 SEVERITY_TO_LEVEL: dict[Severity, str] = {
     Severity.CRITICAL: "error",
@@ -30,13 +35,50 @@ def _build_fingerprint(finding: Finding) -> str:
     return hashlib.sha256(data.encode()).hexdigest()
 
 
-def _build_partial_fingerprint(finding: Finding) -> str:
-    """Generate a partial fingerprint (first 16 hex chars) for location-based dedup."""
-    data = f"{finding.rule_id}:{finding.file_path}:{finding.line_number or 0}"
-    return hashlib.sha256(data.encode()).hexdigest()[:16]
+def _read_finding_line(finding: Finding, project_root: Path | None) -> str | None:
+    """Best-effort read of the source line at `finding.line_number`.
+
+    Used to build a *content-aware* partialFingerprint so GitHub Code
+    Scanning dedupes the same alert across moves (line shifts) when the
+    surrounding code hasn't changed, and flags it as new when the code
+    DID change. Returns None if the file can't be read (binary, too
+    large, not on disk).
+    """
+    if not finding.line_number or not finding.file_path:
+        return None
+    candidates: list[Path] = []
+    if project_root:
+        candidates.append(project_root / finding.file_path)
+    candidates.append(Path(finding.file_path))
+    for path in candidates:
+        try:
+            if not path.is_file():
+                continue
+            # Cap at 2MB to keep SARIF emission fast.
+            if path.stat().st_size > 2_000_000:
+                return None
+            with path.open("r", encoding="utf-8", errors="replace") as fh:
+                for i, line in enumerate(fh, start=1):
+                    if i == finding.line_number:
+                        return line.rstrip("\r\n")
+        except OSError:
+            continue
+    return None
 
 
-def _rule_to_sarif(rule_id: str, index: int) -> dict:
+def _build_partial_fingerprint(finding: Finding, line_content: str | None) -> str:
+    """SHA-256(line content + rule ID). Falls back to location-based hash
+    when the line content can't be read so we always emit *something*
+    stable for de-dup."""
+    if line_content is not None:
+        data = f"{line_content}\0{finding.rule_id}"
+    else:
+        data = f"{finding.rule_id}:{finding.file_path}:{finding.line_number or 0}"
+    return hashlib.sha256(data.encode()).hexdigest()
+
+
+def _rule_to_sarif(rule_id: str, index: int) -> dict:  # noqa: ARG001
+    del index  # kept for call-site compat; SARIF rules[] index is positional
     """Convert a rule definition to a SARIF reportingDescriptor.
 
     Args:
@@ -61,6 +103,10 @@ def _rule_to_sarif(rule_id: str, index: int) -> dict:
         tags.extend(f"OWASP-Agentic-{r}" for r in rule.owasp_agentic_references)
     if rule.adversa_references:
         tags.extend(f"Adversa-{r}" for r in rule.adversa_references)
+    if rule.incident_references:
+        tags.extend(f"incident-{r}" for r in rule.incident_references)
+    if rule.aicm_references:
+        tags.extend(f"AICM-{r}" for r in rule.aicm_references)
 
     # Build help text with remediation and references
     help_text = rule.remediation
@@ -85,7 +131,7 @@ def _rule_to_sarif(rule_id: str, index: int) -> dict:
         "name": rule.sarif_name or rule.rule_id.replace("-", ""),
         "shortDescription": {"text": rule.title},
         "fullDescription": {"text": rule.description},
-        "helpUri": "https://owasp.org/www-project-mcp-top-10/",
+        "helpUri": f"{_HELP_URI_BASE}/{rule.rule_id}",
         "help": {
             "text": help_text,
             "markdown": help_markdown,
@@ -99,15 +145,23 @@ def _rule_to_sarif(rule_id: str, index: int) -> dict:
     }
 
 
-def _finding_to_result(finding: Finding, rule_index_map: dict[str, int]) -> dict:
+FINGERPRINT_STRATEGIES = ("auto", "line-hash", "disabled")
+
+
+def _finding_to_result(
+    finding: Finding,
+    rule_index_map: dict[str, int],
+    project_root: Path | None = None,
+    fingerprint_strategy: str = "auto",
+) -> dict:
     """Convert a Finding to a SARIF result object.
 
     Args:
         finding: The finding to convert.
         rule_index_map: Mapping from rule_id to index in the rules array.
-
-    Returns:
-        SARIF-compliant result dictionary.
+        project_root: used to resolve relative paths for content-aware
+            partial-fingerprint hashing. Falls back to location-based
+            hashing when the file can't be read.
     """
     location: dict = {
         "physicalLocation": {
@@ -120,42 +174,97 @@ def _finding_to_result(finding: Finding, rule_index_map: dict[str, int]) -> dict
     if finding.line_number:
         location["physicalLocation"]["region"] = {"startLine": finding.line_number}
 
-    full_fingerprint = _build_fingerprint(finding)
-    partial_fingerprint = _build_partial_fingerprint(finding)
-
     result: dict = {
         "ruleId": finding.rule_id,
         "ruleIndex": rule_index_map.get(finding.rule_id, 0),
         "level": SEVERITY_TO_LEVEL[finding.severity],
         "message": {"text": finding.description},
         "locations": [location],
-        "fingerprints": {
-            "primaryLocationFingerprint": full_fingerprint,
-        },
-        "partialFingerprints": {
-            "primaryLocationLineHash": partial_fingerprint,
+        "properties": {
+            "security-severity": SEVERITY_TO_SCORE[finding.severity],
         },
     }
+
+    if fingerprint_strategy != "disabled":
+        full_fingerprint = _build_fingerprint(finding)
+        result["fingerprints"] = {"primaryLocationFingerprint": full_fingerprint}
+        if fingerprint_strategy == "line-hash":
+            # Force content-hash mode even when source isn't on disk —
+            # falls back to location-hash inside _build_partial_fingerprint
+            # so the SARIF always validates.
+            line_content = _read_finding_line(finding, project_root)
+            partial_fingerprint = _build_partial_fingerprint(finding, line_content)
+        else:  # "auto"
+            line_content = _read_finding_line(finding, project_root)
+            partial_fingerprint = _build_partial_fingerprint(finding, line_content)
+        result["partialFingerprints"] = {
+            "primaryLocationLineHash": partial_fingerprint,
+        }
 
     if finding.evidence:
         result["message"]["text"] += f"\n\nEvidence: {finding.evidence}"
 
+    # NOTE: do NOT emit a SARIF `fixes` object here. A `fixes[].fix` requires
+    # `artifactChanges` (it describes a machine-applicable patch, not prose);
+    # emitting one with only `description` makes every result invalid and
+    # GitHub's codeql-action/upload-sarif rejects the whole file. The remediation
+    # prose is already surfaced via the rule-level `help`/`helpMarkdown`; the
+    # per-finding copy goes in a valid property bag.
     if finding.remediation:
-        result["fixes"] = [{"description": {"text": finding.remediation}}]
+        result.setdefault("properties", {})["remediation"] = finding.remediation
+
+    # relatedLocations: other artifacts that together with the primary location
+    # constitute the finding (e.g. the individual skills whose capability union
+    # AAK-AGENT-COMPOSE-001 flags). A code-scanning UI links each one so the
+    # finding is navigable to every contributing file, not just the anchor.
+    related = []
+    for rel in finding.related_locations:
+        phys: dict = {
+            "artifactLocation": {
+                "uri": rel["file_path"],
+                "uriBaseId": "%SRCROOT%",
+            },
+        }
+        if rel.get("line_number"):
+            phys["region"] = {"startLine": rel["line_number"]}
+        entry: dict = {"physicalLocation": phys}
+        if rel.get("message"):
+            entry["message"] = {"text": rel["message"]}
+        related.append(entry)
+    if related:
+        result["relatedLocations"] = related
 
     return result
 
 
-def format_results(result: ScanResult, min_severity: Severity = Severity.LOW) -> str:
+def format_results(
+    result: ScanResult,
+    min_severity: Severity = Severity.LOW,
+    project_root: Path | None = None,
+    fingerprint_strategy: str = "auto",
+) -> str:
     """Format scan results as SARIF 2.1.0 JSON for GitHub Code Scanning.
 
     Args:
         result: The scan result containing findings.
         min_severity: Minimum severity level to include.
-
-    Returns:
-        SARIF JSON string.
+        project_root: used for content-aware partialFingerprint hashing.
+            When omitted, partial fingerprints fall back to
+            location-based hashing.
+        fingerprint_strategy: one of ``auto``, ``line-hash``, ``disabled``.
+            - ``auto`` (default) — emit both full + partial fingerprints;
+              use content hashing if source is co-located, location hash
+              otherwise. Matches GitHub Code Scanning's expectation.
+            - ``line-hash`` — same behaviour as ``auto`` today; kept as a
+              forward-compat slot for when we add AST-based fingerprints.
+            - ``disabled`` — emit no fingerprints. Useful for bespoke
+              downstream processors that compute their own.
     """
+    if fingerprint_strategy not in FINGERPRINT_STRATEGIES:
+        raise ValueError(
+            f"unknown fingerprint_strategy {fingerprint_strategy!r}; "
+            f"expected one of {FINGERPRINT_STRATEGIES}"
+        )
     filtered = result.findings_at_or_above(min_severity)
 
     # Build ordered rules list (preserving first-seen order, deduped)
@@ -184,7 +293,10 @@ def format_results(result: ScanResult, min_severity: Severity = Severity.LOW) ->
                 "automationDetails": {
                     "id": "agent-audit-kit/",
                 },
-                "results": [_finding_to_result(f, rule_index_map) for f in filtered],
+                "results": [
+                    _finding_to_result(f, rule_index_map, project_root, fingerprint_strategy)
+                    for f in filtered
+                ],
             }
         ],
     }

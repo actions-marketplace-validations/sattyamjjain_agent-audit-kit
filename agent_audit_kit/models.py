@@ -48,6 +48,22 @@ class Category(Enum):
     TRANSPORT_SECURITY = "transport-security"
     A2A_PROTOCOL = "a2a-protocol"
     LEGAL_COMPLIANCE = "legal-compliance"
+    MCP_SERVER_CARD = "mcp-server-card"
+    COMPOSITION = "composition"
+    AGENTIC_SKILL = "agentic-skill"
+
+
+# Schema versioning — bump when new reference fields land on Finding /
+# RuleDefinition. Consumers (SARIF, rules.json, PR-summary) read this so
+# they can gracefully ignore unknown fields from newer scanners.
+#
+# 2: added `incident_references` + `aicm_references` (v0.3.2). The CSA
+# MCP Security Baseline v0.1 RC is expected to drop this week — when
+# it does, we'll tag rules with `csa_mcp_baseline_references` as a v3
+# addition. Track at:
+#   https://cloudsecurityalliance.org/blog/2025/08/20/securing-the-agentic-ai-control-plane-announcing-the-mcp-security-resource-center
+#   https://cloudsecurityalliance.org/artifacts/ai-controls-matrix
+SCHEMA_VERSION = 3
 
 
 @dataclass
@@ -65,6 +81,28 @@ class Finding:
     owasp_mcp_references: list[str] = field(default_factory=list)
     owasp_agentic_references: list[str] = field(default_factory=list)
     adversa_references: list[str] = field(default_factory=list)
+    # v0.3.2 additions (SCHEMA_VERSION 2):
+    # Reference incidents that drove the rule. Use stable IDs of the
+    # form `<VENDOR>-<DATE>` (e.g. `VERCEL-2026-04-19`, `OX-MCP-2026-04-15`).
+    # Distinct from CVEs — covers disclosed incidents that never got a CVE.
+    incident_references: list[str] = field(default_factory=list)
+    # Control IDs from the CSA AI Controls Matrix (AICM) — used by the
+    # `agent-audit-kit report --compliance aicm` output to group findings
+    # by control. Empty for rules with no AICM mapping yet.
+    aicm_references: list[str] = field(default_factory=list)
+    # v0.3.85 (SCHEMA_VERSION 3): OWASP Agentic Skills Top 10 (AST01-AST10) ids.
+    # Its own list rather than a reuse of owasp_agentic_references, because AST10
+    # is a different taxonomy over a different layer -- MCP is how the model talks
+    # to tools, AST10 is what those tools do -- and folding them together would
+    # make both coverage numbers wrong.
+    owasp_ast_references: list[str] = field(default_factory=list)
+    # v0.3.73 additions (SCHEMA_VERSION 3): other artifacts that, together with
+    # file_path, constitute the finding — e.g. the individual skills whose
+    # capability union AAK-AGENT-COMPOSE-001 flags. Each entry is
+    # {"file_path": str, "line_number": int | None, "message": str}. Emitted as
+    # SARIF `relatedLocations` so a code-scanning UI can navigate to each
+    # contributing artifact.
+    related_locations: list[dict] = field(default_factory=list)
 
 
 @dataclass

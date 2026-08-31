@@ -1,6 +1,8 @@
 # AgentAuditKit: Market Research & Growth Strategy
 **Date**: April 12, 2026 | **Version**: v0.2.0 | **Current stars**: 1
 
+> **Note (2026-07-14):** the 48h CVE-to-rule SLA described here was retired; response is best-effort with no fixed deadline. See SECURITY.md.
+
 ---
 
 ## PART 1: WHERE YOU STAND (Competitive Landscape)

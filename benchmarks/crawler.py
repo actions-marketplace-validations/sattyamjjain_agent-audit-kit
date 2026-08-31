@@ -34,9 +34,28 @@ logger = logging.getLogger(__name__)
 
 GITHUB_SEARCH_URL = "https://api.github.com/search/code"
 GITHUB_API_VERSION = "2022-11-28"
+# Primary query (kept for back-compat / single-query callers).
 SEARCH_QUERY = "mcpServers filename:.mcp.json"
+# Each GitHub Code Search query is capped at 1,000 results, so a single
+# filename query plateaus (~571 distinct configs for `.mcp.json`). To widen the
+# corpus we sweep the other common MCP-config filenames and dedupe by
+# repo+path. Every query is public-metadata only (no exploitation).
+SEARCH_QUERIES = [
+    "mcpServers filename:.mcp.json",
+    "mcpServers filename:mcp.json",
+    "mcpServers filename:claude_desktop_config.json",
+    "mcpServers filename:cline_mcp_settings.json",
+    "mcpServers filename:mcp_settings.json",
+]
 PER_PAGE = 100  # max allowed by GitHub
-RATE_LIMIT_PAUSE_S = 10  # seconds to wait when rate-limited
+RATE_LIMIT_PAUSE_S = 10  # base back-off when rate-limited
+MAX_RATE_LIMIT_WAIT_S = 90  # never stall a scheduled job longer than this
+# Total wall-clock budget for a crawl. Surviving rate limits is unbounded in
+# time without this: the back-off ladder is 240s per API call, which over 150
+# configs is ~10 hours against GitHub's 6-hour job timeout -- and a timeout kill
+# produces no snapshot at all, which is the original failure with extra steps.
+# The budget guarantees an artifact instead of a gap.
+DEFAULT_MAX_SECONDS = 1800
 DATA_DIR = Path(__file__).resolve().parent / "data"
 
 
@@ -97,28 +116,76 @@ def _github_headers() -> dict[str, str]:
     return headers
 
 
+class EmptyCrawl(RuntimeError):
+    """The crawl finished with zero configs.
+
+    Distinct from a partial crawl, which is a smaller but real data point. Zero
+    is not a data point, so this is the one case that should still fail the
+    workflow: better a visible failure and a notification than a zero silently
+    entering the trend chart.
+    """
+
+
+class RateLimited(RuntimeError):
+    """The GitHub API rate limit did not clear within the retry budget.
+
+    Distinct from a bug so the caller can keep a partial crawl instead of losing
+    the week. This workflow snapshots a time series: 200 configs is a data point,
+    a crash is a gap, and the gap is what happened -- every scheduled run from
+    2026-06-15 failed except one, so history.json held a single snapshot while
+    the site said "not enough snapshots yet for a trend chart".
+    """
+
+
+def _retry_after_seconds(exc: urllib.error.HTTPError, attempt: int) -> int:
+    """How long to wait, preferring what GitHub actually told us.
+
+    ``Retry-After`` when present, else the gap to ``X-RateLimit-Reset``, else an
+    exponential back-off. Capped so a crawl cannot hang a scheduled job.
+    """
+    header = exc.headers.get("Retry-After")
+    if header:
+        try:
+            return min(int(header), MAX_RATE_LIMIT_WAIT_S)
+        except ValueError:
+            pass
+    reset = exc.headers.get("X-RateLimit-Reset")
+    if reset:
+        try:
+            delta = int(reset) - int(time.time())
+            if delta > 0:
+                return min(delta, MAX_RATE_LIMIT_WAIT_S)
+        except ValueError:
+            pass
+    return min(RATE_LIMIT_PAUSE_S * (2 ** attempt), MAX_RATE_LIMIT_WAIT_S)
+
+
 def _api_get(url: str) -> dict[str, Any]:
     """Perform a GET request against the GitHub API with retry on rate-limit."""
     headers = _github_headers()
     req = urllib.request.Request(url, headers=headers)
 
-    for attempt in range(3):
+    attempts = 5
+    for attempt in range(attempts):
         try:
             with urllib.request.urlopen(req, timeout=30) as resp:
                 return json.loads(resp.read().decode("utf-8"))
         except urllib.error.HTTPError as exc:
-            if exc.code == 403:
-                # Rate limited -- back off and retry
-                retry_after = int(exc.headers.get("Retry-After", RATE_LIMIT_PAUSE_S))
+            # 429 is what the Search API actually returns for a secondary rate
+            # limit, and it used to fall straight through to `raise` because only
+            # 403 was handled. That is why every scheduled snapshot since
+            # 2026-06-15 died with an unhandled HTTPError instead of degrading:
+            # the retry path existed but the status code never reached it.
+            if exc.code in (403, 429):
+                retry_after = _retry_after_seconds(exc, attempt)
                 logger.warning(
-                    "Rate limited (attempt %d/3). Waiting %ds...",
-                    attempt + 1,
-                    retry_after,
+                    "Rate limited: HTTP %d (attempt %d/%d). Waiting %ds...",
+                    exc.code, attempt + 1, attempts, retry_after,
                 )
                 time.sleep(retry_after)
                 continue
             raise
-    raise RuntimeError(f"GitHub API request failed after 3 attempts: {url}")
+    raise RateLimited(f"GitHub API rate limit not cleared after 3 attempts: {url}")
 
 
 # ---------------------------------------------------------------------------
@@ -136,27 +203,46 @@ def search_mcp_configs(limit: int = 100) -> list[dict[str, Any]]:
         List of search result items from the GitHub Code Search API.
     """
     items: list[dict[str, Any]] = []
-    page = 1
-    per_page = min(limit, PER_PAGE)
+    seen: set[tuple[str, str]] = set()
+    per_page = PER_PAGE
 
-    while len(items) < limit:
-        url = (
-            f"{GITHUB_SEARCH_URL}"
-            f"?q={urllib.request.quote(SEARCH_QUERY)}"
-            f"&per_page={per_page}&page={page}"
-        )
-        logger.info("Searching page %d (collected %d/%d)...", page, len(items), limit)
-        data = _api_get(url)
+    for query in SEARCH_QUERIES:
+        page = 1
+        while len(items) < limit:
+            url = (
+                f"{GITHUB_SEARCH_URL}"
+                f"?q={urllib.request.quote(query)}"
+                f"&per_page={per_page}&page={page}"
+            )
+            logger.info(
+                "Searching %r page %d (collected %d/%d distinct)...",
+                query, page, len(items), limit,
+            )
+            try:
+                data = _api_get(url)
+            except RuntimeError:
+                # GitHub caps Code Search at 1,000 results / rate-limits hard;
+                # a failed page just ends this query, not the whole sweep.
+                logger.warning("Query %r ended early at page %d", query, page)
+                break
 
-        page_items = data.get("items", [])
-        if not page_items:
+            page_items = data.get("items", [])
+            if not page_items:
+                break
+
+            for it in page_items:
+                repo = it.get("repository", {}).get("full_name", "")
+                path = it.get("path", "")
+                key = (repo, path)
+                if key in seen:
+                    continue
+                seen.add(key)
+                items.append(it)
+
+            page += 1
+            time.sleep(2)  # respect rate limits between pages
+        if len(items) >= limit:
             break
-
-        items.extend(page_items)
-        page += 1
-
-        # Respect rate limits between pages
-        time.sleep(2)
 
     return items[:limit]
 
@@ -368,7 +454,9 @@ def aggregate_results(config_results: list[ConfigResult]) -> BenchmarkResults:
 # ---------------------------------------------------------------------------
 
 
-def run_benchmark(limit: int, output_path: Path) -> BenchmarkResults:
+def run_benchmark(
+    limit: int, output_path: Path, max_seconds: int = DEFAULT_MAX_SECONDS
+) -> BenchmarkResults:
     """Execute the full benchmark pipeline.
 
     1. Search GitHub for public .mcp.json files.
@@ -384,7 +472,14 @@ def run_benchmark(limit: int, output_path: Path) -> BenchmarkResults:
         The aggregated BenchmarkResults.
     """
     logger.info("Searching GitHub for public .mcp.json files (limit=%d)...", limit)
-    items = search_mcp_configs(limit=limit)
+    deadline = time.monotonic() + max_seconds if max_seconds else None
+    partial_reason: str | None = None
+    try:
+        items = search_mcp_configs(limit=limit)
+    except RateLimited as exc:
+        logger.warning("Rate limited during search: %s", exc)
+        items = []
+        partial_reason = f"rate limit reached during search: {exc}"
     logger.info("Found %d results from GitHub Search API.", len(items))
 
     config_results: list[ConfigResult] = []
@@ -394,12 +489,38 @@ def run_benchmark(limit: int, output_path: Path) -> BenchmarkResults:
         file_path = item.get("path", "unknown")
         logger.info("[%d/%d] Processing %s/%s", idx, len(items), repo, file_path)
 
-        local_path = download_config(item, idx)
+        if deadline is not None and time.monotonic() > deadline:
+            logger.warning(
+                "Wall-clock budget of %ds spent after %d/%d configs. Emitting the "
+                "partial crawl rather than being killed by the job timeout with "
+                "nothing to show.", max_seconds, idx - 1, len(items),
+            )
+            partial_reason = (
+                f"wall-clock budget of {max_seconds}s spent after {idx - 1}/{len(items)} configs"
+            )
+            break
+        try:
+            local_path = download_config(item, idx)
+        except RateLimited as exc:
+            logger.warning(
+                "Rate limit reached while downloading %d/%d: %s. Keeping the "
+                "partial crawl.", idx, len(items), exc,
+            )
+            partial_reason = f"rate limit reached after {idx - 1}/{len(items)} configs"
+            break
         if local_path is None:
             logger.warning("  Skipped (download failed)")
             continue
 
-        result = analyze_config(local_path, repo, file_path)
+        try:
+            result = analyze_config(local_path, repo, file_path)
+        except RateLimited as exc:
+            logger.warning(
+                "Rate limit reached after %d/%d configs: %s. Keeping the partial "
+                "crawl rather than losing the snapshot.", idx - 1, len(items), exc,
+            )
+            partial_reason = f"rate limit reached after {idx - 1}/{len(items)} configs"
+            break
         config_results.append(result)
         logger.info(
             "  Findings: %d | Secrets: %s | EnableAll: %s",
@@ -415,12 +536,36 @@ def run_benchmark(limit: int, output_path: Path) -> BenchmarkResults:
     benchmark = aggregate_results(config_results)
 
     # Write output
+    payload = asdict(benchmark)
+    payload["partial"] = partial_reason is not None
+    payload["partial_reason"] = partial_reason
+    payload["requested_limit"] = limit
+    payload["max_seconds"] = max_seconds
     output_path.parent.mkdir(parents=True, exist_ok=True)
     output_path.write_text(
-        json.dumps(asdict(benchmark), indent=2, default=str),
+        json.dumps(payload, indent=2, default=str),
         encoding="utf-8",
     )
-    logger.info("Results written to %s", output_path)
+    # A snapshot with nothing in it is not a data point. Publishing it would put a
+    # zero into the trend chart and read as "we scanned and found nothing" rather
+    # than "the crawl never got started". The file is still written for debugging;
+    # the non-zero exit is what stops the workflow publishing it and fires the
+    # scheduled-failure notification.
+    if not config_results:
+        _print_summary(benchmark)
+        raise EmptyCrawl(
+            f"crawl produced 0 configs ({partial_reason or 'no results from search'}); "
+            "refusing to publish an empty snapshot"
+        )
+
+    if partial_reason:
+        logger.warning(
+            "PARTIAL snapshot (%s). Written to %s -- a short snapshot beats a gap, "
+            "but it is recorded as partial so nothing downstream reads it as a full "
+            "crawl.", partial_reason, output_path,
+        )
+    else:
+        logger.info("Results written to %s", output_path)
 
     # Print summary to stdout
     _print_summary(benchmark)
@@ -464,6 +609,16 @@ def main() -> None:
         help="Maximum number of configs to download and scan (default: 100).",
     )
     parser.add_argument(
+        "--max-seconds",
+        type=int,
+        default=DEFAULT_MAX_SECONDS,
+        help=(
+            "Wall-clock budget. On expiry the crawl stops and writes what it has, "
+            "marked partial, instead of running until the CI job timeout kills it "
+            f"with nothing (default: {DEFAULT_MAX_SECONDS})."
+        ),
+    )
+    parser.add_argument(
         "--output",
         type=str,
         default=str(Path(__file__).resolve().parent / "results.json"),
@@ -476,6 +631,17 @@ def main() -> None:
         default=False,
         help="Enable verbose logging.",
     )
+    parser.add_argument(
+        "--server-cards",
+        action="store_true",
+        default=False,
+        help=(
+            "Opt-in NETWORK pass: discover SEP-1649 server cards at "
+            "/.well-known/mcp/server-card.json for enumerated servers and audit "
+            "each with the MCP Server Card scanner. Writes a dated results file "
+            "(benchmarks/results-<date>.json). Off by default (zero-cloud)."
+        ),
+    )
     args = parser.parse_args()
 
     log_level = logging.DEBUG if args.verbose else logging.INFO
@@ -485,7 +651,68 @@ def main() -> None:
         datefmt="%H:%M:%S",
     )
 
-    run_benchmark(limit=args.limit, output_path=Path(args.output))
+    if args.server_cards:
+        run_server_card_prevalence(limit=args.limit)
+        return
+
+    run_benchmark(
+        limit=args.limit,
+        output_path=Path(args.output),
+        max_seconds=args.max_seconds,
+    )
+
+
+def run_server_card_prevalence(limit: int = 200) -> dict[str, Any]:
+    """Opt-in: discover + audit SEP-1649 server cards; write a dated results file.
+
+    Reuses `benchmarks/sources.collect_all` for enumeration and
+    `agent_audit_kit.scanners.mcp_server_card` for the audit. Network-gated
+    (only runs behind `--server-cards`); never part of the default scan path or
+    the test suite.
+    """
+    import datetime
+    from collections import Counter
+
+    from agent_audit_kit.scanners.mcp_server_card import _audit_card
+
+    from sources import collect_all, well_known_server_cards  # type: ignore[import-not-found]
+
+    entries = collect_all(limit_per_source=limit)
+    logger.info("Enumerated %d distinct servers; probing for server cards...", len(entries))
+    pairs = well_known_server_cards(entries, limit=limit)
+    logger.info("Discovered %d reachable server cards.", len(pairs))
+
+    rule_counts: Counter[str] = Counter()
+    cards_with_finding = 0
+    per_card: list[dict[str, Any]] = []
+    for entry, card in pairs:
+        findings = _audit_card(card, entry.url or entry.name, json.dumps(card, indent=2))
+        rids = sorted({f.rule_id for f in findings})
+        if rids:
+            cards_with_finding += 1
+        for r in rids:
+            rule_counts[r] += 1
+        per_card.append({"server": entry.url or entry.name, "rules": rids})
+
+    total = len(pairs)
+    result = {
+        "kind": "server-card-prevalence",
+        "servers_enumerated": len(entries),
+        "cards_discovered": total,
+        "cards_with_finding": cards_with_finding,
+        "cards_with_finding_pct": round(100.0 * cards_with_finding / total, 1) if total else 0.0,
+        "rule_hit_counts": dict(rule_counts.most_common()),
+        "per_card": per_card,
+    }
+    # Deterministic dated filename; never clobber results-2026-06-13.json.
+    today = datetime.date.today().isoformat()
+    out = Path(__file__).resolve().parent / f"results-{today}.json"
+    out.write_text(json.dumps(result, indent=2) + "\n", encoding="utf-8")
+    logger.info(
+        "Server-card prevalence: %d/%d cards had >=1 finding -> %s",
+        cards_with_finding, total, out,
+    )
+    return result
 
 
 if __name__ == "__main__":

@@ -4,7 +4,7 @@
 > Show HN: We scanned 500 MCP servers for 2026 CVEs — here's the leaderboard
 
 **URL:**
-> https://mcp-security-index.com/ (the index, not the repo)
+> https://sattyamjjain.github.io/agent-audit-kit/ (the index, not the repo)
 
 **Text body:** leave blank (URL post — HN prefers clean URL submissions).
 
@@ -23,8 +23,8 @@
 > evidence output** — SARIF + OWASP MCP Top 10 + EU AI Act Article 15
 > + SOC 2 + ISO 27001 / 42001 + HIPAA + NIST AI RMF in one scan.
 >
-> agent-audit-kit is that. 124 deterministic rules. Zero cloud
-> dependencies, no auth required. Apache 2.0.
+> agent-audit-kit is that. 327 deterministic rules. Zero cloud
+> dependencies, no auth required. MIT.
 >
 > The leaderboard: we run the scanner weekly against 500 public MCP
 > servers and publish per-server grade cards. Findings are embargoed
@@ -40,11 +40,11 @@
 - **"How is this different from Snyk Agent Scan?"**
   → No auth, no cloud, compliance-evidence output, India DPDP +
   Singapore framework + EU AI Act Article 55. Deterministic, so CI
-  runs are reproducible. 48h CVE-to-rule SLA we publicly track.
+  runs are reproducible. public CVE-response ledger we maintain.
 - **"Does it use an LLM?"**
   → No. The moat is deterministic rules. We keep an optional
   `--llm-scan` flag for semantic tool-description checks, but the core
-  124 rules are regex + AST patterns that run in <50 ms on a normal
+  327 detection rules are regex + AST patterns that run in <50 ms on a normal
   project.
 - **"What's your false-positive rate?"**
   → We scan 500 public MCP servers weekly. Ground-truth is unknown

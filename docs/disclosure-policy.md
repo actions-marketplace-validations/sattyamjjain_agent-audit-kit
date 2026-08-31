@@ -9,8 +9,9 @@ on that leaderboard, we follow this policy.
 When our weekly crawl discovers a previously-unseen finding, we:
 
 1. Open a **private** security advisory (or private issue) on the
-   affected repository within **48 hours** of the scan that discovered
-   it.
+   affected repository as soon as we reasonably can after the scan that
+   discovered it — best-effort, prioritised by severity, with no fixed
+   clock (this is a solo-maintained project).
 2. Include: the rule ID (e.g. `AAK-MCP-011`), the file + line pointer,
    the remediation text the scanner carries, the CVSS-estimated severity,
    and a link to this policy.

@@ -29,6 +29,7 @@ _FRAMEWORK_TITLES = {
     "iso42001": "ISO/IEC 42001:2023 — AI Management System",
     "hipaa": "HIPAA Security Rule — Technical Safeguards",
     "nist-ai-rmf": "NIST AI RMF 1.0 — GOVERN, MAP, MEASURE, MANAGE",
+    "nsa-mcp-csi-2026": "NSA MCP Security CSI — U/OO/6030316-26 (May 2026)",
     "singapore-agentic": "Singapore Agentic AI Governance Framework (Jan 2026)",
     "india-dpdp": "India Digital Personal Data Protection Act 2023",
     "alabama-dppa": "Alabama Personal Data Protection Act (HB 351, 2026)",
@@ -127,6 +128,25 @@ _CATEGORY_TO_CONTROL = {
         "transport-security": "A.6.2.3 AI system operational controls",
         "a2a-protocol": "A.10.1 Supplier AI agreements",
         "legal-compliance": "A.5.1 Leadership & governance",
+    },
+    # NSA AISC Cybersecurity Information Sheet — U/OO/6030316-26 / PP-26-1834.
+    # Category → recommendation section heading (verbatim from the CSI body,
+    # pp.10-14). Verified against the source PDF (Wayback snapshot
+    # 20260520161722). Used by the PDF / text report's "Findings by control"
+    # grouping; the full per-control rule mapping lives in
+    # agent_audit_kit/output/compliance.py:FRAMEWORKS["nsa-mcp-csi-2026"].
+    "nsa-mcp-csi-2026": {
+        "mcp-config": "Scan local network for open or vulnerable MCP servers (p.14)",
+        "hook-injection": "Constrain and sandbox tool execution (p.11)",
+        "trust-boundary": "Design for boundaries (p.10)",
+        "secret-exposure": "Sign and verify MCP messages (p.12)",
+        "supply-chain": "Choose supported MCP projects when possible (p.10)",
+        "agent-config": "Instrument for logging and detection (p.13)",
+        "tool-poisoning": "Filter and monitor output pipelines and chained execution (p.12)",
+        "taint-analysis": "Validate parameters (p.11)",
+        "transport-security": "Sign and verify MCP messages (p.12)",
+        "a2a-protocol": "Design for boundaries (p.10)",
+        "legal-compliance": "Track and patch MCP related vulnerabilities (p.13)",
     },
     "singapore-agentic": {
         "mcp-config": "Pillar 3 — Safe & Secure Deployment",
@@ -297,3 +317,84 @@ def emit_pdf(result: ScanResult, framework: str, output_path: Path) -> tuple[boo
 
     doc.build(story)
     return True, f"wrote PDF report to {output_path}"
+
+
+def _report_text(results: dict) -> str:
+    """Plain-text fallback for the State-of-MCP aggregate report."""
+    lines = [
+        "The State of MCP Security, 2026 — AgentAuditKit",
+        f"Scan date: {results.get('scan_date', '?')}",
+        f"Corpus: {results['distinct_configs_scanned']:,} distinct public MCP server configs",
+        "",
+        "Top findings (% of corpus):",
+    ]
+    for t in results.get("top_misconfigurations", []):
+        lines.append(f"  {t['config_pct']:>5}%  {t['rule_id']} [{t['severity']}] — {t['title']}")
+    return "\n".join(lines) + "\n"
+
+
+def emit_report_pdf(results: dict, output_path: Path) -> tuple[bool, str]:
+    """Render the State-of-MCP aggregate (`results.json`) as a human PDF.
+
+    Reuses the same reportlab primitives as `emit_pdf`; falls back to a .txt when
+    reportlab is missing. This is the credibility artifact — the "% of public MCP
+    servers fail X" report — not a per-scan compliance pack.
+    """
+    try:
+        from reportlab.lib.pagesizes import letter
+        from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
+        from reportlab.lib.units import inch
+        from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle
+        from reportlab.lib import colors
+    except ImportError:
+        text_path = output_path.with_suffix(".txt")
+        text_path.write_text(_report_text(results), encoding="utf-8")
+        return False, f"reportlab not installed; wrote plain-text fallback to {text_path}."
+
+    doc = SimpleDocTemplate(str(output_path), pagesize=letter, title="State of MCP Security 2026")
+    styles = getSampleStyleSheet()
+    body = ParagraphStyle("aak-body", parent=styles["BodyText"], fontName="Helvetica", fontSize=9, leading=12)
+    n = results["distinct_configs_scanned"]
+    story = [
+        Paragraph("<b>The State of MCP Security, 2026</b>", styles["Title"]),
+        Paragraph(f"AgentAuditKit {__version__} — offline, deterministic", styles["Heading3"]),
+        Paragraph(
+            f"Scan date: {results.get('scan_date', '?')} &nbsp;·&nbsp; Corpus: {n:,} distinct "
+            f"public MCP server configs ({results.get('corpus_sources', {})})",
+            body,
+        ),
+        Spacer(1, 0.2 * inch),
+        Paragraph("<b>Headline findings — % of public MCP servers</b>", styles["Heading2"]),
+    ]
+    rows = [["Rule", "Severity", "% of corpus", "Configs", "Finding"]]
+    for t in results.get("top_misconfigurations", []):
+        rows.append([t["rule_id"], t["severity"].upper(), f"{t['config_pct']}%", str(t["configs"]), t["title"]])
+    tbl = Table(rows, colWidths=[1.7 * inch, 0.7 * inch, 0.8 * inch, 0.6 * inch, 2.7 * inch])
+    tbl.setStyle(TableStyle([
+        ("BACKGROUND", (0, 0), (-1, 0), colors.lightgrey),
+        ("GRID", (0, 0), (-1, -1), 0.25, colors.grey),
+        ("FONTNAME", (0, 0), (-1, -1), "Helvetica"),
+        ("FONTSIZE", (0, 0), (-1, -1), 7),
+        ("ROWBACKGROUNDS", (0, 1), (-1, -1), [colors.white, colors.whitesmoke]),
+    ]))
+    story.append(tbl)
+    story.append(Spacer(1, 0.2 * inch))
+
+    ap = results.get("auth_profile_2026_07_28", {})
+    na = ap.get("no_authentication", {})
+    story.append(Paragraph("<b>Authentication posture (2026-07-28 profile)</b>", styles["Heading2"]))
+    story.append(Paragraph(
+        f"No authentication: {na.get('n')} of {n:,} ({na.get('pct')}%). "
+        f"RFC 9728 PRM discovery: {ap.get('rfc9728_prm_discovery', {}).get('n')} of {n:,}. "
+        f"Of inline-auth remotes, {ap.get('remote_auth_static_credential', {}).get('n')} of "
+        f"{ap.get('remote_auth_static_credential', {}).get('denominator')} hardcode a static credential.",
+        body,
+    ))
+    story.append(Spacer(1, 0.15 * inch))
+    story.append(Paragraph(
+        "Reproduce (offline, deterministic): <font face='Courier'>make report</font>. "
+        "Full narrative + method: research/state-of-mcp-2026/REPORT.md.",
+        body,
+    ))
+    doc.build(story)
+    return True, f"wrote State-of-MCP report PDF to {output_path}"

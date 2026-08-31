@@ -1,4 +1,5 @@
 import * as vscode from "vscode";
+import { registerSarifCommands } from "./sarifReader";
 import { execFile } from "child_process";
 import * as path from "path";
 
@@ -246,6 +247,12 @@ export function activate(context: vscode.ExtensionContext): void {
 
   context.subscriptions.push(outputChannel);
   context.subscriptions.push(diagnosticCollection);
+
+  // SARIF loading lives in its own module with its own diagnostic collection
+  // ("agent-audit-kit-sarif"), so imported findings never overwrite the ones
+  // this extension produces itself. It was written, never imported, and
+  // therefore never ran until v0.3.87.
+  registerSarifCommands(context);
 
   // Register the command to show the output channel
   const showOutputCommand = vscode.commands.registerCommand(

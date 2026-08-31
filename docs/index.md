@@ -13,14 +13,14 @@ agent-audit-kit scan .
 
 ## Features
 
-- **74 detection rules** across 11 categories
+- **<!-- rule-count:total -->327<!-- /rule-count --> detection rules** across 14 categories
 - **OWASP Agentic Top 10** complete mapping (ASI01-ASI10)
 - **OWASP MCP Top 10** complete mapping
 - **Adversa AI Top 25** mapping
-- **Compliance frameworks**: EU AI Act, SOC2, ISO 27001, HIPAA, NIST AI RMF
+- **Compliance frameworks** (12): EU AI Act, SOC 2, ISO 27001, ISO 42001, HIPAA, NIST AI RMF, NSA MCP CSI, + regional (India DPDP, Singapore, Alabama, Tennessee)
 - **Tool pinning** for rug pull detection
 - **Taint analysis** for @tool function security
-- **Multi-agent discovery** across 10 frameworks
+- **Multi-agent discovery** across 10 agent platforms
 - **Auto-fix** for common misconfigurations
 - **Security scoring** with A-F grades and SVG badges
 - **SARIF output** for GitHub Code Scanning integration
