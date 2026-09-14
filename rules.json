@@ -4711,7 +4711,9 @@
         "CVE-2026-50287",
         "CVE-2026-23744",
         "CVE-2026-49257",
-        "CVE-2026-48989"
+        "CVE-2026-48989",
+        "CVE-2026-90617",
+        "CVE-2026-38924"
       ],
       "description": "A repository publishes an MCP server over HTTP / SSE / Streamable-HTTP (an `/mcp` route handler, or an `SSEServerTransport` / `StreamableHTTPServerTransport` / `--http` setup) with no inbound authentication marker on the handler, while also binding to all interfaces (`0.0.0.0` / `::`) or serving a wildcard `Access-Control-Allow-Origin: *`. The result is a mutation-capable RPC endpoint, backed by the operator's own tokens, reachable without credentials by any network (or, with wildcard CORS, any cross-origin browser) peer. This is a recurring 2026 class: GitLab MCP Server (CVE-2026-44895), Nocturne Memory (CVE-2026-44830), and AgenticMail (CVE-2026-50287) all shipped auth-less HTTP/SSE MCP transports on `0.0.0.0` with wildcard CORS. Generalises the Azure-only `AAK-AZURE-MCP-NOAUTH-001` to any published MCP HTTP server (the Azure rule still owns Azure-MCP repos; this rule defers to it there). Beyond server source, this also flags the launch surface: MCP config files (`mcp.json`, `claude_desktop_config.json`, `*.mcp.yaml` `command`/`args`), Docker `--host 0.0.0.0` / `-p 0.0.0.0:` publishes, and MCP Inspector / FastMCP startup args that bind a non-loopback interface (`0.0.0.0` / `::` / a routable IP) with no token / `requireAuth`, or with the Inspector kill-switch `DANGEROUSLY_OMIT_AUTH` set. CVE-2026-23744 (MCP Inspector, CVSS 9.8) is the motivating exemplar of the launch-bind variant; Censys counted ~12,520 MCP services exposed on the public internet in this shape. Two further 2026 instances of this exact class: CVE-2026-49257 (mcp-pinot <= 3.0.1, CVSS 10.0) defaults to an HTTP MCP server bound to `0.0.0.0:8080` with no authentication, exposing SQL execution as a confused deputy; CVE-2026-48989 (Windows-MCP < 0.7.5, CVSS 8.9) exposed the MCP control plane over HTTP without auth while enabling wildcard CORS. CWE-306 (Missing Authentication for Critical Function).",
       "incident_references": [],
@@ -8699,8 +8701,10 @@
       ],
       "auto_fixable": false,
       "category": "taint-analysis",
-      "cve_references": [],
-      "description": "A @tool function parameter is passed to os.system(), subprocess, or similar shell execution functions without sanitization.",
+      "cve_references": [
+        "CVE-2026-90617"
+      ],
+      "description": "A @tool function parameter is passed to os.system(), os.popen(), a blocking subprocess call, subprocess.getoutput() or asyncio.create_subprocess_shell() without sanitization. CVE-2026-90617 (GH05TCREW PentestAgent) is the 2026 exemplar: the `run_task` MCP tool hands its caller-supplied task string to `asyncio.create_subprocess_shell` through LocalRuntime, reachable remotely because the same server binds 0.0.0.0 with no credential (that half is AAK-MCP-HTTP-NOAUTH-SERVER-001).",
       "incident_references": [],
       "limitations": "",
       "owasp_agentic_references": [
