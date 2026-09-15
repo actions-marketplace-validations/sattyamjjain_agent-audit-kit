@@ -16,6 +16,34 @@ open.
 > issue. The per-CVE latency figures in the tables are **measurements recorded at
 > the time**, kept as dated facts, not a standing promise.
 
+## 2026-09-16: ten disclosures, one new rule, four out of scope
+
+The watcher opened ten `cve-response` issues across 2026-09-14 and 09-15
+(#732-#741). Six were in scope. The four that were not are the more
+interesting half.
+
+**Four Apache Storm advisories, out of scope.** CVE-2026-82439 (DRPC memory
+exhaustion), CVE-2026-82428 (blob-key collision), CVE-2026-82427
+(`topology.blobstore.map` path traversal) and CVE-2026-82429 (setuid
+worker-launcher TOCTOU) are all Apache Storm, a distributed stream processor.
+None of it is MCP or an agent pipeline. They matched because every one of those
+advisories credits "the ASF, found using Claude agents to study the security of
+open-source projects": the watcher matched the word "agents" in an
+acknowledgement line. That is the same collision as CVE-2026-89622, where
+MCP2221, a Microchip USB-to-I2C bridge, matched on the acronym. Right bias for
+a watcher, wrong answer for a rule, and no rule records them.
+
+| CVE | CVSS | Package | What changed | Issue |
+|---|---|---|---|---|
+| CVE-2026-57124 | 9.8 | `praisonai` | No new rule. Unauthenticated `POST /api/mcp/connect` with caller-controlled `command`/`args` into `StdioMCPClient` and a 0.0.0.0 bind, which is `AAK-MCP-PRAISONAI-CVE-2026-61427-001`'s own shape. Fixed 4.6.59, below the existing 4.6.78 floor, so every affected version already fires. Recorded in `cve_references`. | #732 |
+| CVE-2026-73496 | 7.7 | `mcp-atlassian` | No new rule. Same unconfined `file_path`, this time in `jira_update_issue`. Fixed 0.22.0, the existing floor exactly. | #737 |
+| CVE-2026-73497 | 6.5 | `mcp-atlassian` | No new rule. `X-Atlassian-*-Url` resolved at middleware time and again at connect time with no IP pinning, so a rebinding name reaches cloud metadata. Same 0.22.0 fix release. | #740 |
+| CVE-2026-55837 | 6.8 | `dbt-mcp` | **Floor raised 1.17.1 to 1.20.0.** The local OAuth helper serves `GET /dbt_platform_context` unauthenticated with no Host validation, handing access and refresh tokens to anything reaching `127.0.0.1:6785`, and the missing `TrustedHostMiddleware` opens it to DNS rebinding. The fix is above the old floor, so 1.17.1 through 1.19.x were vulnerable and silent: this is the case a `cve_references` line cannot cover. | #739 |
+| CVE-2026-55253 | 7.7 | `langgraph-checkpoint-mongodb`, `langgraph-store-mongodb` | **Two new pins on the existing rule.** The same `$`-prefixed-key NoSQL injection as CVE-2026-48121, but in the PyPI distributions; the existing pin names the npm `@langchain/...` package and could not see either. Floors 0.3.0 and 0.4.0. | #738 |
+| CVE-2026-55235 | 5.9 | `langgraph-api` | **New rule** `AAK-MCP-LANGGRAPH-API-CVE-2026-55235-001`. A relative webhook target delivered over the in-process loopback transport skips the external auth context, so an authenticated user can create or modify a run on another user's thread. Floor 0.10.0. | #741 |
+
+Dispositioned at 2026-09-15T18:38:33Z, shipped in v0.6.6.
+
 ## 2026-09-14: two disclosures, no new rules
 
 Both `cve-response` issues from this wave (#727, #728) map onto rules that
@@ -44,7 +72,7 @@ correctly-fixed server in the corpus.
 
 Dispositioned at 2026-09-14T12:52:09Z, shipped in v0.6.5.
 
-### CVE-2026-90898 (#729) is deferred, not covered
+### CVE-2026-90898 (#729): deferred 2026-09-14, closed 2026-09-15
 
 A third issue opened the same day, after the two above were already in flight:
 CVE-2026-90898 (maximhq/bifrost, CVSS 9.8, CWE-284/306). Bifrost registers MCP
@@ -74,6 +102,36 @@ coverage that does not exist is worse in a scanner than recording none: it is
 the same class of drift as a stale count, except the number that rots is a
 security claim. #729 is labelled `cve-deferred` with a target date, and the
 missing Go arm is tracked separately.
+
+**Closed 2026-09-15 (#731).** Both halves shipped, and the deferral is closed
+here rather than left standing beside its own fix.
+
+`AAK-MCP-STDIO-CMD-INJ-005` is the Go arm the family was missing. It is
+modelled on the Rust arm and carries the Rust arm's posture verbatim: regex and
+proximity, not data-flow analysis, stated in the rule text rather than implied.
+One precision guard earns its place, a string literal in argv[0], because the
+binary being chosen server-side is exactly what a patched handler looks like
+and without it the arm reports every server that decoded a request body in the
+preceding 2 KB.
+
+`AAK-MCP-NOAUTH-DEFAULT` gains a disabled-auth config arm. It wanted a
+placeholder secret plus a non-loopback bind; Bifrost's config carries no secret
+at all, only `governance.auth_config.is_enabled: false`, which is the same idea
+spelled differently and matched nothing.
+
+| CVE | CVSS | Package | What changed | Issue |
+|---|---|---|---|---|
+| CVE-2026-90898 | 9.8 | `bifrost` (`transports`, Go; fixed `transports/v2.1.0`) | **New rule** `AAK-MCP-STDIO-CMD-INJ-005` (Go arm of the STDIO command-injection family) plus a disabled-auth config arm on `AAK-MCP-NOAUTH-DEFAULT`. Positive and negative fixtures under `tests/fixtures/cves/cve-2026-90898-bifrost/`, the negative being the `transports/v2.1.0` posture so the arm cannot report every patched server. | #729, #731 |
+
+Benign-slice false positives are unchanged at 0 of 1 across 536 servers. That
+number is evidence for the config arm, which reads exactly the MCP config JSON
+the slice is made of, and is **not** evidence for the Go arm: the slice
+contains no Go source, so it never exercises it. The Go arm's precision
+controls are unit tests in `tests/test_cve_2026_90898_bifrost.py` instead, and
+saying which of the two the benchmark covers seemed better than quoting an
+unchanged number at both.
+
+Shipped at 2026-09-15T17:30:41Z in v0.6.6.
 
 
 ## 2026-09-12: eight disclosures, one new rule

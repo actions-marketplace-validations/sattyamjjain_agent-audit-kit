@@ -6607,6 +6607,11 @@ _r(
         # affect already fires. Recorded here rather than given their own
         # pins: two pins on one package report one dependency twice.
         "CVE-2026-55532", "CVE-2026-55529", "CVE-2026-55531",
+        # 2026-09-14: CVE-2026-57124 (CRITICAL 9.8). POST /api/mcp/connect is
+        # unauthenticated, caller-controlled `command`/`args` reach
+        # StdioMCPClient, and the UI binds 0.0.0.0 -- this rule's own shape.
+        # Fixed 4.6.59, below the 4.6.78 floor, so again no pin of its own.
+        "CVE-2026-57124",
     ],
     owasp_mcp_references=["MCP01:2025"],
     owasp_agentic_references=["ASI04"],
@@ -6818,7 +6823,17 @@ _r(
     "`resource_type` against an allow-list before adding them to argv, and redact "
     "tool arguments in telemetry / logs.",
     sarif_name="DbtMcpFlagInjection",
-    cve_references=["CVE-2026-44968", "CVE-2026-44970", "CVE-2026-44969"],
+    cve_references=[
+        "CVE-2026-44968", "CVE-2026-44970", "CVE-2026-44969",
+        # 2026-09-14: CVE-2026-55837 (MEDIUM 6.8). The local OAuth helper
+        # serves GET /dbt_platform_context with no auth and no Host validation,
+        # returning access and refresh tokens to anything that reaches
+        # 127.0.0.1:6785, and the missing TrustedHostMiddleware makes it
+        # reachable by DNS rebinding from a browser. Fixed 1.20.0, ABOVE this
+        # rule's previous 1.17.1 floor, so the floor is raised rather than the
+        # CVE merely recorded: 1.17.1 through 1.19.x were vulnerable and silent.
+        "CVE-2026-55837",
+    ],
     owasp_mcp_references=["MCP04:2025"],
     owasp_agentic_references=["ASI09"],
     adversa_references=["ADV-INJECT-01"],
@@ -7108,7 +7123,16 @@ _r(
     "they reach a MongoDB query, so an object payload can never be read as an "
     "operator.",
     sarif_name="LangGraphMongoCheckpointNosqlInjection",
-    cve_references=["CVE-2026-48121"],
+    cve_references=[
+        "CVE-2026-48121",
+        # 2026-09-14: CVE-2026-55253 (HIGH 7.7) is the same defect in the PyPI
+        # distributions rather than the npm one -- MongoDBSaver.list/alist and
+        # MongoDBStore.search fold a caller-controlled filter dict into the
+        # query without recursively rejecting `$`-prefixed keys. Fixed in
+        # langgraph-checkpoint-mongodb 0.3.0 and langgraph-store-mongodb 0.4.0,
+        # both now pinned, because the npm pin could not see either package.
+        "CVE-2026-55253",
+    ],
     owasp_mcp_references=["MCP03:2025"],
     owasp_agentic_references=["ASI04"],
     adversa_references=["ADV-SUPPLY-01"],
@@ -7520,7 +7544,18 @@ _r(
     "root before opening it (the fix's `validate_safe_path`), and treat any "
     "tool argument that reaches `open()` as untrusted.",
     sarif_name="McpAtlassianAttachmentPathTraversal",
-    cve_references=["CVE-2026-73498"],
+    cve_references=[
+        "CVE-2026-73498",
+        # 2026-09-14 wave, same package and the same 0.22.0 fix release, so the
+        # floor already fires on every version either affects. Recorded for
+        # auditability rather than pinned again.
+        # CVE-2026-73496 (HIGH 7.7): the same unconfined `file_path` in
+        # jira_update_issue's attachments parameter as well as Confluence.
+        # CVE-2026-73497 (MEDIUM 6.5): X-Atlassian-*-Url resolved once at
+        # middleware time and again at connection time with no IP pinning, so
+        # a rebinding name reaches cloud metadata.
+        "CVE-2026-73496", "CVE-2026-73497",
+    ],
     owasp_mcp_references=["MCP04:2025"],
     owasp_agentic_references=["ASI05"],
     adversa_references=["ADV-DATA-01"],
@@ -8564,6 +8599,121 @@ _r(
     ),
 )
 
+
+_r(
+    "AAK-MCP-LANGGRAPH-API-CVE-2026-55235-001",
+    "langgraph-api < 0.10.0 (loopback webhook bypasses per-user authorization)",
+    "`langgraph-api` before 0.10.0 lets a run or cron name a *relative* webhook "
+    "target, delivered over an in-process loopback transport that the "
+    "authentication middleware treats as internal: the external auth context "
+    "is never applied. In a deployment that separates threads and runs by "
+    "per-user authorization, an authenticated user can aim a webhook at the "
+    "server's own thread and run routes and create a run on, or modify, "
+    "another user's thread, pulling some of the targeted thread's metadata "
+    "into the created run record (CVE-2026-55235, MEDIUM CVSS 5.9). Fixed in "
+    "0.10.0. The fix does not make loopback delivery safe in general: a "
+    "deployment that deliberately re-enables it still carries unauthenticated "
+    "webhooks and must restrict them to controlled same-process routes.",
+    Severity.MEDIUM,
+    Category.SUPPLY_CHAIN,
+    "Upgrade `langgraph-api` to 0.10.0 or later. If loopback webhook delivery "
+    "is re-enabled deliberately, restrict the targets to a controlled "
+    "same-process allowlist and do not treat a transport being in-process as "
+    "an authorization decision.",
+    sarif_name="McpLangGraphApiWebhookAuthBypass",
+    cve_references=["CVE-2026-55235"],
+    owasp_mcp_references=["MCP06:2025"],
+    owasp_agentic_references=["ASI03"],
+)
+
+_r(
+    "AAK-MCP-STDIO-CMD-INJ-005",
+    "MCP STDIO command spawned from network-controlled input (Go)",
+    "A Go file calls `exec.Command(...)` or `exec.CommandContext(...)` in an "
+    "MCP-shaped file, after a network-controlled source in the same scope: "
+    "`json.NewDecoder(r.Body)`, an `*http.Request` handler parameter, or "
+    "`c.ShouldBindJSON(...)`. CVE-2026-90898 (maximhq/bifrost, CVSS 9.8) is "
+    "the anchor: Bifrost registers MCP clients through a management API, a "
+    "stdio client is a command plus args, and the gateway starts that program "
+    "the moment the client is added, so one unauthenticated "
+    "`POST /api/mcp/client` runs a program as the gateway user. Fixed in "
+    "`transports/v2.1.0`. NOTE: this rule is regex and proximity, exactly like "
+    "the Rust arm `AAK-MCP-STDIO-CMD-INJ-004`, and not Go data-flow analysis. "
+    "It reports that a spawn sink appears in an MCP file downstream of a "
+    "network-shaped source, which is not the same claim as proving the "
+    "request reaches the sink. Expect false positives where a handler decodes "
+    "a body and separately shells out to a constant. There is no go/ast pass "
+    "behind this and none is pending.",
+    Severity.CRITICAL,
+    Category.SUPPLY_CHAIN,
+    "Do not build an exec argv from request-controlled values. Resolve the "
+    "command against a fixed allowlist server-side, pass caller data as data "
+    "rather than as argv, and require authentication on any route that "
+    "registers or starts a subprocess: an unauthenticated registration "
+    "endpoint that spawns is remote code execution by design, not by bug.",
+    sarif_name="McpStdioCommandTaintedGo",
+    cve_references=["CVE-2026-90898"],
+    owasp_mcp_references=["MCP01:2025", "MCP05:2025"],
+    owasp_agentic_references=["ASI02", "ASI10"],
+)
+
+_r(
+    "AAK-SKILL-006",
+    "SKILL.md body hides an instruction in an HTML comment",
+    "A `SKILL.md` body carries an HTML comment whose text reads as an "
+    "instruction rather than a note: an injection trigger, or a local-secret "
+    "reference paired with an outbound destination. The comment is invisible "
+    "in every rendered view a human reviews -- GitHub, an editor preview, a "
+    "skill marketplace listing -- and fully visible to the model, which is "
+    "handed the raw file. That gap between what the reviewer reads and what "
+    "the agent reads is the whole attack. `AAK-AGENT-005` has flagged this "
+    "shape in named agent instruction files (AGENTS.md, CLAUDE.md, "
+    "`.cursorrules`) since v0.2; skills were not on that list, so the same "
+    "payload in a `SKILL.md` body was unreported (issue #742). `AAK-SKILL-005` "
+    "reads only the frontmatter and `AAK-SKILL-003` wants a code-level sink "
+    "(`curl`, `fetch`), so a plain-English exfiltration instruction in a body "
+    "comment fell between them.",
+    Severity.HIGH,
+    Category.TOOL_POISONING,
+    "Delete the comment. A skill body is model-visible input: anything that "
+    "must not reach the model must not be in the file, and anything a reviewer "
+    "needs to read belongs in visible prose. Review skills as raw text rather "
+    "than rendered markdown.",
+    sarif_name="SkillHiddenInstruction",
+    # AST01 Malicious Skills: the hidden-instruction arm. No CVE -- this is a
+    # pattern class, not a disclosure -- and no AICM row, which this rule
+    # cannot evidence on its own.
+    owasp_mcp_references=["MCP05:2025"],
+    owasp_agentic_references=["ASI01"],
+    owasp_ast_references=["AST01"],
+)
+
+_r(
+    "AAK-MCP-CONFIG-MALFORMED-001",
+    "MCP server entry has a field of the wrong type",
+    "An `mcpServers` entry declares a field whose type does not match the MCP "
+    "client schema -- most often `args` as a scalar instead of a list of "
+    "strings. Clients disagree about what to do with it: some coerce, some "
+    "ignore the field, some refuse to start the server. A config that one "
+    "client launches and another silently drops is a security fact, not a "
+    "cosmetic one, because the reviewed configuration and the running "
+    "configuration stop being the same thing. AAK's own composition pass "
+    "crashed on `\"args\": 42` (issue #743), which is how this was found: the "
+    "scan reported a clean project because the scanner that would have "
+    "objected died before it could.",
+    Severity.MEDIUM,
+    Category.MCP_CONFIG,
+    "Give the field the type the MCP schema defines: `args` must be a list of "
+    "strings (`[\"--port\", \"8080\"]`, not `8080`). Validate agent configs in "
+    "CI so a client-specific coercion never decides what runs.",
+    sarif_name="McpConfigMalformedField",
+    # Tool/launch integrity: when clients disagree about how to coerce a field,
+    # the server that runs is not necessarily the server that was reviewed.
+    # Deliberately no AICM or CVE row -- this rule evidences neither, and a tick
+    # a scanner cannot substantiate is worse than a blank.
+    owasp_mcp_references=["MCP03:2025"],
+    owasp_agentic_references=["ASI04"],
+)
 
 _r(
     "AAK-INTERNAL-SCANNER-FAIL",

@@ -1,13 +1,13 @@
 {
   "schema_version": "1",
-  "last_updated": "2026-09-14T12:54:52Z",
-  "aak_version": "0.6.5",
-  "rule_count": 348,
+  "last_updated": "2026-09-15T18:38:49Z",
+  "aak_version": "0.6.6",
+  "rule_count": 352,
   "coverage": [
     {
       "asi_id": "ASI01",
       "title": "Goal Hijack",
-      "rule_density": 14,
+      "rule_density": 15,
       "rules": [
         {
           "id": "AAK-AGENT-001",
@@ -136,13 +136,19 @@
           "aicm_references": [
             "STA-10"
           ]
+        },
+        {
+          "id": "AAK-SKILL-006",
+          "severity": "high",
+          "cve_references": [],
+          "aicm_references": []
         }
       ]
     },
     {
       "asi_id": "ASI02",
       "title": "Tool Misuse",
-      "rule_density": 48,
+      "rule_density": 49,
       "rules": [
         {
           "id": "AAK-AGENT-SHARED-RES-AUTHZ-001",
@@ -482,6 +488,14 @@
           ]
         },
         {
+          "id": "AAK-MCP-STDIO-CMD-INJ-005",
+          "severity": "critical",
+          "cve_references": [
+            "CVE-2026-90898"
+          ],
+          "aicm_references": []
+        },
+        {
           "id": "AAK-MCP-STDIO-LAUNCHER-INJECT-001",
           "severity": "high",
           "cve_references": [
@@ -649,7 +663,7 @@
     {
       "asi_id": "ASI03",
       "title": "Memory Poisoning",
-      "rule_density": 73,
+      "rule_density": 74,
       "rules": [
         {
           "id": "AAK-A2A-005",
@@ -925,6 +939,14 @@
             "IAM-01",
             "IVS-04"
           ]
+        },
+        {
+          "id": "AAK-MCP-LANGGRAPH-API-CVE-2026-55235-001",
+          "severity": "medium",
+          "cve_references": [
+            "CVE-2026-55235"
+          ],
+          "aicm_references": []
         },
         {
           "id": "AAK-MCP-N8N-CVE-2026-65594-001",
@@ -1269,7 +1291,7 @@
     {
       "asi_id": "ASI04",
       "title": "Identity & Privilege Abuse",
-      "rule_density": 74,
+      "rule_density": 75,
       "rules": [
         {
           "id": "AAK-AGENT-HARNESS-SHARED-STATE-001",
@@ -1567,6 +1589,12 @@
           ]
         },
         {
+          "id": "AAK-MCP-CONFIG-MALFORMED-001",
+          "severity": "medium",
+          "cve_references": [],
+          "aicm_references": []
+        },
+        {
           "id": "AAK-MCP-DEEPSEEK-CVE-2026-55604-001",
           "severity": "high",
           "cve_references": [
@@ -1669,7 +1697,8 @@
           "id": "AAK-MCP-LANGGRAPH-MONGO-CVE-2026-48121-001",
           "severity": "medium",
           "cve_references": [
-            "CVE-2026-48121"
+            "CVE-2026-48121",
+            "CVE-2026-55253"
           ],
           "aicm_references": [
             "AIS-07",
@@ -1758,6 +1787,7 @@
             "CVE-2026-55529",
             "CVE-2026-55531",
             "CVE-2026-55532",
+            "CVE-2026-57124",
             "CVE-2026-61427"
           ],
           "aicm_references": [
@@ -2249,6 +2279,8 @@
           "id": "AAK-MCP-ATLASSIAN-CVE-2026-73498-001",
           "severity": "high",
           "cve_references": [
+            "CVE-2026-73496",
+            "CVE-2026-73497",
             "CVE-2026-73498"
           ],
           "aicm_references": []
@@ -3165,7 +3197,8 @@
           "cve_references": [
             "CVE-2026-44968",
             "CVE-2026-44969",
-            "CVE-2026-44970"
+            "CVE-2026-44970",
+            "CVE-2026-55837"
           ],
           "aicm_references": [
             "AIS-07",
@@ -3266,7 +3299,7 @@
     {
       "asi_id": "ASI10",
       "title": "Supply-Chain",
-      "rule_density": 21,
+      "rule_density": 22,
       "rules": [
         {
           "id": "AAK-A2A-007",
@@ -3483,6 +3516,14 @@
             "AIS-08",
             "IAM-05"
           ]
+        },
+        {
+          "id": "AAK-MCP-STDIO-CMD-INJ-005",
+          "severity": "critical",
+          "cve_references": [
+            "CVE-2026-90898"
+          ],
+          "aicm_references": []
         },
         {
           "id": "AAK-SK-INMEMORY-VECTORSTORE-FILTER-CVE-2026-26030-PIN-001",
