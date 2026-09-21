@@ -11,21 +11,43 @@ CORPUS   := benchmarks/data
 MANIFEST := $(RESEARCH)/corpus/registry-manifest.json
 RESULTS  := $(RESEARCH)/results.json
 
-.PHONY: report corpus report-check count-check test lint typecheck repo-description \
+.PHONY: report corpus report-check report-pdf report-pdf-check count-check test lint typecheck repo-description \
         cve-latency cve-latency-check cve-latency-refresh \
         remediation-corpus remediation-corpus-check \
-        fp fp-check
+        fp fp-check \
+        registry-parity cve-deferral-check
 
 ## report: regenerate results.json from the corpus + manifest (offline, deterministic)
+## Also re-renders the human PDF, because the docs site serves it at a stable URL
+## and a PDF left behind by a results.json bump is a published wrong number.
 report:
 	python $(RESEARCH)/run_report.py \
 	  --corpus $(CORPUS) \
 	  --registry-manifest $(MANIFEST) \
 	  --out $(RESULTS)
+	python scripts/render_report_pdf.py
+
+## report-pdf: re-render just the human PDF from the committed results.json
+report-pdf:
+	python scripts/render_report_pdf.py
+
+## report-pdf-check: fail if the PDF was built from a different results.json.
+## Not a byte-diff: reportlab stamps a /CreationDate, so two renders of the same
+## input differ. The stamp beside the PDF records its source hash instead.
+report-pdf-check:
+	@python scripts/render_report_pdf.py --check
 
 ## corpus: refresh the MCP Registry corpus manifest (the one network step)
 corpus:
 	python $(RESEARCH)/fetch_registry.py --target 5000
+
+## report-figures-check: fail if a governed report figure is stated outside a
+## `report:` marker. report-check guards results.json against the corpus; this
+## guards the published prose against results.json, which is the gap that let
+## `100% (421/421)` sit in the README while the data said 424 -- unmarked, so the
+## marker test could not see it.
+report-figures-check:
+	@PYTHONPATH=. python scripts/check_report_figures.py
 
 ## report-check: fail if results.json is not byte-identical to a fresh run (drift guard)
 report-check:
@@ -63,6 +85,7 @@ fp-check:
 count-check:
 	@PYTHONPATH=. python scripts/check_counts.py
 	@PYTHONPATH=. python scripts/sync_rule_count.py --check
+	@PYTHONPATH=. python scripts/sync_rule_doc_pages.py --check
 
 ## cve-latency: regenerate docs/cve-latency.md from the ledger (offline, deterministic)
 cve-latency:
@@ -85,6 +108,22 @@ remediation-corpus:
 ## this target is for regenerating locally without running the suite.
 remediation-corpus-check:
 	@python scripts/gen_remediation_key_corpus.py --check
+
+## registry-parity: does the version we declare actually exist on PyPI? (network)
+## The only check here that looks OUTSIDE the repo. Every other version guard
+## compares one in-repo surface to another, and all of them passed on 2026-08-31
+## while 0.3.91 was declared and PyPI served 0.3.90. Also runs daily in CI --
+## the failure is time-based, so a push-only gate cannot see it.
+registry-parity:
+	@python scripts/check_registry_parity.py
+
+## cve-deferral-check: every `cve-deferred` issue must name a target date (network, needs gh)
+## `cve-deferred` is the one label that switches the release gate off, and until
+## 2026-09-04 its only obligation was a prose comment nothing read -- so a deferral
+## and a silent drop were the same gesture. Runs inside the release gate; this target
+## is for checking the queue before you get there.
+cve-deferral-check:
+	@python scripts/check_cve_deferrals.py
 
 ## test: run the test suite
 test:

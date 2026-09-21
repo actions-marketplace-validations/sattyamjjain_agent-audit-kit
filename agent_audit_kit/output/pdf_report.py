@@ -34,6 +34,8 @@ _FRAMEWORK_TITLES = {
     "india-dpdp": "India Digital Personal Data Protection Act 2023",
     "alabama-dppa": "Alabama Personal Data Protection Act (HB 351, 2026)",
     "tennessee-sb1580": "Tennessee SB 1580 — Health Care AI (PRA)",
+    "colorado-admt": "Colorado SB 26-189 — Automated Decision-Making Technology (eff. 2027-01-01)",
+    "eu-ai-act-art50": "EU AI Act — Article 50 Transparency Obligations (in force 2026-08-02)",
 }
 
 # Coarse mapping from AAK categories to framework control families.
@@ -173,6 +175,57 @@ _CATEGORY_TO_CONTROL = {
         "transport-security": "s.8(4) Reasonable security safeguards",
         "a2a-protocol": "s.8(7) Processor obligations",
         "legal-compliance": "s.5 DPDP Rules 2023 alignment",
+    },
+    # EU AI Act Article 50. Paragraph numbers read from the consolidated article
+    # on 2026-09-12: https://artificialintelligenceact.eu/article/50/
+    # In force since 2026-08-02 — unlike the Article 15 rows above, which the AI
+    # Omnibus deferred to 2027-12-02 (Annex III) and 2028-08-02 (Annex I).
+    # Every row is evidence toward a duty. Art. 50(1) exempts what is "obvious
+    # from context to a reasonably informed person", and 50(2) and 50(4) exempt
+    # assistive editing and artistic or editorially-reviewed work; none of those
+    # can be settled by reading a repository.
+    "eu-ai-act-art50": {
+        "mcp-config": "Art. 50(5) Clear and distinguishable, at first interaction",
+        "hook-injection": "Art. 50(1) Disclosure integrity: the notice a hook must not suppress",
+        "trust-boundary": "Art. 50(1) Informing the natural person interacting with the system",
+        "secret-exposure": "Art. 50(2) Provenance marking integrity (a marking signed with a leaked key proves nothing)",
+        "supply-chain": "Art. 50(2) Machine-readable marking across generation dependencies",
+        "agent-config": "Art. 50(1) System designed so the person is informed",
+        "tool-poisoning": "Art. 50(4) Disclosure that content is artificially generated or manipulated",
+        "taint-analysis": "Art. 50(2) Marking survives the transformation path to the output",
+        # No paragraph cited. Article 50 governs what is disclosed to a person,
+        # not how bytes move; the transport-security findings under it are
+        # supporting evidence for the integrity of a disclosure, not evidence of
+        # a transparency duty in their own right.
+        "transport-security": "Supporting evidence only (no Art. 50 paragraph governs transport)",
+        "a2a-protocol": "Art. 50(1) Disclosure obligation is not discharged by an upstream agent",
+        "legal-compliance": "Art. 50(1)-(2), (4)-(5) Transparency; 50(3) emotion recognition is not evidenced by this scanner",
+    },
+    # Colorado SB 26-189, C.R.S. part 17 of article 1 of title 6. Section numbers
+    # read from the signed act on 2026-09-12:
+    # https://leg.colorado.gov/bill_files/116489/download
+    # Every row below is EVIDENCE TOWARD a duty. None of them is a determination
+    # that the duty attaches: 6-1-1702 binds the developer of a "covered ADMT",
+    # which 6-1-1701(5) defines as an ADMT "USED TO MATERIALLY INFLUENCE A
+    # CONSEQUENTIAL DECISION", and an MCP configuration scan does not establish
+    # that a project is one. Rows that the scanner cannot evidence at all say so
+    # rather than printing a control number.
+    "colorado-admt": {
+        "mcp-config": "6-1-1702(1)(d) Instructions for appropriate use and monitoring",
+        "hook-injection": "6-1-1702(2)(a) Notice of material updates and substantial modifications",
+        "trust-boundary": "6-1-1702(1)(c) Known limitations, risks, and circumstances of non-use",
+        "secret-exposure": "6-1-1702(1)(b) Categories of data, including personal data, used to train",
+        "supply-chain": "6-1-1702(4) Three-year retention: system version identifiers and changelogs",
+        "agent-config": "6-1-1702(1)(a) Intended uses and known harmful or inappropriate uses",
+        "tool-poisoning": "6-1-1702(2)(a) Notice of changes to intended use, limitations, or risk mitigation",
+        "taint-analysis": "6-1-1702(1)(c) Known limitations, risks, and circumstances of non-use",
+        "transport-security": "6-1-1702(1)(e) Information the deployer needs to satisfy 6-1-1704",
+        # No subsection cited on purpose. 6-1-1703 is the deployer's retention
+        # duty and 6-1-1705 the consumer's human-review right; neither binds the
+        # developer, and nothing in 6-1-1702 maps onto agent-to-agent transport.
+        # A number here would be a citation to a duty this row does not evidence.
+        "a2a-protocol": "Developer-to-deployer handoff (no developer subsection in 6-1-1702 governs this)",
+        "legal-compliance": "6-1-1702(1)(a)-(d) Developer documentation; 6-1-1702(4) three-year record retention",
     },
     "alabama-dppa": {
         # HB 351 sections. Alabama's structure follows the VCDPA/CCPA lineage.

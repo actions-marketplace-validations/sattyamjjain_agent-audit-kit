@@ -316,6 +316,78 @@
       "title": "A2A schema confusion between major versions"
     },
     {
+      "adversa_references": [],
+      "aicm_references": [],
+      "auto_fixable": false,
+      "category": "legal-compliance",
+      "cve_references": [],
+      "description": "The project declares a tool, MCP server or docstring that both performs an inference and names a Colorado SB 26-189 covered domain (education, employment, residential real estate, financial or lending services, insurance, health care, or essential government services and public benefits), and the repository carries no developer documentation at all: no model card, no system card, and no page naming intended uses. Where the technology is one C.R.S. 6-1-1702 covers, subsection (1) requires that documentation to be available to each deployer from 2027-01-01. This is evidence toward that duty, not a determination that the duty applies.",
+      "incident_references": [],
+      "limitations": "",
+      "owasp_agentic_references": [],
+      "owasp_ast_references": [],
+      "owasp_mcp_references": [],
+      "remediation": "Add a model or system card naming the intended uses and known harmful or inappropriate uses (C.R.S. 6-1-1702(1)(a)), the categories of training data (1)(b), known limitations (1)(c), and instructions for appropriate use, monitoring and meaningful human review (1)(d). Retain it: 6-1-1702(4) requires records demonstrating compliance to be kept for not less than three years, including system version identifiers and changelogs.",
+      "rule_id": "AAK-ADMT-001",
+      "sarif_name": "AdmtNoDeveloperDocumentation",
+      "severity": "medium",
+      "title": "No developer documentation for a declared covered-domain decision surface"
+    },
+    {
+      "adversa_references": [],
+      "aicm_references": [],
+      "auto_fixable": false,
+      "category": "legal-compliance",
+      "cve_references": [],
+      "description": "Developer documentation exists for a declared covered-domain decision surface but does not describe the categories of data, including personal data, used to train the system. C.R.S. 6-1-1702(1)(b) requires that description, to the extent known, where the technology is one the statute covers. Evidence toward the duty, not a determination that it applies.",
+      "incident_references": [],
+      "limitations": "",
+      "owasp_agentic_references": [],
+      "owasp_ast_references": [],
+      "owasp_mcp_references": [],
+      "remediation": "Add a section describing the categories of training data, including any personal data, to the extent known. C.R.S. 6-1-1702(1)(b) asks for categories rather than the data itself, so this is compatible with the trade-secret protection subsection (1) preserves.",
+      "rule_id": "AAK-ADMT-002",
+      "sarif_name": "AdmtNoTrainingDataCategories",
+      "severity": "medium",
+      "title": "Developer documentation does not name the categories of training data"
+    },
+    {
+      "adversa_references": [],
+      "aicm_references": [],
+      "auto_fixable": false,
+      "category": "legal-compliance",
+      "cve_references": [],
+      "description": "Developer documentation exists for a declared covered-domain decision surface but names no known limitations. C.R.S. 6-1-1702(1)(c) requires known limitations including known risks and the circumstances in which the covered technology should not be used. Evidence toward the duty, not a determination that it applies.",
+      "incident_references": [],
+      "limitations": "",
+      "owasp_agentic_references": [],
+      "owasp_ast_references": [],
+      "owasp_mcp_references": [],
+      "remediation": "Add a known-limitations section covering the risks and, specifically, the circumstances in which the system should not be used. C.R.S. 6-1-1702(1)(c) names the non-use circumstances explicitly, so a list of accuracy caveats alone does not answer it.",
+      "rule_id": "AAK-ADMT-003",
+      "sarif_name": "AdmtNoKnownLimitations",
+      "severity": "medium",
+      "title": "Developer documentation names no known limitations"
+    },
+    {
+      "adversa_references": [],
+      "aicm_references": [],
+      "auto_fixable": false,
+      "category": "legal-compliance",
+      "cve_references": [],
+      "description": "Developer documentation exists for a declared covered-domain decision surface but gives no instruction for human review of the system's output. C.R.S. 6-1-1702(1)(d) requires instructions for the deployer's appropriate use, monitoring, and meaningful human review, where applicable, and is more specific here than in the other documentation paragraphs. Evidence toward the duty, not a determination that it applies.",
+      "incident_references": [],
+      "limitations": "",
+      "owasp_agentic_references": [],
+      "owasp_ast_references": [],
+      "owasp_mcp_references": [],
+      "remediation": "Document how a deployer is expected to monitor the system and what meaningful human review of its output looks like: who reviews, at what point in the decision, and with what authority to override. C.R.S. 6-1-1702(1)(d). Note that 6-1-1705 gives the consumer a separate right to human review, which the deployer cannot exercise without this instruction.",
+      "rule_id": "AAK-ADMT-004",
+      "sarif_name": "AdmtNoHumanReviewInstruction",
+      "severity": "medium",
+      "title": "Developer documentation gives no human-review instruction"
+    },
+    {
       "adversa_references": [
         "ADV-HIJACK-01"
       ],
@@ -691,6 +763,60 @@
       "title": "Agent Zero 0.9.8 MCP-config RCE (CVE-2026-30624, git-only pin)"
     },
     {
+      "adversa_references": [],
+      "aicm_references": [],
+      "auto_fixable": false,
+      "category": "legal-compliance",
+      "cve_references": [],
+      "description": "A persona, system prompt, chatbot or agent-card surface that converses with a person carries no string telling that person they are interacting with an AI system. Article 50(1) of the EU AI Act, in force since 2026-08-02, requires a provider to design such a system so the natural persons concerned are informed, and 50(5) requires that clearly and distinguishably at the latest at the first interaction. The paragraph exempts cases obvious to a reasonably informed person, which is a fact about the deployed product; this is evidence toward the duty, not a determination that it applies or was breached.",
+      "incident_references": [],
+      "limitations": "Reads one file at a time. A disclosure rendered by the host application, or injected by a framework outside this repository, is not visible here. Art. 50(1)'s 'obvious from context' exemption cannot be evaluated statically at all.",
+      "owasp_agentic_references": [],
+      "owasp_ast_references": [],
+      "owasp_mcp_references": [],
+      "remediation": "State in the agent's own surface that the user is talking to an AI, in a form that reaches them at first interaction rather than in a policy page they never open (Art. 50(5)). `AAK-HEALTHCARE-AI-004` is the same duty scoped to clinical contexts, where several US state laws expect it too.",
+      "rule_id": "AAK-AIACT50-001",
+      "sarif_name": "EuAiActArt50NoInteractionDisclosure",
+      "severity": "medium",
+      "title": "Conversational agent surface with no AI-disclosure to the user"
+    },
+    {
+      "adversa_references": [],
+      "aicm_references": [],
+      "auto_fixable": false,
+      "category": "legal-compliance",
+      "cve_references": [],
+      "description": "A declared capability to generate synthetic audio, image, video or text with no machine-readable marking of the output as artificially generated. Article 50(2) of the EU AI Act, in force since 2026-08-02, requires providers to mark such outputs in a machine-readable format, detectable as artificially generated or manipulated, and to do so effectively and interoperably so far as technically feasible. Assistive editing that does not substantially alter the input data is exempt. Evidence toward the duty, not a determination that it applies.",
+      "incident_references": [],
+      "limitations": "Detects the absence of a provenance marker in the same file that declares the generation capability. Marking applied by a downstream service, or by the model provider before the bytes reach this code, is not seen.",
+      "owasp_agentic_references": [],
+      "owasp_ast_references": [],
+      "owasp_mcp_references": [],
+      "remediation": "Attach C2PA Content Credentials to generated media, or an equivalent durable provenance signal such as SynthID for the modality you emit. Art. 50(2) asks for machine-readable and interoperable, so a visible caption alone does not answer it, and neither does a marking stripped by the first re-encode in your own pipeline.",
+      "rule_id": "AAK-AIACT50-002",
+      "sarif_name": "EuAiActArt50NoSyntheticMarking",
+      "severity": "medium",
+      "title": "Synthetic media generation with no machine-readable provenance marking"
+    },
+    {
+      "adversa_references": [],
+      "aicm_references": [],
+      "auto_fixable": false,
+      "category": "legal-compliance",
+      "cve_references": [],
+      "description": "A declared capability to produce deep-fake image, audio or video content, or to publish text intended to inform the public on matters of public interest, with no disclosure that the content is artificially generated or manipulated. Article 50(4) of the EU AI Act, in force since 2026-08-02, places this on the deployer, and 50(5) requires the disclosure at the latest at the time of first exposure. The paragraph exempts artistic, creative, satirical and fictional work, and text that had human editorial review with someone holding editorial responsibility. Evidence toward the duty, not a determination that it applies.",
+      "incident_references": [],
+      "limitations": "The 50(4) exemptions are assessed by the words a project uses about itself: a file describing satire, fiction or human editorial review is skipped entirely. That is deliberately generous, because the failure mode of the opposite bias is accusing a newsroom of an offence.",
+      "owasp_agentic_references": [],
+      "owasp_ast_references": [],
+      "owasp_mcp_references": [],
+      "remediation": "Disclose that the content is artificially generated or manipulated, at first exposure and in the content's own presentation rather than in terms of service. Where the work is artistic or satirical, Art. 50(4) still expects the existence of generated content to be disclosed, in a way that does not hamper enjoyment of the work.",
+      "rule_id": "AAK-AIACT50-003",
+      "sarif_name": "EuAiActArt50NoDeepfakeDisclosure",
+      "severity": "medium",
+      "title": "Deep-fake or public-interest text generation with no artificiality disclosure"
+    },
+    {
       "adversa_references": [
         "ADV-INJECT-01"
       ],
@@ -719,6 +845,32 @@
       "sarif_name": "AnthropicSdkStdioSanitizer",
       "severity": "high",
       "title": "MCP server built on the upstream SDK without STDIO sanitizer"
+    },
+    {
+      "adversa_references": [
+        "ADV-AUTH-01"
+      ],
+      "aicm_references": [],
+      "auto_fixable": false,
+      "category": "trust-boundary",
+      "cve_references": [
+        "CVE-2026-19591"
+      ],
+      "description": "An agent decides whether a command needs human approval by parsing it, then hands it to a PowerShell-family interpreter, without handling the stop-parsing token `--%`. pwsh re-reads everything after `--%` verbatim, so the command that was classified is not the command that runs and the approval prompt is skipped. Neither truncation nor a rebuilt argv is involved: the checker and the shell read the same bytes and disagree about what they mean, which is a third route to the same bypass.",
+      "incident_references": [],
+      "limitations": "Covers the PowerShell stop-parsing token specifically, not every shell's escaping grammar. A gate in front of bash or cmd is not flagged, because claiming to know every shell's parser is a claim a pattern scan cannot make. Any mention of `--%` or stop-parsing in the file clears it.",
+      "owasp_agentic_references": [
+        "ASI02"
+      ],
+      "owasp_ast_references": [],
+      "owasp_mcp_references": [
+        "MCP01:2025"
+      ],
+      "remediation": "Reject `--%` (and any token that suspends the interpreter's own parsing) before classifying a command, or pass an argv straight to the interpreter instead of a shell-parsed command string.",
+      "rule_id": "AAK-APPROVAL-PARSER-DESYNC-001",
+      "sarif_name": "ApprovalParserDesync",
+      "severity": "high",
+      "title": "Command-safety parser and the executing shell disagree about a token"
     },
     {
       "adversa_references": [
@@ -964,7 +1116,7 @@
       "cve_references": [
         "CVE-2026-40068"
       ],
-      "description": "Claude Code 2.1.63 \u2192 before 2.1.83 derives folder-trust from the git worktree `commondir` file without validating its contents. A malicious repo with a crafted `commondir` pointing to a previously-trusted path silently bypasses the trust prompt \u2014 every subsequent agent run executes inside that fake-trusted scope. Patched in 2.1.83 (released 2026-05-04). This pin-only rule fires on the scoped npm package `@anthropic-ai/claude-code` < 2.1.83 in any consumer manifest. Pre-allocated rule-name from the v0.3.15 triage of issue #181; ships in v0.3.16.",
+      "description": "Claude Code 2.1.63 \u2192 before 2.1.83 derives folder-trust from the git worktree `commondir` file without validating its contents. A malicious repo with a crafted `commondir` pointing to a previously-trusted path silently bypasses the trust prompt \u2014 every subsequent agent run executes inside that fake-trusted scope. Patched in 2.1.83 (released 2026-05-04). This pin-only rule fires on the scoped npm package `@anthropic-ai/claude-code` < 2.1.83 in any consumer manifest. Rule name was pre-allocated in the v0.3.15 triage of issue #181 and shipped in v0.3.16.",
       "incident_references": [
         "ANTHROPIC-CLAUDECODE-2026-05-06"
       ],
@@ -1238,9 +1390,10 @@
         "CVE-2025-66414",
         "CVE-2025-66416",
         "CVE-2026-35568",
-        "CVE-2026-35577"
+        "CVE-2026-35577",
+        "CVE-2026-81102"
       ],
-      "description": "The upstream MCP Python, Java, Apollo and TypeScript SDKs shipped a StreamableHTTP transport that trusts the browser-supplied `Host` header. A malicious web page that a user visits can resolve a custom domain to 127.0.0.1 via DNS rebinding and reach a local MCP server, turning every browser tab into a remote-attack surface for stdio-grade tools. The upstream patch adds a Host allow-list; downstream servers embedding StreamableHTTP must enforce one too. See CVE-2025-66414 / CVE-2025-66416 (Python), CVE-2026-35568 (Java), CVE-2026-35577 (Apollo).",
+      "description": "The upstream MCP Python, Java, Apollo and TypeScript SDKs shipped a StreamableHTTP transport that trusts the browser-supplied `Host` header. A malicious web page that a user visits can resolve a custom domain to 127.0.0.1 via DNS rebinding and reach a local MCP server, turning every browser tab into a remote-attack surface for stdio-grade tools. The upstream patch adds a Host allow-list; downstream servers embedding StreamableHTTP must enforce one too. See CVE-2025-66414 / CVE-2025-66416 (Python), CVE-2026-35568 (Java), CVE-2026-35577 (Apollo), CVE-2026-81102 (Python FastMCP). Detection reads the raw SDK transport classes and, since v0.3.93, the Python **FastMCP** wrapper when it is told to run over a network transport (`run(transport=\"streamable-http\"/\"sse\")`, `streamable_http_app()`, `sse_app()`). **stdio FastMCP servers are deliberately not flagged**: FastMCP defaults to stdio and a stdio server has no listener to rebind onto. **Binding to loopback is not a mitigation** and does not clear this rule -- CVE-2026-81102 was loopback-bound; the Host allow-list is the control. Single-file pattern detection with a project-wide mitigation check: one allow-list anywhere in the tree clears every candidate, so a server whose middleware lives in a separate package that is not scanned together will read as mitigated.",
       "incident_references": [
         "MCP-DNS-REBIND-2026-04"
       ],
@@ -1253,7 +1406,7 @@
         "MCP02:2025",
         "MCP07:2025"
       ],
-      "remediation": "Wrap the StreamableHTTP app with a Host-header allow-list. In Starlette / FastAPI attach `TrustedHostMiddleware(allowed_hosts=...)`; in Node attach an `allowedHosts:` option or a Host middleware; in Java/Apollo enable `HostHeaderFilter` / `allowedHosts` config. Alternatively upgrade the SDK to a patched version and pass through its host-validation option.",
+      "remediation": "Wrap the StreamableHTTP app with a Host-header allow-list. In Starlette / FastAPI attach `TrustedHostMiddleware(allowed_hosts=...)`; in Node attach an `allowedHosts:` option or a Host middleware; in Java/Apollo enable `HostHeaderFilter` / `allowedHosts` config. In Python FastMCP pass `transport_security=TransportSecuritySettings(allowed_hosts=[...])` when constructing the server, or run it over stdio. Alternatively upgrade the SDK to a patched version and pass through its host-validation option.",
       "rule_id": "AAK-DNS-REBIND-001",
       "sarif_name": "McpStreamableHttpDnsRebind",
       "severity": "critical",
@@ -2506,7 +2659,7 @@
       "owasp_mcp_references": [
         "MCP05:2025"
       ],
-      "remediation": "Wrap the URL with the same SSRF guard you use for any other fetch: validate the resolved IP against an allow-list, disable redirects, and pin the resolved IP for the actual request. Bump `lmdeploy` to the patched release (see GHSA for the exact version once NVD enrichment lands).",
+      "remediation": "Wrap the URL with the same SSRF guard you use for any other fetch: validate the resolved IP against an allow-list, disable redirects, and pin the resolved IP for the actual request. Upgrade `lmdeploy` to >= 0.12.3 and pin it: versions below 0.12.3 are affected (GHSA-6w67-hwm5-92mq). Exploitation was observed within roughly twelve hours of the advisory, so treat an unpinned or older install as urgent rather than routine.",
       "rule_id": "AAK-LMDEPLOY-VL-SSRF-001",
       "sarif_name": "LmdeployVlSsrf",
       "severity": "high",
@@ -3497,7 +3650,9 @@
       "auto_fixable": false,
       "category": "supply-chain",
       "cve_references": [
-        "CVE-2026-73498"
+        "CVE-2026-73498",
+        "CVE-2026-73496",
+        "CVE-2026-73497"
       ],
       "description": "MCP Atlassian (`mcp-atlassian`), an MCP server for Confluence and Jira, before 0.22.0 passes the client-supplied `file_path` argument of `confluence_upload_attachment` straight to `open(file_path, \"rb\")` inside `_upload_attachment_direct()` in `src/mcp_atlassian/confluence/attachments.py`, without routing it through `validate_safe_path`. An authenticated MCP client can therefore read any file the server process can reach and exfiltrate it to Confluence as an attachment. Because the tool is agent-callable, untrusted content that induces an agent to call it reaches the same primitive, disclosing server environment material such as `CONFLUENCE_API_TOKEN` and other credentials (CVE-2026-73498, CVSS 7.7). Fixed in 0.22.0.",
       "incident_references": [],
@@ -3624,6 +3779,63 @@
       "sarif_name": "AwsApiMcpServerPolicyBypass",
       "severity": "high",
       "title": "AWS API MCP Server security-policy bypass on init failure (0.2.13\u2013<1.3.47)"
+    },
+    {
+      "adversa_references": [
+        "ADV-DATA-01"
+      ],
+      "aicm_references": [],
+      "auto_fixable": false,
+      "category": "supply-chain",
+      "cve_references": [
+        "CVE-2026-87911",
+        "CVE-2026-85787"
+      ],
+      "description": "Amazon awslabs postgres-mcp-server (`awslabs.postgres-mcp-server`, PyPI) before 1.1.7 carries two defects in the same SQL validation component, both cleared by one floor. CVE-2026-87911 (CRITICAL 9.6): the read-only enforcement does not stop a crafted `COPY ... TO PROGRAM` statement, so an unauthenticated actor who can place content that an authenticated user later processes executes operating-system commands on the host of a self-managed PostgreSQL server, in the server's default configuration. CVE-2026-85787 (MEDIUM 6.5): the disallowed-input list is incomplete, so crafted SQL reaching the same path modifies data beyond the server's read-only scope. The command-injection reading is the load-bearing one \u2014 a read-only *scope* bypass and OS command execution are different threats, and the remediation below addresses the latter. Fixed in 1.1.7; treat < 1.1.7 (and unpinned) as exposed.",
+      "incident_references": [],
+      "limitations": "",
+      "owasp_agentic_references": [
+        "ASI04"
+      ],
+      "owasp_ast_references": [],
+      "owasp_mcp_references": [
+        "MCP03:2025"
+      ],
+      "remediation": "Upgrade `awslabs.postgres-mcp-server` to >= 1.1.7 and pin it. Enforce read-only access with a least-privilege database role rather than relying on the server's own statement filtering: a role without `pg_execute_server_program` cannot run `COPY ... TO PROGRAM` even if the statement filter is bypassed.",
+      "rule_id": "AAK-MCP-AWSPOSTGRES-CVE-2026-85787-001",
+      "sarif_name": "AwslabsPostgresMcpSqlValidationGap",
+      "severity": "critical",
+      "title": "awslabs postgres-mcp-server: COPY TO PROGRAM command injection and SQL validation gap (< 1.1.7)"
+    },
+    {
+      "adversa_references": [
+        "ADV-DATA-01"
+      ],
+      "aicm_references": [
+        "STA-08",
+        "DSP-10",
+        "IVS-04"
+      ],
+      "auto_fixable": false,
+      "category": "supply-chain",
+      "cve_references": [
+        "CVE-2026-87913"
+      ],
+      "description": "AWS Security Agent MCP server (`awslabs.security-agent-mcp-server`, PyPI) before 0.2.0 does not verify that the S3 bucket it writes scan output to is owned by the caller's own account (CVE-2026-87913, MEDIUM 5.9). The bucket name is derived from a publicly known account identifier, so a third party who pre-registers that name receives the private source archive of every scanned workspace \u2014 including any credentials and infrastructure state the archive contains. Fixed in 0.2.0; treat < 0.2.0 (and unpinned) as exposed.",
+      "incident_references": [],
+      "limitations": "",
+      "owasp_agentic_references": [
+        "ASI04"
+      ],
+      "owasp_ast_references": [],
+      "owasp_mcp_references": [
+        "MCP03:2025"
+      ],
+      "remediation": "Upgrade `awslabs.security-agent-mcp-server` to >= 0.2.0 and pin it. Upgrading is not sufficient on its own: it does not release a bucket name a third party has already registered, so confirm the scan output bucket in your account is owned by your account, and treat anything already written to it as disclosed.",
+      "rule_id": "AAK-MCP-AWSSECAGENT-CVE-2026-87913-001",
+      "sarif_name": "AwsSecurityAgentMcpBucketOwnership",
+      "severity": "medium",
+      "title": "awslabs security-agent-mcp-server: scan output written to an unverified S3 bucket (< 0.2.0)"
     },
     {
       "adversa_references": [
@@ -3901,6 +4113,59 @@
       "title": "CodeWhale auto-approved code execution: rlm_eval and exec_shell_interact bypass the approval policy (`codewhale` >= 0.8.41, < 0.8.64)"
     },
     {
+      "adversa_references": [],
+      "aicm_references": [],
+      "auto_fixable": false,
+      "category": "mcp-config",
+      "cve_references": [],
+      "description": "An `mcpServers` entry declares a field whose type does not match the MCP client schema -- most often `args` as a scalar instead of a list of strings. Clients disagree about what to do with it: some coerce, some ignore the field, some refuse to start the server. A config that one client launches and another silently drops is a security fact, not a cosmetic one, because the reviewed configuration and the running configuration stop being the same thing. AAK's own composition pass crashed on `\"args\": 42` (issue #743), which is how this was found: the scan reported a clean project because the scanner that would have objected died before it could.",
+      "incident_references": [],
+      "limitations": "",
+      "owasp_agentic_references": [
+        "ASI04"
+      ],
+      "owasp_ast_references": [],
+      "owasp_mcp_references": [
+        "MCP03:2025"
+      ],
+      "remediation": "Give the field the type the MCP schema defines: `args` must be a list of strings (`[\"--port\", \"8080\"]`, not `8080`). Validate agent configs in CI so a client-specific coercion never decides what runs.",
+      "rule_id": "AAK-MCP-CONFIG-MALFORMED-001",
+      "sarif_name": "McpConfigMalformedField",
+      "severity": "medium",
+      "title": "MCP server entry has a field of the wrong type"
+    },
+    {
+      "adversa_references": [
+        "ADV-NET-01"
+      ],
+      "aicm_references": [],
+      "auto_fixable": false,
+      "category": "supply-chain",
+      "cve_references": [
+        "CVE-2026-77822",
+        "CVE-2026-18905",
+        "CVE-2026-18486",
+        "CVE-2026-18489",
+        "CVE-2026-53710",
+        "CVE-2026-78573"
+      ],
+      "description": "IBM ContextForge MCP Gateway (`mcp-contextforge-gateway`, PyPI) at or below 1.0.8 carries four disclosed defects that one floor remediates. CVE-2026-77822 (HIGH 8.2): the A2A invocation endpoint `POST /a2a/{agent_name}/invoke` does not pin the DNS-resolved IP at connection time \u2014 unlike every other egress path in the gateway \u2014 so an authenticated low-privileged user reaches internal addresses by DNS rebinding and receives the full response body. CVE-2026-18905 (HIGH 7.7): the same rebinding class during tool invocation, at or below 1.0.6. CVE-2026-18486 (HIGH 8.8): jq filters are validated improperly, letting a remote authenticated attacker read credentials and escalate, at or below 1.0.7. CVE-2026-18489 (HIGH 7.4): the Translate utility exposes data elements to the wrong session, leaking across sessions, at or below 1.0.8. CVE-2026-78573 (CRITICAL 9.8): 1.0.0 through 1.0.7 ship default credentials, so a remote attacker gains administrative access outright \u2014 the floor already in place covers it, and it is recorded here rather than as a second rule because one upgrade remediates all five. Treat < 1.0.9 (and unpinned) as exposed.",
+      "incident_references": [],
+      "limitations": "",
+      "owasp_agentic_references": [
+        "ASI05"
+      ],
+      "owasp_ast_references": [],
+      "owasp_mcp_references": [
+        "MCP06:2025"
+      ],
+      "remediation": "Upgrade `mcp-contextforge-gateway` to >= 1.0.9 and pin it. Change any credential that shipped as a default before doing anything else. Where the gateway makes outbound requests on behalf of a caller, resolve the destination once and connect to the pinned IP rather than re-resolving the hostname after the allow-list check.",
+      "rule_id": "AAK-MCP-CONTEXTFORGE-CVE-2026-77822-001",
+      "sarif_name": "ContextForgeGatewayRebindAndSessionLeak",
+      "severity": "critical",
+      "title": "IBM ContextForge MCP Gateway: default credentials, DNS-rebind SSRF, jq-filter and cross-session leaks (<= 1.0.8)"
+    },
+    {
       "adversa_references": [
         "ADV-RCE-04"
       ],
@@ -3940,7 +4205,8 @@
       "cve_references": [
         "CVE-2026-44968",
         "CVE-2026-44970",
-        "CVE-2026-44969"
+        "CVE-2026-44969",
+        "CVE-2026-55837"
       ],
       "description": "`dbt-mcp` before 1.17.1 appends unsanitized `node_selection` / `resource_type` values to the dbt subprocess argv, letting an MCP client inject dbt global flags such as `--profiles-dir` / `--project-dir` / `--target` into `subprocess.Popen` even with `shell=False` (CVE-2026-44968); it also emits every tool call's full arguments (`sql_query`, `vars`, `node_selection`) through telemetry (CVE-2026-44970, on by default) and file logging (CVE-2026-44969) without redaction. Treat < 1.17.1 (and unpinned) as exposed.",
       "incident_references": [],
@@ -3996,7 +4262,7 @@
       "auto_fixable": false,
       "category": "mcp-config",
       "cve_references": [],
-      "description": "Server or client code declares or exercises the `roots` capability \u2014 the `roots/list` request, the `notifications/roots/list_changed` notification, or the SDK aliases (`list_roots`, `ListRootsRequest`, `send_roots_list_changed`). The MCP 2026-07-28 spec release candidate deprecates `roots` (SEP-2577) under the new 12-month deprecation policy (SEP-2596): it stays functional for at least a year but is on the removal path. Roots leaked the client's workspace layout to every connected server, which the RC judged an unnecessary standing surface.",
+      "description": "Server or client code declares or exercises the `roots` capability \u2014 the `roots/list` request, the `notifications/roots/list_changed` notification, or the SDK aliases (`list_roots`, `ListRootsRequest`, `send_roots_list_changed`). The ratified MCP 2026-07-28 spec deprecates `roots` (SEP-2577) under the new 12-month deprecation policy (SEP-2596): it stays functional for at least a year but is on the removal path. Roots leaked the client's workspace layout to every connected server, which the RC judged an unnecessary standing surface.",
       "incident_references": [],
       "limitations": "",
       "owasp_agentic_references": [],
@@ -4019,7 +4285,7 @@
       "auto_fixable": false,
       "category": "mcp-config",
       "cve_references": [],
-      "description": "Server or client code declares or exercises the `sampling` capability \u2014 the `sampling/createMessage` request, a `CreateMessageRequest` handler, or the SDK aliases (`create_message`, `.sampling.create`). The MCP 2026-07-28 spec release candidate deprecates `sampling` (SEP-2577) under the 12-month deprecation policy (SEP-2596). Server-initiated sampling made the server a privileged caller of the host LLM and had no clean stateless story; it is on the removal path. (Distinct from AAK-MCP-SAMPLING-001, which flags sampling wired up without a consent gate \u2014 this rule flags the deprecated capability itself.)",
+      "description": "Server or client code declares or exercises the `sampling` capability \u2014 the `sampling/createMessage` request, a `CreateMessageRequest` handler, or the SDK aliases (`create_message`, `.sampling.create`). The MCP ratified 2026-07-28 spec deprecates `sampling` (SEP-2577) under the 12-month deprecation policy (SEP-2596). Server-initiated sampling made the server a privileged caller of the host LLM and had no clean stateless story; it is on the removal path. (Distinct from AAK-MCP-SAMPLING-001, which flags sampling wired up without a consent gate \u2014 this rule flags the deprecated capability itself.)",
       "incident_references": [],
       "limitations": "",
       "owasp_agentic_references": [],
@@ -4042,7 +4308,7 @@
       "auto_fixable": false,
       "category": "mcp-config",
       "cve_references": [],
-      "description": "Server or client code declares or exercises the `logging` capability \u2014 the `logging/setLevel` request, the `notifications/message` log notification, or the SDK aliases (`set_level`, `SetLevelRequest`, `LoggingMessageNotification`, `LoggingLevel`). The MCP 2026-07-28 spec release candidate deprecates `logging` (SEP-2577) under the 12-month deprecation policy (SEP-2596). Protocol-level log-level control was redundant with host-side observability and is on the removal path.",
+      "description": "Server or client code declares or exercises the `logging` capability \u2014 the `logging/setLevel` request, the `notifications/message` log notification, or the SDK aliases (`set_level`, `SetLevelRequest`, `LoggingMessageNotification`, `LoggingLevel`). The ratified MCP 2026-07-28 spec deprecates `logging` (SEP-2577) under the 12-month deprecation policy (SEP-2596). Protocol-level log-level control was redundant with host-side observability and is on the removal path.",
       "incident_references": [],
       "limitations": "",
       "owasp_agentic_references": [],
@@ -4055,6 +4321,33 @@
       "sarif_name": "McpDeprecatedLogging",
       "severity": "medium",
       "title": "Use of deprecated `logging` capability (logging/setLevel)"
+    },
+    {
+      "adversa_references": [
+        "ADV-NET-01"
+      ],
+      "aicm_references": [],
+      "auto_fixable": false,
+      "category": "mcp-config",
+      "cve_references": [
+        "CVE-2026-85666",
+        "CVE-2026-86122"
+      ],
+      "description": "A destination that arrives through MCP server / webhook configuration \u2014 `server_url`, `webhook_url`, `mcp_server_url` and the like \u2014 is passed to an outbound HTTP call without a destination check, so a caller who can write that configuration steers the server at internal addresses and cloud metadata endpoints (`http://169.254.169.254/`). Two disclosed shapes, one defect. **Absence** (CVE-2026-86122, Rowboat through 0.9.1, CVSS 5.0): nothing in the module resolves or range-checks a destination at all. **Asymmetry** (CVE-2026-85666, OGX / ex-Llama Stack, CVSS 7.5): the guard exists and is called \u2014 OGX applies `validate_url_not_private()` to its other URL inputs \u2014 and is simply not applied to this one; on the default starter configuration, which runs unauthenticated, that also forwards attacker-supplied headers and bearer tokens to the chosen destination. The asymmetry arm is the higher-precision signal, and it is the same class this scanner already detects at two other layers: `AAK-MCPWN-001` (auth middleware present on one route but not its twin) and `AAK-MCP-TOOLGATE-ASYMMETRY-001` (a gate enforced in `tools/list` but not `tools/call`). Those two rules carry their own CVEs and are named here as the family, not as coverage this rule provides.",
+      "incident_references": [],
+      "limitations": "Python only, and scoped to configuration-shaped destination names. A caller-supplied URL arriving as a tool *argument* is AAK-MCP-SSRF-001's surface, not this rule's; bare `url` is deliberately not matched because it is the most common identifier in any HTTP code.",
+      "owasp_agentic_references": [
+        "ASI05"
+      ],
+      "owasp_ast_references": [],
+      "owasp_mcp_references": [
+        "MCP06:2025"
+      ],
+      "remediation": "Validate the destination on every path that can reach an outbound call, not on the paths that happened to get a guard first. Resolve the host once, reject private, loopback, link-local and metadata ranges on the *resolved IP*, and connect to that pinned address. Where a guard already exists in the module, the fix is usually to call it here too rather than to write a second one \u2014 and never forward caller-supplied `Authorization` headers to a destination the caller also chose.",
+      "rule_id": "AAK-MCP-DEST-UNVALIDATED-001",
+      "sarif_name": "McpConfiguredDestinationUnvalidated",
+      "severity": "high",
+      "title": "MCP-configured destination reaches an outbound fetch with no guard (absence or asymmetry)"
     },
     {
       "adversa_references": [
@@ -4170,6 +4463,36 @@
     },
     {
       "adversa_references": [
+        "ADV-AGENT-01"
+      ],
+      "aicm_references": [
+        "IVS-04",
+        "STA-08"
+      ],
+      "auto_fixable": false,
+      "category": "supply-chain",
+      "cve_references": [
+        "CVE-2026-91931",
+        "CVE-2026-91932"
+      ],
+      "description": "Flowise (`flowise`, npm) before 3.1.4 allows an authenticated attacker to reach remote code execution through the Custom MCP node by two routes closed in the same release. Supplying npx package names in the `mcpServerConfig` parameter causes Flowise to invoke `npx` on attacker-controlled npm packages, running their install and entry-point code on the Flowise server (CVE-2026-91931, CVSS 8.5, CWE-78). Separately, the path validation applied to `mcpServerConfig` is bypassed by passing a clean filename in the `args` array while controlling the `cwd` parameter, so the resolved executable is taken from an attacker-chosen working directory (CVE-2026-91932, CVSS 8.5, CWE-20). Both are fixed in 3.1.4.",
+      "incident_references": [],
+      "limitations": "",
+      "owasp_agentic_references": [
+        "ASI02"
+      ],
+      "owasp_ast_references": [],
+      "owasp_mcp_references": [
+        "MCP01:2025"
+      ],
+      "remediation": "Upgrade `flowise` to >= 3.1.4 and pin it. Treat the Custom MCP node's `mcpServerConfig` as untrusted input even from authenticated users: allowlist the commands it may launch rather than validating the filename alone, and resolve them against a fixed directory instead of a caller-supplied `cwd`. Restrict who holds Flowise credentials, since both paths require only an authenticated session.",
+      "rule_id": "AAK-MCP-FLOWISE-CVE-2026-91931-001",
+      "sarif_name": "FlowiseCustomMcpNodeRce",
+      "severity": "high",
+      "title": "flowise < 3.1.4 (Custom MCP node reaches RCE through npx package names and an unvalidated cwd)"
+    },
+    {
+      "adversa_references": [
         "ADV-AUTH-01"
       ],
       "aicm_references": [
@@ -4200,6 +4523,35 @@
     },
     {
       "adversa_references": [
+        "ADV-AGENT-04"
+      ],
+      "aicm_references": [
+        "IVS-04",
+        "STA-08"
+      ],
+      "auto_fixable": false,
+      "category": "supply-chain",
+      "cve_references": [
+        "CVE-2026-59973"
+      ],
+      "description": "`mcp-from-openapi` (npm) from 2.3.0 until 2.5.0 forwards untrusted OpenAPI `url` and `spec` inputs, and `loadOptions.refResolution`, from `loadOPENAPISpec()` in `libs/adapters/src/openapi/openapi.adapter.ts` into `OpenAPIToolGenerator.fromURL()` and `.fromJSON()`. The external `$ref` guard compares parsed hostname strings without resolving addresses, pinning the validated address, revalidating redirect targets, or normalizing IPv4-mapped IPv6 forms. An authenticated user who can import or configure an OpenAPI specification in a hosted or multi-user deployment therefore causes backend-origin requests to internal services via DNS-to-loopback resolution, redirect-to-loopback behaviour, or `::ffff:` loopback forms, exposing internal administrative APIs, metadata-like services and other private endpoints (CVE-2026-59973, CVSS 8.5, CWE-918). The same defect ships in `frontmcp` and `@frontmcp/adapters` on their own 1.x line, where that package's existing 1.5.7 pin floor already covers the 1.5.0 fix; this rule exists because `mcp-from-openapi` runs a 2.x line that floor cannot express. Impact is lower where only a trusted local administrator can configure specs, and disabling external reference protocols prevents the request outright.",
+      "incident_references": [],
+      "limitations": "",
+      "owasp_agentic_references": [
+        "ASI04"
+      ],
+      "owasp_ast_references": [],
+      "owasp_mcp_references": [
+        "MCP08:2025"
+      ],
+      "remediation": "Upgrade `mcp-from-openapi` to >= 2.5.0 and pin it (the sibling `frontmcp` and `@frontmcp/adapters` packages to >= 1.5.0). Disable external `$ref` resolution unless you need it. Where you must resolve remote references, resolve the hostname, reject private, loopback, link-local and IPv4-mapped IPv6 addresses, pin the validated address for the connection, and revalidate every redirect target rather than trusting the first hop.",
+      "rule_id": "AAK-MCP-FROMOPENAPI-CVE-2026-59973-001",
+      "sarif_name": "McpFromOpenapiRefSsrf",
+      "severity": "high",
+      "title": "mcp-from-openapi < 2.5.0 (external $ref guard does not resolve or pin addresses \u2014 SSRF)"
+    },
+    {
+      "adversa_references": [
         "ADV-RCE-01"
       ],
       "aicm_references": [
@@ -4210,7 +4562,8 @@
       "auto_fixable": false,
       "category": "supply-chain",
       "cve_references": [
-        "CVE-2026-67531"
+        "CVE-2026-67531",
+        "CVE-2026-59973"
       ],
       "description": "`frontmcp` before 1.5.7 exposes live host Zod schema instances to the sandboxed `codecall:execute` tool through `getTool()`; because Zod v4's `_zod` is a non-configurable, non-writable own property, the Proxy invariants force the security membrane to return the raw host object, letting a script reach `_zod.constr.constructor` (the host Function constructor) and run arbitrary code as the server user. One `tools/call` is sufficient, and the framework's default public auth mode serves it to unauthenticated callers (CVE-2026-67531). A pinnable npm artifact (latest 1.6.0) the pin scanner resolves from `package.json` / lockfiles / `.mcp.json`.",
       "incident_references": [],
@@ -4315,6 +4668,38 @@
       "sarif_name": "GenieacsMcpDnsRebind",
       "severity": "high",
       "title": "genieacs-mcp serves an unauthenticated /mcp listener open to DNS rebinding (< 0.3.2)"
+    },
+    {
+      "adversa_references": [
+        "ADV-AGENT-02"
+      ],
+      "aicm_references": [
+        "IAM-01",
+        "DSP-17",
+        "STA-08"
+      ],
+      "auto_fixable": false,
+      "category": "supply-chain",
+      "cve_references": [
+        "CVE-2026-61560",
+        "CVE-2026-61559",
+        "CVE-2026-61568"
+      ],
+      "description": "`@zereight/mcp-gitlab` (npm), an MCP server for GitLab, carries three disclosures that share one pin at the highest fix floor. Before 2.1.27, SSE transport mode (`SSE=true`) exposes every MCP tool with no authentication, and the `upload_markdown` tool reads arbitrary files from the server's filesystem through an unsanitised `file_path` parameter and uploads them to a GitLab project; together an unauthenticated network-reachable caller reads `/proc/self/environ`, recovers `GITLAB_PERSONAL_ACCESS_TOKEN` and takes over the GitLab account. That is the default configuration for Docker deployments (CVE-2026-61560, CVSS 9.8, CWE-22). Also before 2.1.27, setting `ENABLE_DYNAMIC_API_URL=true` makes the server read the `X-GitLab-API-URL` request header and use it as the base URL for outbound GitLab API calls, validating only that it parses as a URL, with no allowlist or hostname restriction, while still attaching the victim's `Private-Token` to every such request \u2014 so any caller who reaches the transport receives the token at a host of their choosing (CVE-2026-61559, CVSS 9.6, CWE-918). Before 2.1.30, the Streamable HTTP endpoint has no effective Host or Origin allowlist, so a malicious web page uses DNS rebinding to route a browser's requests to a victim's local MCP listener while preserving an attacker-controlled `Host` and `Origin`, and the server reaches MCP initialization instead of rejecting the request at the HTTP boundary (CVE-2026-61568, CVSS 9.6, CWE-350). 2.1.30 is the highest of the three fix versions and is the floor this rule pins.",
+      "incident_references": [],
+      "limitations": "",
+      "owasp_agentic_references": [
+        "ASI04"
+      ],
+      "owasp_ast_references": [],
+      "owasp_mcp_references": [
+        "MCP07:2025"
+      ],
+      "remediation": "Upgrade `@zereight/mcp-gitlab` to >= 2.1.30 and pin it \u2014 2.1.27 closes the unauthenticated-SSE and dynamic-API-URL paths but not the DNS-rebinding one. Do not run the SSE transport on a reachable interface without an inbound credential, leave `ENABLE_DYNAMIC_API_URL` unset unless you allowlist the hostnames it may resolve to, and treat any `GITLAB_PERSONAL_ACCESS_TOKEN` exposed to an affected deployment as compromised: rotate it rather than relying on the upgrade alone.",
+      "rule_id": "AAK-MCP-GITLAB-ZEREIGHT-CVE-2026-61560-001",
+      "sarif_name": "ZereightMcpGitlabUnauthAndSsrf",
+      "severity": "critical",
+      "title": "@zereight/mcp-gitlab < 2.1.30 (unauthenticated SSE + arbitrary file read, header-controlled API base, DNS rebinding)"
     },
     {
       "adversa_references": [
@@ -4444,7 +4829,13 @@
         "CVE-2026-50287",
         "CVE-2026-23744",
         "CVE-2026-49257",
-        "CVE-2026-48989"
+        "CVE-2026-48989",
+        "CVE-2026-90617",
+        "CVE-2026-38924",
+        "CVE-2026-59971",
+        "CVE-2026-53710",
+        "CVE-2026-57139",
+        "CVE-2026-61560"
       ],
       "description": "A repository publishes an MCP server over HTTP / SSE / Streamable-HTTP (an `/mcp` route handler, or an `SSEServerTransport` / `StreamableHTTPServerTransport` / `--http` setup) with no inbound authentication marker on the handler, while also binding to all interfaces (`0.0.0.0` / `::`) or serving a wildcard `Access-Control-Allow-Origin: *`. The result is a mutation-capable RPC endpoint, backed by the operator's own tokens, reachable without credentials by any network (or, with wildcard CORS, any cross-origin browser) peer. This is a recurring 2026 class: GitLab MCP Server (CVE-2026-44895), Nocturne Memory (CVE-2026-44830), and AgenticMail (CVE-2026-50287) all shipped auth-less HTTP/SSE MCP transports on `0.0.0.0` with wildcard CORS. Generalises the Azure-only `AAK-AZURE-MCP-NOAUTH-001` to any published MCP HTTP server (the Azure rule still owns Azure-MCP repos; this rule defers to it there). Beyond server source, this also flags the launch surface: MCP config files (`mcp.json`, `claude_desktop_config.json`, `*.mcp.yaml` `command`/`args`), Docker `--host 0.0.0.0` / `-p 0.0.0.0:` publishes, and MCP Inspector / FastMCP startup args that bind a non-loopback interface (`0.0.0.0` / `::` / a routable IP) with no token / `requireAuth`, or with the Inspector kill-switch `DANGEROUSLY_OMIT_AUTH` set. CVE-2026-23744 (MCP Inspector, CVSS 9.8) is the motivating exemplar of the launch-bind variant; Censys counted ~12,520 MCP services exposed on the public internet in this shape. Two further 2026 instances of this exact class: CVE-2026-49257 (mcp-pinot <= 3.0.1, CVSS 10.0) defaults to an HTTP MCP server bound to `0.0.0.0:8080` with no authentication, exposing SQL execution as a confused deputy; CVE-2026-48989 (Windows-MCP < 0.7.5, CVSS 8.9) exposed the MCP control plane over HTTP without auth while enabling wildcard CORS. CWE-306 (Missing Authentication for Critical Function).",
       "incident_references": [],
@@ -4551,6 +4942,33 @@
     },
     {
       "adversa_references": [
+        "ADV-DATA-01"
+      ],
+      "aicm_references": [],
+      "auto_fixable": false,
+      "category": "supply-chain",
+      "cve_references": [
+        "CVE-2026-86439",
+        "CVE-2026-88938"
+      ],
+      "description": "knowns (`knowns`, npm \u2014 knowns-dev) before 0.30.0 does not validate filesystem paths supplied in MCP tool arguments, so an attacker-controlled path containing directory-traversal sequences reads, creates, overwrites or deletes files outside the project directory (CVE-2026-86439, CVSS 8.8). NVD scopes the read reach to \"arbitrary Markdown files accessible to the server process\", which follows from where the defect sits: the document and memory stores (`internal/storage/doc_store.go`, `internal/storage/memory_store.go`) are Markdown-backed. Fixed in v0.30.0. CVE-2026-88938 (MEDIUM 6.5) then reopened the same class on a different tool: `knowns` **through 0.33.0** does not confine the `path` argument of the `code.find` MCP tool to the project root, so an agent session supplies an absolute path or traversal sequence and retrieves full file contents from anywhere the server process can read. 0.33.0 is the newest published release (npm, 2026-09-05) and is itself in the affected range, so **there is no fix floor to upgrade to** and this pin is presence-only: it fires on any referenced version. That is the permanent state until upstream ships a fix, not a placeholder \u2014 the same shape as the `postgres-mcp` and `mcp-florence2` pins in this table.",
+      "incident_references": [],
+      "limitations": "",
+      "owasp_agentic_references": [
+        "ASI04"
+      ],
+      "owasp_ast_references": [],
+      "owasp_mcp_references": [
+        "MCP03:2025"
+      ],
+      "remediation": "No fixed release exists: 0.33.0 is the newest and is affected. Until upstream ships one, run `knowns` against a directory that contains nothing the agent session should not read, or drop it. When a fix lands, upgrade past 0.33.0 and pin it. The upstream fix has to resolve every path taken from a tool argument and reject any result that escapes the project root before opening it.",
+      "rule_id": "AAK-MCP-KNOWNS-CVE-2026-86439-001",
+      "sarif_name": "KnownsMcpPathTraversal",
+      "severity": "high",
+      "title": "knowns MCP doc/memory and code.find tools: path traversal outside the project directory (no fixed release)"
+    },
+    {
+      "adversa_references": [
         "ADV-INJECT-01"
       ],
       "aicm_references": [
@@ -4624,9 +5042,13 @@
         "CVE-2026-17626",
         "CVE-2026-8446",
         "CVE-2026-9077",
-        "CVE-2026-7646"
+        "CVE-2026-7646",
+        "CVE-2026-9186",
+        "CVE-2026-85025",
+        "CVE-2026-78575",
+        "CVE-2026-81941"
       ],
-      "description": "IBM Langflow OSS (`langflow`) from 1.0.0 through 1.10.1 is vulnerable to unauthenticated remote code execution through its MCP stdio launcher: the `DANGEROUS_ENV_VARS` blocklist in `src/lfx/base/mcp/util.py` omits `SHELLOPTS`, `BASHOPTS`, and `PS4`, so an unauthenticated attacker can inject those environment variables into a launched stdio MCP server process and achieve arbitrary code execution (CVE-2026-12940, CVSS 9.8). The same 1.11.0 floor also remediates five further Langflow OSS CVEs disclosed for 1.0.0\u20131.10.3: CVE-2026-17623 (command-field RCE in MCP server configurations), CVE-2026-17626 (host-file read/modify via unfiltered Docker volume-mount and device-mapping args), CVE-2026-8446 (MCP composer OAuth authentication bypass), CVE-2026-9077 (writing arbitrary MCP server configurations into host IDE config files), and CVE-2026-7646 (`resources/read` path traversal reading the JWT signing secret, the SQLite DB, and process env). Fixed at or before 1.11.0; treat < 1.11.0 (and unpinned) as exposed. Pre-1.0.0 releases predate the MCP stdio launcher and are not in the affected range.",
+      "description": "IBM Langflow OSS (`langflow`) from 1.0.0 through 1.10.1 is vulnerable to unauthenticated remote code execution through its MCP stdio launcher: the `DANGEROUS_ENV_VARS` blocklist in `src/lfx/base/mcp/util.py` omits `SHELLOPTS`, `BASHOPTS`, and `PS4`, so an unauthenticated attacker can inject those environment variables into a launched stdio MCP server process and achieve arbitrary code execution (CVE-2026-12940, CVSS 9.8). The same 1.11.0 floor also remediates five further Langflow OSS CVEs disclosed for 1.0.0\u20131.10.3: CVE-2026-17623 (command-field RCE in MCP server configurations), CVE-2026-17626 (host-file read/modify via unfiltered Docker volume-mount and device-mapping args), CVE-2026-8446 (MCP composer OAuth authentication bypass), CVE-2026-9077 (writing arbitrary MCP server configurations into host IDE config files), and CVE-2026-7646 (`resources/read` path traversal reading the JWT signing secret, the SQLite DB, and process env). A seventh, CVE-2026-9186, raised the floor past those: Langflow OSS 1.0.0\u20131.11.2 trusts a spoofed `X-Forwarded-For: 127.0.0.1` header to satisfy its localhost-only guard on MCP-config installation, so a remote authenticated attacker writes arbitrary IDE configuration files (`~/.cursor/mcp.json` and siblings) \u2014 which 1.11.0, 1.11.1 and 1.11.2 are all exposed to. Three further IBM advisories then moved the floor again, all scoped 1.0.0 through 1.11.5: CVE-2026-85025 (CRITICAL 9.8) \u2014 unauthenticated arbitrary code execution and access to other users' chat sessions through publicly shared MCP project endpoints, because public-flow security restrictions and session isolation are both enforced improperly; CVE-2026-78575 (HIGH 8.8) \u2014 a remote authenticated attacker executes arbitrary commands through improperly validated command-line arguments in the MCP stdio server configuration; and CVE-2026-81941 (HIGH 8.8) \u2014 a non-administrative authenticated user runs OS commands at the application's privilege level by building a flow whose MCP Tools component uses a local stdio subprocess transport, bypassing both `LANGFLOW_CUSTOM_COMPONENT_ADMIN_ONLY` and `LANGFLOW_BLOCK_CODE_INTERPRETER_COMPONENTS`. Fixed in 1.11.6; treat < 1.11.6 (and unpinned) as exposed. Pre-1.0.0 releases predate the MCP stdio launcher and are not in the affected range.",
       "incident_references": [],
       "limitations": "",
       "owasp_agentic_references": [
@@ -4636,11 +5058,35 @@
       "owasp_mcp_references": [
         "MCP10:2025"
       ],
-      "remediation": "Upgrade `langflow` to >= 1.11.0 and pin it. Do not pass an attacker-influenced environment through to a launched stdio MCP server; blocklist (or, better, allowlist) the process environment, including `SHELLOPTS`/`BASHOPTS`/`PS4`.",
+      "remediation": "Upgrade `langflow` to >= 1.11.6 and pin it. Do not pass an attacker-influenced environment through to a launched stdio MCP server; blocklist (or, better, allowlist) the process environment, including `SHELLOPTS`/`BASHOPTS`/`PS4`. Derive the client address from the socket, not from a caller-supplied `X-Forwarded-For` header, when gating localhost-only operations.",
       "rule_id": "AAK-MCP-LANGFLOW-CVE-2026-12940-001",
       "sarif_name": "LangflowMcpStdioEnvInjectionRce",
       "severity": "critical",
-      "title": "Langflow MCP stdio launcher env-var-injection RCE (1.0.0\u2013<1.11.0)"
+      "title": "Langflow MCP stdio launcher env-var-injection RCE (1.0.0\u2013<1.11.6)"
+    },
+    {
+      "adversa_references": [],
+      "aicm_references": [],
+      "auto_fixable": false,
+      "category": "supply-chain",
+      "cve_references": [
+        "CVE-2026-55235"
+      ],
+      "description": "`langgraph-api` before 0.10.0 lets a run or cron name a *relative* webhook target, delivered over an in-process loopback transport that the authentication middleware treats as internal: the external auth context is never applied. In a deployment that separates threads and runs by per-user authorization, an authenticated user can aim a webhook at the server's own thread and run routes and create a run on, or modify, another user's thread, pulling some of the targeted thread's metadata into the created run record (CVE-2026-55235, MEDIUM CVSS 5.9). Fixed in 0.10.0. The fix does not make loopback delivery safe in general: a deployment that deliberately re-enables it still carries unauthenticated webhooks and must restrict them to controlled same-process routes.",
+      "incident_references": [],
+      "limitations": "",
+      "owasp_agentic_references": [
+        "ASI03"
+      ],
+      "owasp_ast_references": [],
+      "owasp_mcp_references": [
+        "MCP06:2025"
+      ],
+      "remediation": "Upgrade `langgraph-api` to 0.10.0 or later. If loopback webhook delivery is re-enabled deliberately, restrict the targets to a controlled same-process allowlist and do not treat a transport being in-process as an authorization decision.",
+      "rule_id": "AAK-MCP-LANGGRAPH-API-CVE-2026-55235-001",
+      "sarif_name": "McpLangGraphApiWebhookAuthBypass",
+      "severity": "medium",
+      "title": "langgraph-api < 0.10.0 (loopback webhook bypasses per-user authorization)"
     },
     {
       "adversa_references": [
@@ -4684,7 +5130,8 @@
       "auto_fixable": false,
       "category": "supply-chain",
       "cve_references": [
-        "CVE-2026-48121"
+        "CVE-2026-48121",
+        "CVE-2026-55253"
       ],
       "description": "`@langchain/langgraph-checkpoint-mongodb` (the LangGraph.js MongoDB CheckpointSaver) at 1.3.0 and below passes checkpoint identifiers (`thread_id`, `checkpoint_ns`, `checkpoint_id`) from `config.configurable` into MongoDB `find()` queries in `MongoDBSaver.getTuple()` without type enforcement. An attacker who supplies an object payload (e.g. the MongoDB operators `$gt` / `$ne`) instead of a string has it interpreted as a query operator, bypassing thread scoping and leaking checkpoints, including pending writes, across tenants (CVE-2026-48121, CVSS 6.7). Fixed in 1.3.1; treat <= 1.3.0 (and unpinned) as exposed.",
       "incident_references": [],
@@ -4848,6 +5295,46 @@
     },
     {
       "adversa_references": [
+        "ADV-AUTH-01",
+        "ADV-SSRF-01"
+      ],
+      "aicm_references": [
+        "IAM-01",
+        "IVS-04",
+        "STA-08"
+      ],
+      "auto_fixable": false,
+      "category": "supply-chain",
+      "cve_references": [
+        "CVE-2026-79743",
+        "CVE-2026-79744",
+        "CVE-2026-79745",
+        "CVE-2026-79746",
+        "CVE-2026-79747",
+        "CVE-2026-79748",
+        "CVE-2026-79749",
+        "CVE-2026-79750"
+      ],
+      "description": "MCPHub is a self-hosted gateway that fronts many MCP servers behind one endpoint, so a defect in its authorization layer is a defect in every server behind it. Eight advisories landed against it in one batch (CVE-2026-79743 through CVE-2026-79750) and they are carried by one pin because they share a package and the highest fix version covers all of them. The batch is mostly missing authorization on mutating routes: `PUT /api/system-config` performs no authorization check at all (< 1.0.29); the prompt and resource controllers do no role checking on their mutating POST/PUT routes (< 1.0.32); a bearer key scoped to `servers` is accepted against a group route it should not reach (< 1.0.31); and non-admin server ownership scoping is enforced on list views and config edits but not everywhere (< 1.0.30). The remaining three are execution and egress: the `POST /api/servers` and `PUT /api/servers/:name` endpoints create MCP server entries whose command is executed (< 0.12.15, CVSS 9.9), the MCPB file-upload handler trusts the `name` field of a `manifest.json` read out of an uploaded ZIP (< 0.12.13), and the SSRF guard in `src/utils/ssrf.ts` uses a custom `isBlockedIpv6` that does not cover the address forms it needs to, so an authenticated non-admin registers a server pointing at an internal URL and reads the response back through the hub (< 1.0.32). A project pinning `@samanhappy/mcphub` below 1.0.32, or leaving it unpinned, is exposed to at least one of these. Note that PyPI `mcphub` is an unrelated project by a different author on a 0.1.x line; this rule matches the scoped npm name only and will not fire on it.",
+      "incident_references": [],
+      "limitations": "",
+      "owasp_agentic_references": [
+        "ASI04",
+        "ASI06"
+      ],
+      "owasp_ast_references": [],
+      "owasp_mcp_references": [
+        "MCP01:2025",
+        "MCP09:2025"
+      ],
+      "remediation": "Upgrade `@samanhappy/mcphub` to >= 1.0.32 and pin it \u2014 that floor clears all eight. Until you are past it, treat every authenticated MCPHub user as able to reach the mutating admin routes: put the hub behind an authenticating proxy, restrict who may create or update server entries at all (that route reaches command execution), and place the hub on a network segment with no route to internal services so the SSRF guard is not the only control.",
+      "rule_id": "AAK-MCP-MCPHUB-CVE-2026-79748-001",
+      "sarif_name": "McpHubGatewayAuthorizationBypass",
+      "severity": "critical",
+      "title": "@samanhappy/mcphub < 1.0.32 (eight MCP gateway authorization + SSRF defects)"
+    },
+    {
+      "adversa_references": [
         "ADV-AUTH-01"
       ],
       "aicm_references": [],
@@ -4871,6 +5358,36 @@
       "sarif_name": "McpMemoryServiceUnauthDocuments",
       "severity": "critical",
       "title": "mcp-memory-service < 10.67.1 (/api/documents/* served with no authentication)"
+    },
+    {
+      "adversa_references": [
+        "ADV-AGENT-02"
+      ],
+      "aicm_references": [
+        "IAM-01",
+        "IVS-04",
+        "STA-08"
+      ],
+      "auto_fixable": false,
+      "category": "supply-chain",
+      "cve_references": [
+        "CVE-2026-59971"
+      ],
+      "description": "MySQL MCP Server (`mysql-mcp-server`, PyPI) before 0.4.2 constructs `SseServerTransport` in `src/mysql_mcp_server/server.py` with neither `security_settings` nor `enable_dns_rebinding_protection` when `MCP_TRANSPORT=sse` is set, while the Starlette routes `/`, `/sse` and `/messages/` carry no authentication and the service binds `0.0.0.0` by default. A network attacker reaches `execute_sql` directly; a remote web page reaches it through DNS rebinding, relaying same-origin requests from a victim's browser to the locally bound service. Either path supplies a query that lands at `cursor.execute(query)`, giving unauthenticated read and write access to the configured database. Where the MySQL account holds FILE privileges the same access reads and writes server files and can reach code execution. The default stdio transport is not affected (CVE-2026-59971, CVSS 10.0, CWE-306 + CWE-346). Fixed in 0.4.2.",
+      "incident_references": [],
+      "limitations": "",
+      "owasp_agentic_references": [
+        "ASI04"
+      ],
+      "owasp_ast_references": [],
+      "owasp_mcp_references": [
+        "MCP07:2025"
+      ],
+      "remediation": "Upgrade `mysql-mcp-server` to >= 0.4.2 and pin it. If you must run the SSE transport, bind it to `127.0.0.1` behind an authenticating reverse proxy, enable DNS-rebinding protection, and put an inbound credential on the `/sse` and `/messages/` routes. Grant the MySQL account only the privileges the server needs \u2014 never FILE \u2014 so that a reachable `execute_sql` cannot become file read/write.",
+      "rule_id": "AAK-MCP-MYSQLMCP-CVE-2026-59971-001",
+      "sarif_name": "MysqlMcpServerUnauthSse",
+      "severity": "critical",
+      "title": "mysql-mcp-server < 0.4.2 (unauthenticated SSE transport reaches execute_sql)"
     },
     {
       "adversa_references": [
@@ -4944,9 +5461,10 @@
       "cve_references": [
         "CVE-2026-72768",
         "CVE-2026-77068",
-        "CVE-2026-77073"
+        "CVE-2026-77073",
+        "CVE-2026-85166"
       ],
-      "description": "Three MCP-surface defects in `n8n`, carried by one pin because they share a package and the highest fix version covers all of them. Before 2.32.1 the MCP Client node bypasses server-side-request-forgery protection: an authenticated user crafts a workflow whose MCP Client requests reach internal or blocked hosts and reads their responses back through the workflow (CVE-2026-72768). Before 2.33.4, and on the 2.34.x line before 2.34.1, the `@n8n/workflow-sdk` node-schema loader used for MCP node-schema loading derives a schema module path directly from the attacker-supplied node type string with no path-traversal validation, so a `global:member` user reaches code execution in the n8n main process (CVE-2026-77068). Before 2.34.1 the MCP `create_workflow_from_code` tool skips credential validation when the authentication type is an expression, letting a holder of a valid MCP Bearer API key persist unauthorized cross-project credential references (CVE-2026-77073). A project pinning `n8n` below 2.34.1, or leaving it unpinned, is exposed to at least one of these. Distinct from the earlier n8n credential-domain-bypass and OAuth two-branch-fix pins the scanner already carries; this is the highest of its three n8n floors.",
+      "description": "Three MCP-surface defects in `n8n`, carried by one pin because they share a package and the highest fix version covers all of them. Before 2.32.1 the MCP Client node bypasses server-side-request-forgery protection: an authenticated user crafts a workflow whose MCP Client requests reach internal or blocked hosts and reads their responses back through the workflow (CVE-2026-72768). Before 2.33.4, and on the 2.34.x line before 2.34.1, the `@n8n/workflow-sdk` node-schema loader used for MCP node-schema loading derives a schema module path directly from the attacker-supplied node type string with no path-traversal validation, so a `global:member` user reaches code execution in the n8n main process (CVE-2026-77068). Before 2.34.1 the MCP `create_workflow_from_code` tool skips credential validation when the authentication type is an expression, letting a holder of a valid MCP Bearer API key persist unauthorized cross-project credential references (CVE-2026-77073). Before 2.35.4, and on the 2.36.x line before 2.36.2, nodes that execute an inline sub-workflow (the Workflow Tool node) accept a credential reference in their inline workflow JSON without checking that the author owns it; MCP is one of the named write paths, so a shared-workflow editor persists a node naming somebody else's credential and the secret is resolved and exfiltrated when the workflow later runs under an identity that holds it (CVE-2026-85166). A project pinning `n8n` below 2.35.4, or on 2.36.0/2.36.1, or leaving it unpinned, is exposed to at least one of these \u2014 note that 2.36.0 and 2.36.1 sort *above* the 2.35.4 floor and are still affected, which is why this pin carries a second arm for the 2.36.x line. Distinct from the earlier n8n credential-domain-bypass and OAuth two-branch-fix pins the scanner already carries; this is the highest of its three n8n floors.",
       "incident_references": [],
       "limitations": "",
       "owasp_agentic_references": [
@@ -4958,11 +5476,11 @@
         "MCP09:2025",
         "MCP04:2025"
       ],
-      "remediation": "Upgrade `n8n` to >= 2.34.1 and pin it \u2014 that floor clears all three. Route the MCP Client node's outbound requests through n8n's SSRF protection so a workflow author cannot reach internal or blocked hosts, and segment the n8n runner from sensitive internal services. Treat `global:member` as a privileged role until you are past 2.33.4, since the node-schema loader reaches code execution from it, and audit workflows for credential references that cross project boundaries.",
+      "remediation": "Upgrade `n8n` to >= 2.35.4 and pin it, or to >= 2.36.2 if you are on the 2.36.x line \u2014 2.36.0 and 2.36.1 are newer than 2.35.4 and still affected, so \"at least 2.35.4\" is not sufficient on that branch. Route the MCP Client node's outbound requests through n8n's SSRF protection so a workflow author cannot reach internal or blocked hosts, and segment the n8n runner from sensitive internal services. Treat `global:member` as a privileged role until you are past 2.33.4, since the node-schema loader reaches code execution from it, and audit workflows for credential references that cross project boundaries \u2014 including inside the inline workflow JSON of sub-workflow nodes, which is where CVE-2026-85166 hides one.",
       "rule_id": "AAK-MCP-N8N-CVE-2026-72768-001",
       "sarif_name": "N8nMcpClientNodeSsrfBypass",
       "severity": "high",
-      "title": "n8n < 2.34.1 (MCP Client SSRF bypass, node-schema loader RCE, cross-project credential reference)"
+      "title": "n8n < 2.35.4 / 2.36.x < 2.36.2 (MCP Client SSRF bypass, node-schema loader RCE, cross-project credential reference, inline sub-workflow credential exfiltration)"
     },
     {
       "adversa_references": [
@@ -5237,6 +5755,32 @@
     },
     {
       "adversa_references": [
+        "ADV-DATA-01"
+      ],
+      "aicm_references": [],
+      "auto_fixable": false,
+      "category": "supply-chain",
+      "cve_references": [
+        "CVE-2026-85620"
+      ],
+      "description": "Postgres MCP Pro (`postgres-mcp`, PyPI) 0.3.0 applies function-name validation to plain function calls but not to `RangeFunction` nodes in FROM clauses, so `pg_read_file` and its siblings reached through FROM-clause syntax read arbitrary server-side files despite restricted (\"read-only\") mode (CVE-2026-85620, CVSS 8.6). There is no fixed release: upstream's newest tag is v0.3.0 and the security issue (crystaldba/postgres-mcp#178) is still open, so every published version of this distribution is affected. The separate PyPI name `postgres-mcp-pro` carries the product's marketing name and an identical summary but declares no repository and is not referenced by the upstream project \u2014 it is not treated here as a verified upgrade target. The unrelated npm package of the same name (a multi-database MCP server on the 1.0.x line) is not affected and does not fire.",
+      "incident_references": [],
+      "limitations": "",
+      "owasp_agentic_references": [
+        "ASI04"
+      ],
+      "owasp_ast_references": [],
+      "owasp_mcp_references": [
+        "MCP03:2025"
+      ],
+      "remediation": "There is no patched release to upgrade to. Stop relying on the server's restricted mode as a security boundary: connect it with a least-privilege PostgreSQL role that cannot execute `pg_read_file`, `pg_ls_dir` or `COPY ... FROM PROGRAM`, and enforce read-only at the database rather than in the MCP server's SQL validator.",
+      "rule_id": "AAK-MCP-POSTGRESMCP-CVE-2026-85620-001",
+      "sarif_name": "PostgresMcpRestrictedModeFromClauseBypass",
+      "severity": "high",
+      "title": "Postgres MCP Pro restricted-mode bypass via FROM-clause functions (no fixed release)"
+    },
+    {
+      "adversa_references": [
         "ADV-AUTH-01"
       ],
       "aicm_references": [
@@ -5251,7 +5795,8 @@
         "CVE-2026-48168",
         "CVE-2026-55532",
         "CVE-2026-55529",
-        "CVE-2026-55531"
+        "CVE-2026-55531",
+        "CVE-2026-57124"
       ],
       "description": "PraisonAI before 4.6.78 exposes the MCP HTTP-stream transport without authentication by default: `praisonai mcp serve --transport http-stream` defaults `--api-key` to None and only enforces Authorization/Bearer checks when a key is configured, so an unauthenticated client can initialize a session, enumerate tools (`tools/list`), and invoke them (`tools/call`); arguments are also forwarded without validating the advertised inputSchema (CVE-2026-61427, CVSS 7.3). The same pin also covers CVE-2026-47394 \u2014 an arbitrary-file-read path traversal via `workflow.show` (and the dispatcher's unvalidated `**kwargs` from `tools/call`), an incomplete prior path-handling fix that was fully closed only in 4.6.40. The same floor also covers CVE-2026-48168 (CVSS 10, fixed 4.6.40): a command injection in PraisonAI's bundled Claude GitHub Actions workflow that splices an attacker-controlled pull-request branch name into a Bash `run:` block, with any `@claude` comment able to trigger the job, so a fork PR reaches arbitrary execution in the Actions runner. The 4.6.78 floor is the highest of the three, so a project pinned below it is exposed to all of them. Default bind is 127.0.0.1, so remote reach needs a network bind. Treat < 4.6.78 (and unpinned) as exposed.",
       "incident_references": [],
@@ -5268,6 +5813,36 @@
       "sarif_name": "PraisonAiMcpNoAuthDefault",
       "severity": "high",
       "title": "PraisonAI MCP unauthenticated-default + path traversal (< 4.6.78)"
+    },
+    {
+      "adversa_references": [
+        "ADV-AGENT-02"
+      ],
+      "aicm_references": [
+        "IAM-01",
+        "IVS-04",
+        "STA-08"
+      ],
+      "auto_fixable": false,
+      "category": "supply-chain",
+      "cve_references": [
+        "CVE-2026-57139"
+      ],
+      "description": "PraisonAI's TypeScript package (`praisonai` on npm \u2014 a different project from the `praisonai` PyPI distribution, which runs a 4.6.x line and carries its own separate pin) from 1.5.0 until 1.7.2 binds `MCPServer.startHttp()` in `src/praisonai-ts/src/mcp/server.ts` with no host restriction and forwards every HTTP POST to `handleRequest()` with no authentication or authorization. Any network client that can reach the port calls `tools/list`, `tools/call`, `resources/read` or `prompts/get`, so registered handlers run with server-side credentials and process privileges, or disclose registered data (CVE-2026-57139, CVSS 9.8, CWE-306 + CWE-862 + CWE-1188). NVD describes 1.7.2 as an initial remediation, so the pin floor is 1.7.2 rather than a later release.",
+      "incident_references": [],
+      "limitations": "",
+      "owasp_agentic_references": [
+        "ASI04"
+      ],
+      "owasp_ast_references": [],
+      "owasp_mcp_references": [
+        "MCP07:2025"
+      ],
+      "remediation": "Upgrade the npm `praisonai` package to >= 1.7.2 and pin it. Bind the MCP HTTP server to `127.0.0.1` rather than every interface, and require an inbound credential on `handleRequest()` before any `tools/call` or `resources/read` dispatch. Because 1.7.2 is an initial remediation, track the upstream advisory for a follow-up release.",
+      "rule_id": "AAK-MCP-PRAISONAI-TS-CVE-2026-57139-001",
+      "sarif_name": "PraisonAiTsMcpHttpNoAuth",
+      "severity": "critical",
+      "title": "praisonai (npm, TypeScript) < 1.7.2 (MCP HTTP server binds unrestricted with no auth)"
     },
     {
       "adversa_references": [
@@ -5474,6 +6049,35 @@
         "ADV-AUTH-01"
       ],
       "aicm_references": [
+        "AIS-08",
+        "STA-08"
+      ],
+      "auto_fixable": false,
+      "category": "supply-chain",
+      "cve_references": [
+        "CVE-2026-81845"
+      ],
+      "description": "`mcp-sequential-thinking` (PyPI, arben-adm) up to and including 0.5.0 takes a `file_path` argument on the `import_session` and `export_session` tools in `mcp_sequential_thinking/server.py` and does not confine it to a session directory, so a caller reaches arbitrary paths on the host \u2014 reading files back through an import, or writing them through an export. Both are ordinary MCP tools, so the caller is whatever can drive the server, which in an agent pipeline includes anything that can steer tool selection. Fixed in 0.6.0 (patch 2fad3ee); the exploit is public. Treat <= 0.5.0 and unpinned as exposed.",
+      "incident_references": [],
+      "limitations": "",
+      "owasp_agentic_references": [
+        "ASI04"
+      ],
+      "owasp_ast_references": [],
+      "owasp_mcp_references": [
+        "MCP01:2025"
+      ],
+      "remediation": "Upgrade `mcp-sequential-thinking` to >= 0.6.0 and pin it. If you cannot upgrade yet, disable the `import_session` / `export_session` tools rather than relying on the caller to send a well-behaved path, and run the server as a user with no read access to anything outside its session directory.",
+      "rule_id": "AAK-MCP-SEQTHINKING-CVE-2026-81845-001",
+      "sarif_name": "McpSequentialThinkingSessionPathTraversal",
+      "severity": "medium",
+      "title": "mcp-sequential-thinking <= 0.5.0 (session import/export path traversal)"
+    },
+    {
+      "adversa_references": [
+        "ADV-AUTH-01"
+      ],
+      "aicm_references": [
         "IAM-01",
         "IAM-16"
       ],
@@ -5630,7 +6234,7 @@
       "auto_fixable": false,
       "category": "mcp-config",
       "cve_references": [],
-      "description": "Server or client code reads, writes, asserts, or constants the `Mcp-Session-Id` header. The MCP 2026-07-28 spec release candidate removes the `Mcp-Session-Id` header and the protocol-level session, replacing them with explicit server-minted state handles (SEP-2567); SEP-1442 / SEP-2575 make the initialization handshake optional so stateless is the default. After the final spec lands on 2026-07-28, code that depends on this header (or on the session it represented) will silently break: any MCP request can land on any server instance, and sticky routing / shared session stores at the protocol layer are no longer guaranteed.",
+      "description": "Server or client code reads, writes, asserts, or constants the `Mcp-Session-Id` header. The ratified MCP 2026-07-28 spec removes the `Mcp-Session-Id` header and the protocol-level session, replacing them with explicit server-minted state handles (SEP-2567); SEP-1442 / SEP-2575 make the initialization handshake optional so stateless is the default. After the final spec lands on 2026-07-28, code that depends on this header (or on the session it represented) will silently break: any MCP request can land on any server instance, and sticky routing / shared session stores at the protocol layer are no longer guaranteed.",
       "incident_references": [],
       "limitations": "",
       "owasp_agentic_references": [
@@ -5655,7 +6259,7 @@
       "auto_fixable": false,
       "category": "mcp-config",
       "cve_references": [],
-      "description": "Server or client code dispatches, handles, or names the `tasks/list` JSON-RPC method. The MCP 2026-07-28 spec release candidate removes `tasks/list` from the core because it cannot be scoped safely without the protocol-level session: the experimental Tasks primitive (SEP-1686) moves out of the core specification into the Extensions framework (redesigned as SEP-2663), and the stateful list surface has no stateless successor in core.",
+      "description": "Server or client code dispatches, handles, or names the `tasks/list` JSON-RPC method. The ratified MCP 2026-07-28 spec removes `tasks/list` from the core because it cannot be scoped safely without the protocol-level session: the experimental Tasks primitive (SEP-1686) moves out of the core specification into the Extensions framework (redesigned as SEP-2663), and the stateful list surface has no stateless successor in core.",
       "incident_references": [],
       "limitations": "",
       "owasp_agentic_references": [],
@@ -5854,7 +6458,7 @@
         "CVE-2026-40933",
         "CVE-2026-6980"
       ],
-      "description": "A Rust file invokes `tokio::process::Command::new(...)` or `std::process::Command::new(...)` in a module that imports `mcp_sdk` / `modelcontextprotocol` after a network-controlled source (`reqwest`, `serde_json::from_str`, `std::env::var`, `hyper::body`, `actix_web::web::Json`, `axum::extract::Json`). Same OX MCP April-2026 class. NOTE: this rule is regex-only until #22 lands tree-sitter-rust; expect ~10% false-positive rate on macro-heavy code.",
+      "description": "A Rust file invokes `tokio::process::Command::new(...)` or `std::process::Command::new(...)` in a module that imports `mcp_sdk` / `modelcontextprotocol` after a network-controlled source (`reqwest`, `serde_json::from_str`, `std::env::var`, `hyper::body`, `actix_web::web::Json`, `axum::extract::Json`). Same OX MCP April-2026 class. NOTE: this rule is regex-only, so expect ~10% false-positive rate on macro-heavy code. It is a proximity match, not Rust data-flow analysis. Issue #22 was closed on 2026-08-15 having shipped only a TypeScript slice, so there is no open work item behind this and no reason to wait for one.",
       "incident_references": [
         "OX-MCP-2026-04-25"
       ],
@@ -5873,6 +6477,32 @@
       "sarif_name": "McpStdioCommandTaintedRust",
       "severity": "critical",
       "title": "MCP STDIO command spawned from network-controlled input (Rust)"
+    },
+    {
+      "adversa_references": [],
+      "aicm_references": [],
+      "auto_fixable": false,
+      "category": "supply-chain",
+      "cve_references": [
+        "CVE-2026-90898"
+      ],
+      "description": "A Go file calls `exec.Command(...)` or `exec.CommandContext(...)` in an MCP-shaped file, after a network-controlled source in the same scope: `json.NewDecoder(r.Body)`, an `*http.Request` handler parameter, or `c.ShouldBindJSON(...)`. CVE-2026-90898 (maximhq/bifrost, CVSS 9.8) is the anchor: Bifrost registers MCP clients through a management API, a stdio client is a command plus args, and the gateway starts that program the moment the client is added, so one unauthenticated `POST /api/mcp/client` runs a program as the gateway user. Fixed in `transports/v2.1.0`. NOTE: this rule is regex and proximity, exactly like the Rust arm `AAK-MCP-STDIO-CMD-INJ-004`, and not Go data-flow analysis. It reports that a spawn sink appears in an MCP file downstream of a network-shaped source, which is not the same claim as proving the request reaches the sink. Expect false positives where a handler decodes a body and separately shells out to a constant. There is no go/ast pass behind this and none is pending.",
+      "incident_references": [],
+      "limitations": "",
+      "owasp_agentic_references": [
+        "ASI02",
+        "ASI10"
+      ],
+      "owasp_ast_references": [],
+      "owasp_mcp_references": [
+        "MCP01:2025",
+        "MCP05:2025"
+      ],
+      "remediation": "Do not build an exec argv from request-controlled values. Resolve the command against a fixed allowlist server-side, pass caller data as data rather than as argv, and require authentication on any route that registers or starts a subprocess: an unauthenticated registration endpoint that spawns is remote code execution by design, not by bug.",
+      "rule_id": "AAK-MCP-STDIO-CMD-INJ-005",
+      "sarif_name": "McpStdioCommandTaintedGo",
+      "severity": "critical",
+      "title": "MCP STDIO command spawned from network-controlled input (Go)"
     },
     {
       "adversa_references": [
@@ -5900,6 +6530,38 @@
       "sarif_name": "McpStdioLauncherInjection",
       "severity": "high",
       "title": "MCP stdio server launches a shell-style interpreter with an exec flag or interpolated args"
+    },
+    {
+      "adversa_references": [
+        "ADV-RES-01"
+      ],
+      "aicm_references": [
+        "STA-08",
+        "IVS-04",
+        "BCR-01"
+      ],
+      "auto_fixable": false,
+      "category": "supply-chain",
+      "cve_references": [
+        "CVE-2026-53937"
+      ],
+      "description": "The MCP Kotlin SDK (`io.modelcontextprotocol:kotlin-sdk`, and the `kotlin-sdk-core` / `kotlin-sdk-jvm` artifacts that publish the same code) from 0.7.0 through 0.12.0 appends every chunk received from the stdio transport into a `kotlinx.io.Buffer` with no size cap. `ReadBuffer.append` (`kotlin-sdk-core/src/commonMain/kotlin/io/modelcontextprotocol/kotlin/sdk/shared/ReadBuffer.kt`) only extracts a frame once a `\\n` (0x0a) byte is observed, so a peer that streams bytes and never sends a newline grows the buffer indefinitely until the JVM \u2014 or the host process around it \u2014 is OOM-killed. `StdioServerTransport` and `StdioClientTransport` amplify it: both queue raw chunks through a `Channel<ByteArray>(Channel.UNLIMITED)` and then call `readBuffer.append(chunk)` with neither backpressure nor a size guard. CVE-2026-53937, CVSS 6.2 MEDIUM (`AV:L/AC:L/PR:N/UI:N/S:U/C:N/I:N/A:H`), CWE-400 + CWE-770. The impact is availability only, and the attack vector is local because it arrives on stdin \u2014 but it is pre-authentication, and the reach is remote wherever an untrusted producer feeds that stdin: a host that exec's the server as a subprocess and pipes bytes from a network peer, or a sidecar proxying an HTTP endpoint onto the stdio transport. Fixed in 0.13.0. The affected range starts at 0.7.0 because that is the first release of `kotlin-sdk-core`, where the buffer lives \u2014 a module boundary, not the commit that introduced the defect.",
+      "incident_references": [
+        "NVD-CVE-2026-53937"
+      ],
+      "limitations": "Dependency-level detection on JVM manifests only \u2014 `build.gradle`, `build.gradle.kts`, `gradle/libs.versions.toml` and `pom.xml`. A finding requires a version that actually resolved into 0.7.0\u20130.12.0, so a dynamic version (`0.+`, `latest.release`) or a `version.ref` pointing at a catalog outside the scanned tree is deliberately not reported. It does not detect the unbounded-buffer shape in first-party code.",
+      "owasp_agentic_references": [
+        "ASI06"
+      ],
+      "owasp_ast_references": [],
+      "owasp_mcp_references": [
+        "MCP10:2025"
+      ],
+      "remediation": "Upgrade `io.modelcontextprotocol:kotlin-sdk` (or `kotlin-sdk-core` / `kotlin-sdk-jvm`) to >= 0.13.0 and pin it. Until then, do not let an untrusted producer write directly to an SDK stdio server's stdin: put a framing proxy in front that enforces a maximum bytes-without-newline budget and drops the peer when it is exceeded, and bound the queue between the reader and the parser rather than using `Channel.UNLIMITED`.",
+      "rule_id": "AAK-MCP-STDIO-UNBOUNDED-BUFFER-001",
+      "sarif_name": "McpKotlinSdkStdioUnboundedReadBuffer",
+      "severity": "medium",
+      "title": "MCP Kotlin SDK stdio read buffer grows without bound (CVE-2026-53937, 0.7.0\u20130.12.0)"
     },
     {
       "adversa_references": [
@@ -6043,6 +6705,58 @@
       "sarif_name": "McpToolGateAsymmetry",
       "severity": "high",
       "title": "MCP tool gate enforced in tools/list but not tools/call"
+    },
+    {
+      "adversa_references": [
+        "ADV-DOS-01"
+      ],
+      "aicm_references": [],
+      "auto_fixable": false,
+      "category": "mcp-config",
+      "cve_references": [
+        "CVE-2026-84289"
+      ],
+      "description": "An MCP client or aggregator assembles its tool catalogue from what upstream servers return, with no bound on the number of tools or the size of a schema. The size of the allocation is then chosen by whoever controls the upstream, not by this process. Distinct from an unbounded *request body*: that value arrives from the caller, this one arrives from the server being aggregated, and a body-size limit does not touch it.",
+      "incident_references": [],
+      "limitations": "Detects the absence of any bound in the same file as the catalogue builder. A cap enforced in a wrapper or by the transport layer is not seen, and a slice, a length check, a max_* constant or a break in the loop all clear the finding.",
+      "owasp_agentic_references": [
+        "ASI05"
+      ],
+      "owasp_ast_references": [],
+      "owasp_mcp_references": [
+        "MCP06:2025"
+      ],
+      "remediation": "Cap the number of tools accepted from any single upstream and reject oversized descriptions and schemas before building the catalogue.",
+      "rule_id": "AAK-MCP-TOOLS-LIST-UNBOUNDED-001",
+      "sarif_name": "McpToolsListUnbounded",
+      "severity": "medium",
+      "title": "MCP tool catalogue built from an upstream response with no cap"
+    },
+    {
+      "adversa_references": [
+        "ADV-EXEC-01"
+      ],
+      "aicm_references": [],
+      "auto_fixable": false,
+      "category": "supply-chain",
+      "cve_references": [
+        "CVE-2026-81096"
+      ],
+      "description": "ToolUniverse (`tooluniverse`, PyPI) through 1.2.6 runs caller-supplied Python inside a sandbox that can be escaped, on a server that requires no authentication (CVE-2026-81096, CVSS 10.0). The executor behind the `python_code_executor` tool inspects submitted source against a deny-list of attribute names and calls but leaves the attribute-lookup builtins available, so a dunder attribute reached through a string lookup \u2014 or through a module already permitted \u2014 lets a caller walk from a literal's class to its base and enumerate subclasses until it holds a reference to `subprocess`. A per-call argument also widens the import allow-list before the inspection runs. The HTTP and MCP servers (`http_api_server.py`, `smcp_server.py`) bind every interface with debugging enabled and no authentication, so any caller that reaches the port executes code as the server process. 1.3.0 adds bearer-token authentication, defaults the bind address to loopback, and hardens the attribute checks. Treat < 1.3.0 (and unpinned) as exposed.",
+      "incident_references": [],
+      "limitations": "Dependency-level detection only: this fires on the pinned or unpinned `tooluniverse` reference, not on the sandbox-escape pattern itself. The pattern itself is covered by `AAK-SANDBOX-DENYLIST-001`, which shipped for issue #704 and fires on a deny-list of names checked against a value that is then executed in-process with a lookup primitive still reachable.",
+      "owasp_agentic_references": [
+        "ASI04"
+      ],
+      "owasp_ast_references": [],
+      "owasp_mcp_references": [
+        "MCP01:2025"
+      ],
+      "remediation": "Upgrade `tooluniverse` to >= 1.3.0 and pin it. Do not expose the code-executor tool on a non-loopback interface, and require authentication in front of it \u2014 a deny-list over attribute names is not a sandbox boundary.",
+      "rule_id": "AAK-MCP-TOOLUNIVERSE-CVE-2026-81096-001",
+      "sarif_name": "ToolUniversePythonExecutorSandboxEscape",
+      "severity": "critical",
+      "title": "ToolUniverse unauthenticated RCE via python_code_executor sandbox escape (<= 1.2.6)"
     },
     {
       "adversa_references": [
@@ -6312,7 +7026,8 @@
       "auto_fixable": false,
       "category": "supply-chain",
       "cve_references": [
-        "CVE-2026-48039"
+        "CVE-2026-48039",
+        "CVE-2026-54549"
       ],
       "description": "`meta-ads-mcp` before 1.0.109 has `AuthInjectionMiddleware.dispatch()` unconditionally forward unauthenticated Streamable-HTTP requests to downstream MCP tool handlers without a 401, so any network-reachable caller invokes tools unauthenticated. With no per-request credential the handlers fall back to the `META_ACCESS_TOKEN` env var, and when the downstream Meta Graph API call fails the raw `httpx` request URL \u2014 including the operator's `access_token` query parameter \u2014 is serialised into the JSON-RPC response, delivering the credential to the unauthenticated caller (CVE-2026-48039, CVSS 9.1). Fixed in 1.0.109; treat < 1.0.109 (and unpinned) as exposed.",
       "incident_references": [],
@@ -6581,7 +7296,7 @@
       "auto_fixable": false,
       "category": "mcp-config",
       "cve_references": [],
-      "description": "An OAuth authorization-code client processes the authorization response / redirect callback (reads `code` and `state`, or exchanges the code at the token endpoint) but never references the `iss` parameter. The MCP 2026-07-28 spec release candidate (SEP-2468) requires clients to validate `iss` on authorization responses per RFC 9207 \u2014 without it, an attacker who controls one authorization server in MCP's single-client / many-server deployment can mount an OAuth mix-up attack and have the client redeem a code at the wrong server. This is the token-issuer-validation arm of the 2026-07-28 final MCP auth profile (scanned together with RFC 8707 resource indicators, `AAK-OAUTH-007`, and RFC 9728 Protected-Resource-Metadata discovery, `AAK-OAUTH-008`, via `--profile mcp-2026-07-28`). A later spec version will require rejecting responses that omit `iss` entirely.",
+      "description": "An OAuth authorization-code client processes the authorization response / redirect callback (reads `code` and `state`, or exchanges the code at the token endpoint) but never references the `iss` parameter. The MCP ratified 2026-07-28 spec (SEP-2468) requires clients to validate `iss` on authorization responses per RFC 9207 \u2014 without it, an attacker who controls one authorization server in MCP's single-client / many-server deployment can mount an OAuth mix-up attack and have the client redeem a code at the wrong server. This is the token-issuer-validation arm of the 2026-07-28 final MCP auth profile (scanned together with RFC 8707 resource indicators, `AAK-OAUTH-007`, and RFC 9728 Protected-Resource-Metadata discovery, `AAK-OAUTH-008`, via `--profile mcp-2026-07-28`). A later spec version will require rejecting responses that omit `iss` entirely.",
       "incident_references": [],
       "limitations": "",
       "owasp_agentic_references": [
@@ -7085,8 +7800,10 @@
       "auto_fixable": false,
       "category": "tool-poisoning",
       "cve_references": [],
-      "description": "A tool's definition (name, description, or input schema) has changed since it was last pinned. This could indicate a rug pull attack.",
-      "incident_references": [],
+      "description": "A tool's definition (name, description, or input schema) has changed since it was last pinned. This could indicate a rug pull attack. The Deadbugz campaign (September 2026) is the shape this is for: an MCP server shipped two innocuous tools, behaved for exactly three tool calls, then rewrote the metadata it returned into instructions to hunt SSH keys, AWS credentials, shell history and kubeconfig. Metadata that only turns hostile at runtime defeats review by construction, because every check you run before approving the server passes. A pin taken at approval and re-verified afterwards is what closes that window, and this rule is that comparison.",
+      "incident_references": [
+        "DEADBUGZ-2026-09"
+      ],
       "limitations": "",
       "owasp_agentic_references": [
         "ASI06"
@@ -7095,7 +7812,7 @@
       "owasp_mcp_references": [
         "MCP05:2025"
       ],
-      "remediation": "Review the changes. If legitimate, re-pin with 'agent-audit-kit pin'. If suspicious, remove the server.",
+      "remediation": "Review the changes. If legitimate, re-pin with 'agent-audit-kit pin'. If suspicious, remove the server. Re-run 'agent-audit-kit verify' on a schedule rather than only at install time: a campaign that waits N calls before mutating is invisible to a one-off check at approval.",
       "rule_id": "AAK-RUGPULL-001",
       "sarif_name": "ToolDefinitionChanged",
       "severity": "critical",
@@ -7109,8 +7826,10 @@
       "auto_fixable": false,
       "category": "tool-poisoning",
       "cve_references": [],
-      "description": "A new tool was added to an MCP server since the last pin. New tools should be reviewed before approval.",
-      "incident_references": [],
+      "description": "A new tool was added to an MCP server since the last pin. New tools should be reviewed before approval. The Deadbugz campaign (September 2026) added capability after approval rather than at install time, which is why the comparison has to run again after the server is already trusted.",
+      "incident_references": [
+        "DEADBUGZ-2026-09"
+      ],
       "limitations": "",
       "owasp_agentic_references": [
         "ASI06"
@@ -7148,6 +7867,33 @@
       "sarif_name": "ToolRemovedSincePin",
       "severity": "medium",
       "title": "Tool removed since last pin"
+    },
+    {
+      "adversa_references": [
+        "ADV-EXEC-01"
+      ],
+      "aicm_references": [],
+      "auto_fixable": false,
+      "category": "trust-boundary",
+      "cve_references": [
+        "CVE-2026-81096",
+        "CVE-2026-53710"
+      ],
+      "description": "Caller-supplied Python is inspected against a deny-list of attribute and builtin *names* held as strings, then executed in-process \u2014 while `getattr`, `__getattribute__`, `vars` or `globals` remain reachable. A deny-list over names is not a boundary when the name can be reached through a lookup: a caller walks `literal.__class__.__base__.__subclasses__()` to a reference the list never mentioned, and arrives at `subprocess` without typing any denied token. ToolUniverse's `python_code_executor` is the exemplar (CVE-2026-81096, CVSS 10.0, unauthenticated); RestrictedPython's `getattr` bypass in mcp-context-forge (CVE-2026-53710) is the same defect in a different product, which is what makes it a class. A deny-list that also denies the lookup primitives is merely fragile; one that leaves them reachable is bypassable by construction, and that is what this rule reports.",
+      "incident_references": [],
+      "limitations": "Python only, and requires all four signals together \u2014 a deny-list of names, checked against a value, an in-process exec of that value, and a still-reachable lookup primitive. An executor that isolates in a subprocess never matches, by design: the submitted source is not run here.",
+      "owasp_agentic_references": [
+        "ASI04"
+      ],
+      "owasp_ast_references": [],
+      "owasp_mcp_references": [
+        "MCP01:2025"
+      ],
+      "remediation": "Do not gate execution on a list of forbidden names. Run untrusted code in a separate process with an OS-level boundary \u2014 a container, a seccomp profile, or at minimum a subprocess with dropped privileges and no network \u2014 and treat the in-process namespace as reachable in full. If in-process execution is unavoidable, invert to an allow-list of permitted builtins and deny the attribute-lookup primitives with it; and never let a per-call argument widen the permitted set before the inspection runs, which is the second half of CVE-2026-81096.",
+      "rule_id": "AAK-SANDBOX-DENYLIST-001",
+      "sarif_name": "DenylistSandboxLookupReachable",
+      "severity": "critical",
+      "title": "Deny-list of names used as a Python sandbox boundary, with the lookup builtins still reachable"
     },
     {
       "adversa_references": [],
@@ -7629,6 +8375,30 @@
     },
     {
       "adversa_references": [],
+      "aicm_references": [],
+      "auto_fixable": false,
+      "category": "tool-poisoning",
+      "cve_references": [],
+      "description": "A `SKILL.md` body carries an HTML comment whose text reads as an instruction rather than a note: an injection trigger, or a local-secret reference paired with an outbound destination. The comment is invisible in every rendered view a human reviews -- GitHub, an editor preview, a skill marketplace listing -- and fully visible to the model, which is handed the raw file. That gap between what the reviewer reads and what the agent reads is the whole attack. `AAK-AGENT-005` has flagged this shape in named agent instruction files (AGENTS.md, CLAUDE.md, `.cursorrules`) since v0.2; skills were not on that list, so the same payload in a `SKILL.md` body was unreported (issue #742). `AAK-SKILL-005` reads only the frontmatter and `AAK-SKILL-003` wants a code-level sink (`curl`, `fetch`), so a plain-English exfiltration instruction in a body comment fell between them.",
+      "incident_references": [],
+      "limitations": "",
+      "owasp_agentic_references": [
+        "ASI01"
+      ],
+      "owasp_ast_references": [
+        "AST01"
+      ],
+      "owasp_mcp_references": [
+        "MCP05:2025"
+      ],
+      "remediation": "Delete the comment. A skill body is model-visible input: anything that must not reach the model must not be in the file, and anything a reviewer needs to read belongs in visible prose. Review skills as raw text rather than rendered markdown.",
+      "rule_id": "AAK-SKILL-006",
+      "sarif_name": "SkillHiddenInstruction",
+      "severity": "high",
+      "title": "SKILL.md body hides an instruction in an HTML comment"
+    },
+    {
+      "adversa_references": [],
       "aicm_references": [
         "LOG-06",
         "AIS-12"
@@ -7870,6 +8640,35 @@
       "sarif_name": "SsrfNoAllowlist",
       "severity": "high",
       "title": "Missing SSRF allowlist on outbound fetch"
+    },
+    {
+      "adversa_references": [
+        "ADV-SSRF-01"
+      ],
+      "aicm_references": [
+        "IVS-04",
+        "AIS-08"
+      ],
+      "auto_fixable": false,
+      "category": "transport-security",
+      "cve_references": [
+        "CVE-2026-80347"
+      ],
+      "description": "A URL allow-list reads `.hostname` from a parsed URL and passes it to an IP-classification call, without removing the brackets WHATWG keeps around an IPv6 literal. `net.isIP(\"[::1]\")` returns 0, so the branch holding the private-address checks never runs and the guard falls through to its default-allow tail. A caller asking for `http://[::1]/` reaches loopback through a check written to stop exactly that. The guard being present is why the missing-allow-list rules stay silent on it.",
+      "incident_references": [],
+      "limitations": "JS/TS only. Python's urlsplit().hostname already strips the brackets, so the same code shape is not vulnerable there and is deliberately not flagged. Reads one file at a time, so a guard whose bracket handling lives in an imported helper is not seen.",
+      "owasp_agentic_references": [
+        "ASI06"
+      ],
+      "owasp_ast_references": [],
+      "owasp_mcp_references": [
+        "MCP09:2025"
+      ],
+      "remediation": "Strip the surrounding brackets before classifying the host, and make the guard default to deny rather than allow when classification fails.",
+      "rule_id": "AAK-SSRF-BRACKETED-HOST-001",
+      "sarif_name": "SsrfBracketedHostBypass",
+      "severity": "high",
+      "title": "SSRF guard classifies an IPv6 hostname it never unbracketed"
     },
     {
       "adversa_references": [
@@ -8161,8 +8960,10 @@
       ],
       "auto_fixable": false,
       "category": "taint-analysis",
-      "cve_references": [],
-      "description": "A @tool function parameter is passed to os.system(), subprocess, or similar shell execution functions without sanitization.",
+      "cve_references": [
+        "CVE-2026-90617"
+      ],
+      "description": "A @tool function parameter is passed to os.system(), os.popen(), a blocking subprocess call, subprocess.getoutput() or asyncio.create_subprocess_shell() without sanitization. CVE-2026-90617 (GH05TCREW PentestAgent) is the 2026 exemplar: the `run_task` MCP tool hands its caller-supplied task string to `asyncio.create_subprocess_shell` through LocalRuntime, reachable remotely because the same server binds 0.0.0.0 with no credential (that half is AAK-MCP-HTTP-NOAUTH-SERVER-001).",
       "incident_references": [],
       "limitations": "",
       "owasp_agentic_references": [
@@ -8522,7 +9323,7 @@
       "auto_fixable": false,
       "category": "transport-security",
       "cve_references": [],
-      "description": "An MCP server URL uses HTTP instead of HTTPS, exposing all traffic including credentials to interception.",
+      "description": "An MCP server URL uses a cleartext scheme, exposing all traffic including credentials to interception. **Applies to: `http://` and `ws://`.** A `ws://` handshake is an unencrypted HTTP upgrade, so it is the same defect and not a milder one -- the handshake headers and every frame after them are on the wire in clear. **Does not apply to: `https://`, `wss://` (encrypted), or `stdio` (no URL, no network hop).** Loopback URLs (`localhost`, `127.0.0.1`, `0.0.0.0`, `::1`) are excluded on either scheme, since the traffic does not leave the host.",
       "incident_references": [],
       "limitations": "",
       "owasp_agentic_references": [
@@ -8532,11 +9333,11 @@
       "owasp_mcp_references": [
         "MCP07:2025"
       ],
-      "remediation": "Use HTTPS for all remote MCP server connections.",
+      "remediation": "Use `https://` for remote HTTP/SSE/Streamable-HTTP servers and `wss://` for remote WebSocket servers.",
       "rule_id": "AAK-TRANSPORT-001",
       "sarif_name": "McpHttpNotHttps",
       "severity": "critical",
-      "title": "MCP server uses HTTP instead of HTTPS"
+      "title": "MCP server uses a cleartext transport (http:// or ws://)"
     },
     {
       "adversa_references": [
@@ -8548,7 +9349,7 @@
       "auto_fixable": false,
       "category": "transport-security",
       "cve_references": [],
-      "description": "TLS certificate validation is disabled via NODE_TLS_REJECT_UNAUTHORIZED=0 or similar, enabling MITM attacks.",
+      "description": "TLS certificate validation is disabled via NODE_TLS_REJECT_UNAUTHORIZED=0 or similar, enabling MITM attacks. **Applies to: every TLS-bearing transport -- `https://`, `wss://`, and TLS-wrapped SSE/Streamable HTTP.** The setting is read from the server's `env` block rather than its URL, so it is transport-independent: it disables peer verification for whatever the process connects to. **Does not apply to: `stdio`** (no TLS peer to verify).",
       "incident_references": [],
       "limitations": "",
       "owasp_agentic_references": [
@@ -8574,7 +9375,7 @@
       "auto_fixable": false,
       "category": "transport-security",
       "cve_references": [],
-      "description": "An MCP server uses deprecated Server-Sent Events (SSE) transport instead of Streamable HTTP.",
+      "description": "An MCP server uses deprecated Server-Sent Events (SSE) transport instead of Streamable HTTP. **Applies to: `sse` only** -- matched from an explicit `\"transport\": \"sse\"` or a `/sse` path in the URL. **Does not apply to: `stdio`, `http`/`streamable-http`, or `ws`/`wss`.** WebSocket is a different transport, not a deprecated one: it is outside this rule rather than silently passing it.",
       "incident_references": [],
       "limitations": "",
       "owasp_agentic_references": [
@@ -8600,7 +9401,7 @@
       "auto_fixable": false,
       "category": "transport-security",
       "cve_references": [],
-      "description": "A session token or API key is passed as a URL query parameter, risking exposure in logs and referrer headers.",
+      "description": "A session token or API key is passed as a URL query parameter, risking exposure in logs and referrer headers. **Applies to: every URL-bearing transport -- `http`/`https`, `ws`/`wss`, and SSE/Streamable HTTP**, including loopback URLs, since the exposure is the URL being written down (proxy logs, shell history, referrer headers) rather than the hop being observed. A WebSocket handshake URL is logged by the same intermediaries as any other request line. **Does not apply to: `stdio`** (no URL).",
       "incident_references": [],
       "limitations": "",
       "owasp_agentic_references": [

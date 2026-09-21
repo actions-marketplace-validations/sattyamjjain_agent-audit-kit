@@ -4,19 +4,19 @@ build-backend = "hatchling.build"
 
 [project]
 name = "agent-audit-kit"
-version = "0.3.91"
+version = "0.6.7"
 description = "Security scanner for MCP-connected AI agent pipelines"
 readme = "README.md"
-license = {text = "MIT"}
+license = "Apache-2.0"
 requires-python = ">=3.9"
 authors = [
     {name = "AgentAuditKit Contributors"}
 ]
 keywords = ["mcp", "security", "scanner", "ai-agents", "claude-code"]
 classifiers = [
-    "Development Status :: 3 - Alpha",
+    "Development Status :: 4 - Beta",
     "Intended Audience :: Developers",
-    "License :: OSI Approved :: MIT License",
+    "License :: OSI Approved :: Apache Software License",
     "Programming Language :: Python :: 3",
     "Programming Language :: Python :: 3.9",
     "Programming Language :: Python :: 3.10",
@@ -72,9 +72,15 @@ aak = "agent_audit_kit.cli:cli"
 Homepage = "https://github.com/sattyamjjain/agent-audit-kit"
 Repository = "https://github.com/sattyamjjain/agent-audit-kit"
 Issues = "https://github.com/sattyamjjain/agent-audit-kit/issues"
+Documentation = "https://sattyamjjain.github.io/agent-audit-kit/"
+Changelog = "https://github.com/sattyamjjain/agent-audit-kit/blob/main/CHANGELOG.md"
 
 [tool.hatch.build.targets.wheel]
 packages = ["agent_audit_kit"]
+# Nested CLAUDE.md files (agent_audit_kit/scanners/CLAUDE.md) are Claude Code
+# memory for contributors, not package data. Hatch ships every non-ignored file
+# under the package directory, so without this they would land in the wheel.
+exclude = ["**/CLAUDE.md"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

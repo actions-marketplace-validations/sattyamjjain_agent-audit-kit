@@ -114,6 +114,12 @@ def _scan_mcp_configs_for_supply_chain(project_root: Path) -> list[Finding]:
             command = server_cfg.get("command", "")
             args = server_cfg.get("args", [])
 
+            # `command` is a string per the MCP schema, but a malformed config
+            # can make it a list and `.strip()` then raises (issue #743). The
+            # wrong type is reported by AAK-MCP-CONFIG-MALFORMED-001; there is
+            # no package fetcher to identify here, so skip it.
+            if not isinstance(command, str):
+                continue
             if not command or command.strip().split()[0] not in PACKAGE_FETCHERS:
                 continue
 
@@ -1323,7 +1329,7 @@ def _check_chatgpt_mcp_pin(project_root: Path, scanned_files: set[str]) -> list[
 #      reject `transport=stdio` overrides post-handshake).
 #
 # Architectural class is already covered by AAK-MCP-STDIO-CMD-INJ-001/
-# 002/003/004 + AAK-STDIO-001 (ships in v0.3.6, see _OX_MCP_STDIO_CVES);
+# 002/003/004 + AAK-STDIO-001 (shipped in v0.3.6, see _OX_MCP_STDIO_CVES);
 # this rule adds the product-named pin row consumers expect when
 # grepping CHANGELOG.cves.md for "DocsGPT".
 # Closes the OX MCP 2026-05-01 batch carry-list item from v0.3.12.

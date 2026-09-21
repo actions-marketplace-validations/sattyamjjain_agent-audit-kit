@@ -37,14 +37,55 @@ def test_readme_pins_match_pyproject_version() -> None:
         )
 
 
-def test_description_string_includes_version_and_rule_count() -> None:
+def test_description_string_carries_every_derived_count() -> None:
+    """The canonical description states counts that are all substituted from code.
+
+    It used to assert the version and the literal "AgentAuditKit" too. Both were
+    properties of a *second*, competing description string that this module
+    composed itself — see the next test. The canonical one, the template in
+    `.github/repo-metadata.yml` that the release gate actually enforces and that
+    github.com actually serves, carries no version, so asserting one only pinned
+    the wrong string in place.
+    """
+    from agent_audit_kit.models import Category
+    from agent_audit_kit.output import pdf_report
+
     module = _load_module()
     desc = module._description_string()
-    version = module._read_version()
-    rule_count = module._read_rule_count()
-    assert version in desc
-    assert str(rule_count) in desc
-    assert "AgentAuditKit" in desc
+    assert str(module._read_rule_count()) in desc
+    assert str(len(list(Category))) in desc
+    assert str(len(pdf_report._FRAMEWORK_TITLES)) in desc
+    assert "MCP" in desc
+
+
+def test_the_writer_and_the_checker_agree_on_the_description() -> None:
+    """One canonical string, or the automation fights its own gate.
+
+    `sync-repo-metadata.yml` WRITES `sync_repo_metadata._description_string()`.
+    `description-liveness` in release.yml CHECKS against
+    `render_repo_metadata.render()`. Until 2026-09-01 those produced different
+    text, so a successful write would have set a description the very next
+    release rejected. It never surfaced only because the write step has never
+    run — it needs a METADATA_SYNC_TOKEN that does not exist. Two latent bugs
+    cancelling out is not the same as either one being fixed, and the day a
+    token is added is the day they stop cancelling.
+    """
+    import importlib.util
+    import sys as _sys
+
+    spec = importlib.util.spec_from_file_location(
+        "render_repo_metadata", REPO_ROOT / "scripts" / "render_repo_metadata.py"
+    )
+    assert spec is not None and spec.loader is not None
+    render_mod = importlib.util.module_from_spec(spec)
+    _sys.modules["render_repo_metadata"] = render_mod
+    spec.loader.exec_module(render_mod)
+
+    module = _load_module()
+    assert module._description_string() == render_mod.render(), (
+        "the description that gets written and the one that gets checked have "
+        "drifted apart again"
+    )
 
 
 def test_check_mode_passes_on_clean_tree() -> None:
@@ -258,3 +299,49 @@ def test_frozen_docs_are_excluded_from_the_version_rewrite() -> None:
     selected = {p.as_posix() for p in _iter_docs()}
     assert not any("docs/launch/" in p for p in selected)
     assert not any("docs/presets/" in p for p in selected)
+
+
+# ---------------------------------------------------------------------------
+# The scripts must run in a job that has not installed the package
+# ---------------------------------------------------------------------------
+
+
+def test_render_runs_without_the_package_installed() -> None:
+    """`python scripts/x.py` puts *scripts/* on sys.path, not the repo root.
+
+    So `from agent_audit_kit import RULE_COUNT` fails in any CI job that has not
+    pip-installed the package — which is most of them. release.yml works around it
+    with `PYTHONPATH=.` and a comment saying the omission "is why a stale
+    description survived three release cycles undetected". sync-repo-metadata.yml
+    had no such workaround, so the moment `sync_repo_metadata --description`
+    started delegating to this module (2026-09-01) that job began dying with
+    ModuleNotFoundError — it failed the v0.3.91 release run.
+
+    The subprocess drops exactly one entry — the repo root, which is how an
+    editable install makes the package importable — and keeps site-packages, so
+    the package's own dependencies still resolve. `python -S` was the first
+    attempt and was wrong: it removes every third-party package too, so the test
+    passed locally and failed in CI for a reason that had nothing to do with what
+    it was checking.
+    """
+    import subprocess
+    import sys as _sys
+
+    driver = (
+        "import runpy, sys;"
+        "root = sys.argv.pop(1);"
+        "sys.path[:] = [p for p in sys.path if p and p.rstrip('/') != root];"
+        "runpy.run_path(sys.argv.pop(1), run_name='__main__')"
+    )
+    for script, extra in (
+        ("scripts/render_repo_metadata.py", []),
+        ("scripts/sync_repo_metadata.py", ["--description"]),
+    ):
+        out = subprocess.run(
+            [_sys.executable, "-c", driver, str(REPO_ROOT), script, *extra],
+            cwd=REPO_ROOT, capture_output=True, text=True, timeout=60,
+        )
+        assert out.returncode == 0, (
+            f"{script} failed with the repo root off sys.path:\n{out.stderr}"
+        )
+        assert "rules across" in out.stdout, out.stdout

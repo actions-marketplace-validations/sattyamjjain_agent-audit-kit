@@ -1,10 +1,14 @@
 {
   "_comment": "count = scanner modules the engine registers and runs. unregistered_shims are back-compat re-exports kept so old import paths resolve; they run no detection of their own. count + len(unregistered_shims) == non-private *.py files in agent_audit_kit/scanners/, asserted by scripts/check_counts.py.",
-  "count": 95,
+  "count": 103,
   "scanners": [
     {
       "module": "a2a_protocol",
       "name": "A2A protocol"
+    },
+    {
+      "module": "admt_documentation",
+      "name": "Colorado SB 26-189 ADMT developer documentation"
     },
     {
       "module": "agent_config",
@@ -23,6 +27,10 @@
       "name": "OWASP Agentic Skills Top 10 (AAK-AST02/04/10)"
     },
     {
+      "module": "approval_parser_desync",
+      "name": "Command-safety parser vs PowerShell stop-parsing token (CVE-2026-19591)"
+    },
+    {
       "module": "argv_toctou",
       "name": "Argv rebuilt after allowlist approval before spawn (CVE-2026-53822)"
     },
@@ -39,6 +47,10 @@
       "name": "DeepSeek V4 MoE-routed tool injection"
     },
     {
+      "module": "denylist_sandbox",
+      "name": "Deny-list used as a Python sandbox boundary (CVE-2026-81096)"
+    },
+    {
       "module": "dns_rebind",
       "name": "MCP SDK DNS-rebinding (CVE-2025-66414/66416, CVE-2026-35568/35577)"
     },
@@ -49,6 +61,10 @@
     {
       "module": "eu_ai_act_art15_locale",
       "name": "EU AI Act Art. 15 multilingual-eval coverage (advisory)"
+    },
+    {
+      "module": "eu_ai_act_art50",
+      "name": "EU AI Act Art. 50 transparency (in force 2026-08-02)"
     },
     {
       "module": "gha_hardening",
@@ -81,6 +97,10 @@
     {
       "module": "ipi_wild_corpus",
       "name": "Wild IPI payload corpus (2026-04-24)"
+    },
+    {
+      "module": "jvm_mcp_sdk_pins",
+      "name": "JVM MCP SDK pins in Gradle / Maven manifests (CVE-2026-53937)"
     },
     {
       "module": "langchain_prompt_loader",
@@ -141,6 +161,10 @@
     {
       "module": "mcp_deprecated_features",
       "name": "MCP 2026-07-28 deprecated features roots/sampling/logging (SEP-2577/2596)"
+    },
+    {
+      "module": "mcp_destination_guard",
+      "name": "MCP-configured destination unguarded: absence or guard-application asymmetry (CVE-2026-86122 / CVE-2026-85666)"
     },
     {
       "module": "mcp_env_placeholder_exfil",
@@ -221,6 +245,10 @@
     {
       "module": "mcp_toolgate_asymmetry",
       "name": "MCP tool-gate list-vs-call enforcement asymmetry (CVE-2026-46519)"
+    },
+    {
+      "module": "mcp_tools_list_unbounded",
+      "name": "MCP tool catalogue built from an unbounded upstream response (CVE-2026-84289)"
     },
     {
       "module": "mcp_transport_session_unauth",
@@ -321,6 +349,10 @@
     {
       "module": "splunk_mcp_config",
       "name": "splunk-mcp-server config-side token-leak (CVE-2026-20205)"
+    },
+    {
+      "module": "ssrf_bracketed_host",
+      "name": "SSRF guard classifies a bracketed IPv6 hostname (CVE-2026-80347)"
     },
     {
       "module": "ssrf_patterns",

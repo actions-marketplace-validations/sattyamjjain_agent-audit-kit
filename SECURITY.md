@@ -4,10 +4,31 @@
 
 If you discover a security vulnerability in AgentAuditKit, please report it responsibly. **Do not open a public GitHub issue.**
 
-### Preferred Channels
+### Preferred Channel
 
-1. **Email:** [security@agentauditkit.io](mailto:security@agentauditkit.io)
-2. **GitHub Security Advisories:** [Report a vulnerability](https://github.com/sattyamjjain/agent-audit-kit/security/advisories/new)
+**GitHub Security Advisories** — [report a vulnerability privately](https://github.com/sattyamjjain/agent-audit-kit/security/advisories/new).
+
+This is the only channel that works today, and it is the one to use. Private
+vulnerability reporting is enabled on this repository, so the form is open to
+anyone with a GitHub account; the report stays private to you and the maintainer
+until an advisory is published.
+
+> **`security@agentauditkit.io` does not receive mail.** It was listed here as a
+> contact, but `agentauditkit.io` has never been registered — it returns NXDOMAIN,
+> with no MX record — so anything sent there bounced silently.
+>
+> As of v0.3.97 it is no longer offered as a route anywhere in this repository.
+> `CODE_OF_CONDUCT.md` now names a working conduct contact, and the only places
+> the string survives are the changelog history and the `mailto:`/domain
+> exclusion in `.github/workflows/link-check.yml` that keeps that history from
+> failing a link check. Those are deliberate: rewriting changelog entries to hide
+> a past mistake would be worse than the mistake.
+>
+> This paragraph is the one remaining live mention, and it exists so a reader who
+> greps the changelog, finds the address, and comes looking learns it is dead from
+> the security policy rather than from a bounce message. Nothing here is waiting
+> on a domain registration; the GitHub Security Advisories link above is the
+> channel.
 
 ### What to Include
 
@@ -39,7 +60,7 @@ project for it — run your own review in parallel.
 
 | Version | Supported |
 |---------|-----------|
-| Latest release (0.3.x) | Yes |
+| Latest release (0.6.x) | Yes |
 | Older releases | No |
 
 Only the latest release receives security updates. We recommend always running the most recent version.

@@ -6,7 +6,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Callable
 
-from agent_audit_kit.models import Category, Finding, ScanResult, Severity
+from agent_audit_kit.models import Category, Finding, ScanResult, Severity, SCANNER_FAIL_RULE_ID
 from agent_audit_kit.rules.builtin import all_rule_ids, get_rule
 
 
@@ -52,6 +52,8 @@ _OPTIONAL_SCANNERS: list[tuple[str, str, list[str]]] = [
     ("india_pii", "India PII", []),
     ("healthcare_ai", "Healthcare AI legal triggers", []),
     ("state_privacy", "US state consumer privacy", []),
+    ("admt_documentation", "Colorado SB 26-189 ADMT developer documentation", []),
+    ("eu_ai_act_art50", "EU AI Act Art. 50 transparency (in force 2026-08-02)", []),
     ("stdio_injection", "Ox MCP STDIO command-injection", []),
     ("neo4j_cve", "mcp-neo4j-cypher CVE-2026-35402", []),
     ("log_injection", "MCP tool log-injection (CVE-2026-6494)", []),
@@ -64,6 +66,11 @@ _OPTIONAL_SCANNERS: list[tuple[str, str, list[str]]] = [
     ("log_token_leak", "Token-shaped values in log sinks (CVE-2026-20205)", []),
     ("ssrf_redirect", "SSRF: validate-then-fetch with redirects (CVE-2026-41481)", []),
     ("ssrf_toctou", "SSRF: validate-then-fetch DNS-rebind / TOCTOU (CVE-2026-41488)", []),
+    ("mcp_destination_guard",
+     "MCP-configured destination unguarded: absence or guard-application asymmetry "
+     "(CVE-2026-86122 / CVE-2026-85666)", []),
+    ("denylist_sandbox", "Deny-list used as a Python sandbox boundary (CVE-2026-81096)", []),
+    ("jvm_mcp_sdk_pins", "JVM MCP SDK pins in Gradle / Maven manifests (CVE-2026-53937)", []),
     ("toxic_flow", "Toxic-flow source/sink pair scoring", []),
     ("mcp_stdio_params", "MCP StdioServerParameters config-to-spawn taint (OX-MCP-2026-04-25)", []),
     ("mcp_marketplace_fetch", "MCP marketplace-fetch → StdioServerParameters", []),
@@ -100,6 +107,9 @@ _OPTIONAL_SCANNERS: list[tuple[str, str, list[str]]] = [
     ("mcp_env_placeholder_exfil", "MCP ${VAR} env-placeholder secret exfiltration (CVE-2026-32625)", []),
     ("mcp_http_noauth_server", "Unauthenticated MCP HTTP/SSE server on 0.0.0.0 / wildcard CORS", []),
     ("mcp_transport_session_unauth", "MCP HTTP transport on every interface with no caller credential (CVE-2026-82456)", []),
+    ("ssrf_bracketed_host", "SSRF guard classifies a bracketed IPv6 hostname (CVE-2026-80347)", []),
+    ("mcp_tools_list_unbounded", "MCP tool catalogue built from an unbounded upstream response (CVE-2026-84289)", []),
+    ("approval_parser_desync", "Command-safety parser vs PowerShell stop-parsing token (CVE-2026-19591)", []),
     ("ufo_mobile_mcp", "Microsoft UFO mobile MCP servers unauthenticated on 8020/8021 (CVE-2026-73296)", []),
     ("policy_truncation", "Deny policy evaluated on a truncated copy of the executed value (CVE-2026-73614 class)", []),
     ("mcp_sidecar_http", "MCP server binds an unauthenticated sidecar dashboard on loopback (2026-08 wave)", []),
@@ -266,7 +276,7 @@ def run_scan(
 
     kept: list[Finding] = []
     for finding in all_findings:
-        if finding.rule_id not in active_rules and finding.rule_id != "AAK-INTERNAL-SCANNER-FAIL":
+        if finding.rule_id not in active_rules and finding.rule_id != SCANNER_FAIL_RULE_ID:
             continue
         if _is_ignored(finding.file_path or ""):
             continue

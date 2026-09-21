@@ -304,6 +304,50 @@
       "title": "A2A schema confusion between major versions"
     },
     {
+      "category": "legal-compliance",
+      "cve_references": [],
+      "eu_ai_act": [],
+      "nsa_mcp_csi": [],
+      "owasp_agentic": [],
+      "owasp_mcp": [],
+      "rule_id": "AAK-ADMT-001",
+      "severity": "medium",
+      "title": "No developer documentation for a declared covered-domain decision surface"
+    },
+    {
+      "category": "legal-compliance",
+      "cve_references": [],
+      "eu_ai_act": [],
+      "nsa_mcp_csi": [],
+      "owasp_agentic": [],
+      "owasp_mcp": [],
+      "rule_id": "AAK-ADMT-002",
+      "severity": "medium",
+      "title": "Developer documentation does not name the categories of training data"
+    },
+    {
+      "category": "legal-compliance",
+      "cve_references": [],
+      "eu_ai_act": [],
+      "nsa_mcp_csi": [],
+      "owasp_agentic": [],
+      "owasp_mcp": [],
+      "rule_id": "AAK-ADMT-003",
+      "severity": "medium",
+      "title": "Developer documentation names no known limitations"
+    },
+    {
+      "category": "legal-compliance",
+      "cve_references": [],
+      "eu_ai_act": [],
+      "nsa_mcp_csi": [],
+      "owasp_agentic": [],
+      "owasp_mcp": [],
+      "rule_id": "AAK-ADMT-004",
+      "severity": "medium",
+      "title": "Developer documentation gives no human-review instruction"
+    },
+    {
       "category": "agent-config",
       "cve_references": [],
       "eu_ai_act": [
@@ -609,6 +653,39 @@
       "title": "Agent Zero 0.9.8 MCP-config RCE (CVE-2026-30624, git-only pin)"
     },
     {
+      "category": "legal-compliance",
+      "cve_references": [],
+      "eu_ai_act": [],
+      "nsa_mcp_csi": [],
+      "owasp_agentic": [],
+      "owasp_mcp": [],
+      "rule_id": "AAK-AIACT50-001",
+      "severity": "medium",
+      "title": "Conversational agent surface with no AI-disclosure to the user"
+    },
+    {
+      "category": "legal-compliance",
+      "cve_references": [],
+      "eu_ai_act": [],
+      "nsa_mcp_csi": [],
+      "owasp_agentic": [],
+      "owasp_mcp": [],
+      "rule_id": "AAK-AIACT50-002",
+      "severity": "medium",
+      "title": "Synthetic media generation with no machine-readable provenance marking"
+    },
+    {
+      "category": "legal-compliance",
+      "cve_references": [],
+      "eu_ai_act": [],
+      "nsa_mcp_csi": [],
+      "owasp_agentic": [],
+      "owasp_mcp": [],
+      "rule_id": "AAK-AIACT50-003",
+      "severity": "medium",
+      "title": "Deep-fake or public-interest text generation with no artificiality disclosure"
+    },
+    {
       "category": "supply-chain",
       "cve_references": [],
       "eu_ai_act": [
@@ -631,6 +708,29 @@
       "rule_id": "AAK-ANTHROPIC-SDK-001",
       "severity": "high",
       "title": "MCP server built on the upstream SDK without STDIO sanitizer"
+    },
+    {
+      "category": "trust-boundary",
+      "cve_references": [
+        "CVE-2026-19591"
+      ],
+      "eu_ai_act": [
+        "Art. 9 - Risk Management"
+      ],
+      "nsa_mcp_csi": [
+        "Design for boundaries (p.10)",
+        "Validate parameters (p.11)",
+        "Constrain and sandbox tool execution (p.11)"
+      ],
+      "owasp_agentic": [
+        "ASI02 Tool Misuse"
+      ],
+      "owasp_mcp": [
+        "MCP01:2025 Token & Credential Mismanagement"
+      ],
+      "rule_id": "AAK-APPROVAL-PARSER-DESYNC-001",
+      "severity": "high",
+      "title": "Command-safety parser and the executing shell disagree about a token"
     },
     {
       "category": "agentic-skill",
@@ -1062,7 +1162,8 @@
         "CVE-2025-66414",
         "CVE-2025-66416",
         "CVE-2026-35568",
-        "CVE-2026-35577"
+        "CVE-2026-35577",
+        "CVE-2026-81102"
       ],
       "eu_ai_act": [
         "Art. 10 - Data Governance",
@@ -3034,6 +3135,8 @@
     {
       "category": "supply-chain",
       "cve_references": [
+        "CVE-2026-73496",
+        "CVE-2026-73497",
         "CVE-2026-73498"
       ],
       "eu_ai_act": [
@@ -3147,6 +3250,57 @@
       "rule_id": "AAK-MCP-AWSAPIMCP-CVE-2026-16584-001",
       "severity": "high",
       "title": "AWS API MCP Server security-policy bypass on init failure (0.2.13\u2013<1.3.47)"
+    },
+    {
+      "category": "supply-chain",
+      "cve_references": [
+        "CVE-2026-85787",
+        "CVE-2026-87911"
+      ],
+      "eu_ai_act": [
+        "Art. 10 - Data Governance",
+        "Art. 15 - Robustness & Security"
+      ],
+      "nsa_mcp_csi": [
+        "Choose supported MCP projects when possible (p.10)",
+        "Sign and verify MCP messages (p.12)",
+        "Track and patch MCP related vulnerabilities (p.13)",
+        "Scan local network for open or vulnerable MCP servers (p.14)"
+      ],
+      "owasp_agentic": [
+        "ASI04 Supply Chain Vulnerabilities"
+      ],
+      "owasp_mcp": [
+        "MCP03:2025 Supply Chain Attacks"
+      ],
+      "rule_id": "AAK-MCP-AWSPOSTGRES-CVE-2026-85787-001",
+      "severity": "critical",
+      "title": "awslabs postgres-mcp-server: COPY TO PROGRAM command injection and SQL validation gap (< 1.1.7)"
+    },
+    {
+      "category": "supply-chain",
+      "cve_references": [
+        "CVE-2026-87913"
+      ],
+      "eu_ai_act": [
+        "Art. 10 - Data Governance",
+        "Art. 15 - Robustness & Security"
+      ],
+      "nsa_mcp_csi": [
+        "Choose supported MCP projects when possible (p.10)",
+        "Sign and verify MCP messages (p.12)",
+        "Track and patch MCP related vulnerabilities (p.13)",
+        "Scan local network for open or vulnerable MCP servers (p.14)"
+      ],
+      "owasp_agentic": [
+        "ASI04 Supply Chain Vulnerabilities"
+      ],
+      "owasp_mcp": [
+        "MCP03:2025 Supply Chain Attacks"
+      ],
+      "rule_id": "AAK-MCP-AWSSECAGENT-CVE-2026-87913-001",
+      "severity": "medium",
+      "title": "awslabs security-agent-mcp-server: scan output written to an unverified S3 bucket (< 0.2.0)"
     },
     {
       "category": "supply-chain",
@@ -3371,6 +3525,59 @@
       "title": "CodeWhale auto-approved code execution: rlm_eval and exec_shell_interact bypass the approval policy (`codewhale` >= 0.8.41, < 0.8.64)"
     },
     {
+      "category": "mcp-config",
+      "cve_references": [],
+      "eu_ai_act": [
+        "Art. 10 - Data Governance",
+        "Art. 15 - Robustness & Security"
+      ],
+      "nsa_mcp_csi": [
+        "Choose supported MCP projects when possible (p.10)",
+        "Sign and verify MCP messages (p.12)",
+        "Track and patch MCP related vulnerabilities (p.13)",
+        "Scan local network for open or vulnerable MCP servers (p.14)"
+      ],
+      "owasp_agentic": [
+        "ASI04 Supply Chain Vulnerabilities"
+      ],
+      "owasp_mcp": [
+        "MCP03:2025 Supply Chain Attacks"
+      ],
+      "rule_id": "AAK-MCP-CONFIG-MALFORMED-001",
+      "severity": "medium",
+      "title": "MCP server entry has a field of the wrong type"
+    },
+    {
+      "category": "supply-chain",
+      "cve_references": [
+        "CVE-2026-18486",
+        "CVE-2026-18489",
+        "CVE-2026-18905",
+        "CVE-2026-53710",
+        "CVE-2026-77822",
+        "CVE-2026-78573"
+      ],
+      "eu_ai_act": [
+        "Art. 9 - Risk Management",
+        "Art. 15 - Robustness & Security"
+      ],
+      "nsa_mcp_csi": [
+        "Design for boundaries (p.10)",
+        "Validate parameters (p.11)",
+        "Constrain and sandbox tool execution (p.11)",
+        "Filter and monitor output pipelines and chained execution (p.12)"
+      ],
+      "owasp_agentic": [
+        "ASI05 Unexpected Code Execution"
+      ],
+      "owasp_mcp": [
+        "MCP06:2025 Privilege Escalation"
+      ],
+      "rule_id": "AAK-MCP-CONTEXTFORGE-CVE-2026-77822-001",
+      "severity": "critical",
+      "title": "IBM ContextForge MCP Gateway: default credentials, DNS-rebind SSRF, jq-filter and cross-session leaks (<= 1.0.8)"
+    },
+    {
       "category": "supply-chain",
       "cve_references": [
         "CVE-2026-49986"
@@ -3398,7 +3605,8 @@
       "cve_references": [
         "CVE-2026-44968",
         "CVE-2026-44969",
-        "CVE-2026-44970"
+        "CVE-2026-44970",
+        "CVE-2026-55837"
       ],
       "eu_ai_act": [
         "Art. 13 - Transparency",
@@ -3479,6 +3687,32 @@
       "rule_id": "AAK-MCP-DEPRECATED-003",
       "severity": "medium",
       "title": "Use of deprecated `logging` capability (logging/setLevel)"
+    },
+    {
+      "category": "mcp-config",
+      "cve_references": [
+        "CVE-2026-85666",
+        "CVE-2026-86122"
+      ],
+      "eu_ai_act": [
+        "Art. 9 - Risk Management",
+        "Art. 15 - Robustness & Security"
+      ],
+      "nsa_mcp_csi": [
+        "Design for boundaries (p.10)",
+        "Validate parameters (p.11)",
+        "Constrain and sandbox tool execution (p.11)",
+        "Filter and monitor output pipelines and chained execution (p.12)"
+      ],
+      "owasp_agentic": [
+        "ASI05 Unexpected Code Execution"
+      ],
+      "owasp_mcp": [
+        "MCP06:2025 Privilege Escalation"
+      ],
+      "rule_id": "AAK-MCP-DEST-UNVALIDATED-001",
+      "severity": "high",
+      "title": "MCP-configured destination reaches an outbound fetch with no guard (absence or asymmetry)"
     },
     {
       "category": "supply-chain",
@@ -3575,6 +3809,30 @@
     {
       "category": "supply-chain",
       "cve_references": [
+        "CVE-2026-91931",
+        "CVE-2026-91932"
+      ],
+      "eu_ai_act": [
+        "Art. 9 - Risk Management"
+      ],
+      "nsa_mcp_csi": [
+        "Design for boundaries (p.10)",
+        "Validate parameters (p.11)",
+        "Constrain and sandbox tool execution (p.11)"
+      ],
+      "owasp_agentic": [
+        "ASI02 Tool Misuse"
+      ],
+      "owasp_mcp": [
+        "MCP01:2025 Token & Credential Mismanagement"
+      ],
+      "rule_id": "AAK-MCP-FLOWISE-CVE-2026-91931-001",
+      "severity": "high",
+      "title": "flowise < 3.1.4 (Custom MCP node reaches RCE through npx package names and an unvalidated cwd)"
+    },
+    {
+      "category": "supply-chain",
+      "cve_references": [
         "CVE-2026-67425"
       ],
       "eu_ai_act": [
@@ -3600,6 +3858,32 @@
     {
       "category": "supply-chain",
       "cve_references": [
+        "CVE-2026-59973"
+      ],
+      "eu_ai_act": [
+        "Art. 10 - Data Governance",
+        "Art. 15 - Robustness & Security"
+      ],
+      "nsa_mcp_csi": [
+        "Choose supported MCP projects when possible (p.10)",
+        "Sign and verify MCP messages (p.12)",
+        "Track and patch MCP related vulnerabilities (p.13)",
+        "Scan local network for open or vulnerable MCP servers (p.14)"
+      ],
+      "owasp_agentic": [
+        "ASI04 Supply Chain Vulnerabilities"
+      ],
+      "owasp_mcp": [
+        "MCP08:2025 Audit Logging Gaps"
+      ],
+      "rule_id": "AAK-MCP-FROMOPENAPI-CVE-2026-59973-001",
+      "severity": "high",
+      "title": "mcp-from-openapi < 2.5.0 (external $ref guard does not resolve or pin addresses \u2014 SSRF)"
+    },
+    {
+      "category": "supply-chain",
+      "cve_references": [
+        "CVE-2026-59973",
         "CVE-2026-67531"
       ],
       "eu_ai_act": [
@@ -3697,6 +3981,33 @@
     {
       "category": "supply-chain",
       "cve_references": [
+        "CVE-2026-61559",
+        "CVE-2026-61560",
+        "CVE-2026-61568"
+      ],
+      "eu_ai_act": [
+        "Art. 10 - Data Governance",
+        "Art. 15 - Robustness & Security"
+      ],
+      "nsa_mcp_csi": [
+        "Choose supported MCP projects when possible (p.10)",
+        "Sign and verify MCP messages (p.12)",
+        "Track and patch MCP related vulnerabilities (p.13)",
+        "Scan local network for open or vulnerable MCP servers (p.14)"
+      ],
+      "owasp_agentic": [
+        "ASI04 Supply Chain Vulnerabilities"
+      ],
+      "owasp_mcp": [
+        "MCP07:2025 Insufficient Authentication"
+      ],
+      "rule_id": "AAK-MCP-GITLAB-ZEREIGHT-CVE-2026-61560-001",
+      "severity": "critical",
+      "title": "@zereight/mcp-gitlab < 2.1.30 (unauthenticated SSE + arbitrary file read, header-controlled API base, DNS rebinding)"
+    },
+    {
+      "category": "supply-chain",
+      "cve_references": [
         "CVE-2026-19337"
       ],
       "eu_ai_act": [
@@ -3776,11 +4087,17 @@
       "category": "mcp-config",
       "cve_references": [
         "CVE-2026-23744",
+        "CVE-2026-38924",
         "CVE-2026-44830",
         "CVE-2026-44895",
         "CVE-2026-48989",
         "CVE-2026-49257",
-        "CVE-2026-50287"
+        "CVE-2026-50287",
+        "CVE-2026-53710",
+        "CVE-2026-57139",
+        "CVE-2026-59971",
+        "CVE-2026-61560",
+        "CVE-2026-90617"
       ],
       "eu_ai_act": [
         "Art. 15 - Robustness & Security"
@@ -3865,6 +4182,32 @@
       "title": "mcp-server-kubernetes < 3.9.0 (argument injection \u2192 kubectl --server redirect)"
     },
     {
+      "category": "supply-chain",
+      "cve_references": [
+        "CVE-2026-86439",
+        "CVE-2026-88938"
+      ],
+      "eu_ai_act": [
+        "Art. 10 - Data Governance",
+        "Art. 15 - Robustness & Security"
+      ],
+      "nsa_mcp_csi": [
+        "Choose supported MCP projects when possible (p.10)",
+        "Sign and verify MCP messages (p.12)",
+        "Track and patch MCP related vulnerabilities (p.13)",
+        "Scan local network for open or vulnerable MCP servers (p.14)"
+      ],
+      "owasp_agentic": [
+        "ASI04 Supply Chain Vulnerabilities"
+      ],
+      "owasp_mcp": [
+        "MCP03:2025 Supply Chain Attacks"
+      ],
+      "rule_id": "AAK-MCP-KNOWNS-CVE-2026-86439-001",
+      "severity": "high",
+      "title": "knowns MCP doc/memory and code.find tools: path traversal outside the project directory (no fixed release)"
+    },
+    {
       "category": "tool-poisoning",
       "cve_references": [
         "CVE-2026-13341"
@@ -3914,8 +4257,12 @@
         "CVE-2026-17623",
         "CVE-2026-17626",
         "CVE-2026-7646",
+        "CVE-2026-78575",
+        "CVE-2026-81941",
         "CVE-2026-8446",
-        "CVE-2026-9077"
+        "CVE-2026-85025",
+        "CVE-2026-9077",
+        "CVE-2026-9186"
       ],
       "eu_ai_act": [
         "Art. 10 - Data Governance",
@@ -3935,7 +4282,30 @@
       ],
       "rule_id": "AAK-MCP-LANGFLOW-CVE-2026-12940-001",
       "severity": "critical",
-      "title": "Langflow MCP stdio launcher env-var-injection RCE (1.0.0\u2013<1.11.0)"
+      "title": "Langflow MCP stdio launcher env-var-injection RCE (1.0.0\u2013<1.11.6)"
+    },
+    {
+      "category": "supply-chain",
+      "cve_references": [
+        "CVE-2026-55235"
+      ],
+      "eu_ai_act": [
+        "Art. 15 - Robustness & Security"
+      ],
+      "nsa_mcp_csi": [
+        "Design for boundaries (p.10)",
+        "Sign and verify MCP messages (p.12)",
+        "Scan local network for open or vulnerable MCP servers (p.14)"
+      ],
+      "owasp_agentic": [
+        "ASI03 Identity & Privilege Abuse"
+      ],
+      "owasp_mcp": [
+        "MCP06:2025 Privilege Escalation"
+      ],
+      "rule_id": "AAK-MCP-LANGGRAPH-API-CVE-2026-55235-001",
+      "severity": "medium",
+      "title": "langgraph-api < 0.10.0 (loopback webhook bypasses per-user authorization)"
     },
     {
       "category": "supply-chain",
@@ -3965,7 +4335,8 @@
     {
       "category": "supply-chain",
       "cve_references": [
-        "CVE-2026-48121"
+        "CVE-2026-48121",
+        "CVE-2026-55253"
       ],
       "eu_ai_act": [
         "Art. 10 - Data Governance",
@@ -4102,6 +4473,40 @@
     {
       "category": "supply-chain",
       "cve_references": [
+        "CVE-2026-79743",
+        "CVE-2026-79744",
+        "CVE-2026-79745",
+        "CVE-2026-79746",
+        "CVE-2026-79747",
+        "CVE-2026-79748",
+        "CVE-2026-79749",
+        "CVE-2026-79750"
+      ],
+      "eu_ai_act": [
+        "Art. 10 - Data Governance",
+        "Art. 15 - Robustness & Security"
+      ],
+      "nsa_mcp_csi": [
+        "Choose supported MCP projects when possible (p.10)",
+        "Sign and verify MCP messages (p.12)",
+        "Track and patch MCP related vulnerabilities (p.13)",
+        "Scan local network for open or vulnerable MCP servers (p.14)"
+      ],
+      "owasp_agentic": [
+        "ASI04 Supply Chain Vulnerabilities",
+        "ASI06 Memory & Context Poisoning"
+      ],
+      "owasp_mcp": [
+        "MCP01:2025 Token & Credential Mismanagement",
+        "MCP09:2025 SSRF / Network Boundary"
+      ],
+      "rule_id": "AAK-MCP-MCPHUB-CVE-2026-79748-001",
+      "severity": "critical",
+      "title": "@samanhappy/mcphub < 1.0.32 (eight MCP gateway authorization + SSRF defects)"
+    },
+    {
+      "category": "supply-chain",
+      "cve_references": [
         "CVE-2026-50027"
       ],
       "eu_ai_act": [
@@ -4123,6 +4528,31 @@
       "rule_id": "AAK-MCP-MEMSERVICE-CVE-2026-50027-001",
       "severity": "critical",
       "title": "mcp-memory-service < 10.67.1 (/api/documents/* served with no authentication)"
+    },
+    {
+      "category": "supply-chain",
+      "cve_references": [
+        "CVE-2026-59971"
+      ],
+      "eu_ai_act": [
+        "Art. 10 - Data Governance",
+        "Art. 15 - Robustness & Security"
+      ],
+      "nsa_mcp_csi": [
+        "Choose supported MCP projects when possible (p.10)",
+        "Sign and verify MCP messages (p.12)",
+        "Track and patch MCP related vulnerabilities (p.13)",
+        "Scan local network for open or vulnerable MCP servers (p.14)"
+      ],
+      "owasp_agentic": [
+        "ASI04 Supply Chain Vulnerabilities"
+      ],
+      "owasp_mcp": [
+        "MCP07:2025 Insufficient Authentication"
+      ],
+      "rule_id": "AAK-MCP-MYSQLMCP-CVE-2026-59971-001",
+      "severity": "critical",
+      "title": "mysql-mcp-server < 0.4.2 (unauthenticated SSE transport reaches execute_sql)"
     },
     {
       "category": "supply-chain",
@@ -4171,7 +4601,8 @@
       "cve_references": [
         "CVE-2026-72768",
         "CVE-2026-77068",
-        "CVE-2026-77073"
+        "CVE-2026-77073",
+        "CVE-2026-85166"
       ],
       "eu_ai_act": [
         "Art. 9 - Risk Management",
@@ -4194,7 +4625,7 @@
       ],
       "rule_id": "AAK-MCP-N8N-CVE-2026-72768-001",
       "severity": "high",
-      "title": "n8n < 2.34.1 (MCP Client SSRF bypass, node-schema loader RCE, cross-project credential reference)"
+      "title": "n8n < 2.35.4 / 2.36.x < 2.36.2 (MCP Client SSRF bypass, node-schema loader RCE, cross-project credential reference, inline sub-workflow credential exfiltration)"
     },
     {
       "category": "supply-chain",
@@ -4408,11 +4839,37 @@
     {
       "category": "supply-chain",
       "cve_references": [
+        "CVE-2026-85620"
+      ],
+      "eu_ai_act": [
+        "Art. 10 - Data Governance",
+        "Art. 15 - Robustness & Security"
+      ],
+      "nsa_mcp_csi": [
+        "Choose supported MCP projects when possible (p.10)",
+        "Sign and verify MCP messages (p.12)",
+        "Track and patch MCP related vulnerabilities (p.13)",
+        "Scan local network for open or vulnerable MCP servers (p.14)"
+      ],
+      "owasp_agentic": [
+        "ASI04 Supply Chain Vulnerabilities"
+      ],
+      "owasp_mcp": [
+        "MCP03:2025 Supply Chain Attacks"
+      ],
+      "rule_id": "AAK-MCP-POSTGRESMCP-CVE-2026-85620-001",
+      "severity": "high",
+      "title": "Postgres MCP Pro restricted-mode bypass via FROM-clause functions (no fixed release)"
+    },
+    {
+      "category": "supply-chain",
+      "cve_references": [
         "CVE-2026-47394",
         "CVE-2026-48168",
         "CVE-2026-55529",
         "CVE-2026-55531",
         "CVE-2026-55532",
+        "CVE-2026-57124",
         "CVE-2026-61427"
       ],
       "eu_ai_act": [
@@ -4434,6 +4891,31 @@
       "rule_id": "AAK-MCP-PRAISONAI-CVE-2026-61427-001",
       "severity": "high",
       "title": "PraisonAI MCP unauthenticated-default + path traversal (< 4.6.78)"
+    },
+    {
+      "category": "supply-chain",
+      "cve_references": [
+        "CVE-2026-57139"
+      ],
+      "eu_ai_act": [
+        "Art. 10 - Data Governance",
+        "Art. 15 - Robustness & Security"
+      ],
+      "nsa_mcp_csi": [
+        "Choose supported MCP projects when possible (p.10)",
+        "Sign and verify MCP messages (p.12)",
+        "Track and patch MCP related vulnerabilities (p.13)",
+        "Scan local network for open or vulnerable MCP servers (p.14)"
+      ],
+      "owasp_agentic": [
+        "ASI04 Supply Chain Vulnerabilities"
+      ],
+      "owasp_mcp": [
+        "MCP07:2025 Insufficient Authentication"
+      ],
+      "rule_id": "AAK-MCP-PRAISONAI-TS-CVE-2026-57139-001",
+      "severity": "critical",
+      "title": "praisonai (npm, TypeScript) < 1.7.2 (MCP HTTP server binds unrestricted with no auth)"
     },
     {
       "category": "supply-chain",
@@ -4605,6 +5087,31 @@
       "rule_id": "AAK-MCP-SDK-CVE-2026-52869-001",
       "severity": "high",
       "title": "MCP Python SDK session/task cross-client access (`mcp` < 1.28.1)"
+    },
+    {
+      "category": "supply-chain",
+      "cve_references": [
+        "CVE-2026-81845"
+      ],
+      "eu_ai_act": [
+        "Art. 10 - Data Governance",
+        "Art. 15 - Robustness & Security"
+      ],
+      "nsa_mcp_csi": [
+        "Choose supported MCP projects when possible (p.10)",
+        "Sign and verify MCP messages (p.12)",
+        "Track and patch MCP related vulnerabilities (p.13)",
+        "Scan local network for open or vulnerable MCP servers (p.14)"
+      ],
+      "owasp_agentic": [
+        "ASI04 Supply Chain Vulnerabilities"
+      ],
+      "owasp_mcp": [
+        "MCP01:2025 Token & Credential Mismanagement"
+      ],
+      "rule_id": "AAK-MCP-SEQTHINKING-CVE-2026-81845-001",
+      "severity": "medium",
+      "title": "mcp-sequential-thinking <= 0.5.0 (session import/export path traversal)"
     },
     {
       "category": "mcp-config",
@@ -4928,6 +5435,33 @@
       "title": "MCP STDIO command spawned from network-controlled input (Rust)"
     },
     {
+      "category": "supply-chain",
+      "cve_references": [
+        "CVE-2026-90898"
+      ],
+      "eu_ai_act": [
+        "Art. 9 - Risk Management",
+        "Art. 14 - Human Oversight"
+      ],
+      "nsa_mcp_csi": [
+        "Design for boundaries (p.10)",
+        "Validate parameters (p.11)",
+        "Constrain and sandbox tool execution (p.11)",
+        "Instrument for logging and detection (p.13)"
+      ],
+      "owasp_agentic": [
+        "ASI02 Tool Misuse",
+        "ASI10 Rogue Agents"
+      ],
+      "owasp_mcp": [
+        "MCP01:2025 Token & Credential Mismanagement",
+        "MCP05:2025 Tool Poisoning / Trust Boundary"
+      ],
+      "rule_id": "AAK-MCP-STDIO-CMD-INJ-005",
+      "severity": "critical",
+      "title": "MCP STDIO command spawned from network-controlled input (Go)"
+    },
+    {
       "category": "mcp-config",
       "cve_references": [
         "CVE-2026-40933"
@@ -4952,6 +5486,25 @@
       "rule_id": "AAK-MCP-STDIO-LAUNCHER-INJECT-001",
       "severity": "high",
       "title": "MCP stdio server launches a shell-style interpreter with an exec flag or interpolated args"
+    },
+    {
+      "category": "supply-chain",
+      "cve_references": [
+        "CVE-2026-53937"
+      ],
+      "eu_ai_act": [
+        "Art. 10 - Data Governance"
+      ],
+      "nsa_mcp_csi": [],
+      "owasp_agentic": [
+        "ASI06 Memory & Context Poisoning"
+      ],
+      "owasp_mcp": [
+        "MCP10:2025 Dependency & Package Risks"
+      ],
+      "rule_id": "AAK-MCP-STDIO-UNBOUNDED-BUFFER-001",
+      "severity": "medium",
+      "title": "MCP Kotlin SDK stdio read buffer grows without bound (CVE-2026-53937, 0.7.0\u20130.12.0)"
     },
     {
       "category": "supply-chain",
@@ -5079,6 +5632,56 @@
       "rule_id": "AAK-MCP-TOOLGATE-ASYMMETRY-001",
       "severity": "high",
       "title": "MCP tool gate enforced in tools/list but not tools/call"
+    },
+    {
+      "category": "mcp-config",
+      "cve_references": [
+        "CVE-2026-84289"
+      ],
+      "eu_ai_act": [
+        "Art. 9 - Risk Management",
+        "Art. 15 - Robustness & Security"
+      ],
+      "nsa_mcp_csi": [
+        "Design for boundaries (p.10)",
+        "Validate parameters (p.11)",
+        "Constrain and sandbox tool execution (p.11)",
+        "Filter and monitor output pipelines and chained execution (p.12)"
+      ],
+      "owasp_agentic": [
+        "ASI05 Unexpected Code Execution"
+      ],
+      "owasp_mcp": [
+        "MCP06:2025 Privilege Escalation"
+      ],
+      "rule_id": "AAK-MCP-TOOLS-LIST-UNBOUNDED-001",
+      "severity": "medium",
+      "title": "MCP tool catalogue built from an upstream response with no cap"
+    },
+    {
+      "category": "supply-chain",
+      "cve_references": [
+        "CVE-2026-81096"
+      ],
+      "eu_ai_act": [
+        "Art. 10 - Data Governance",
+        "Art. 15 - Robustness & Security"
+      ],
+      "nsa_mcp_csi": [
+        "Choose supported MCP projects when possible (p.10)",
+        "Sign and verify MCP messages (p.12)",
+        "Track and patch MCP related vulnerabilities (p.13)",
+        "Scan local network for open or vulnerable MCP servers (p.14)"
+      ],
+      "owasp_agentic": [
+        "ASI04 Supply Chain Vulnerabilities"
+      ],
+      "owasp_mcp": [
+        "MCP01:2025 Token & Credential Mismanagement"
+      ],
+      "rule_id": "AAK-MCP-TOOLUNIVERSE-CVE-2026-81096-001",
+      "severity": "critical",
+      "title": "ToolUniverse unauthenticated RCE via python_code_executor sandbox escape (<= 1.2.6)"
     },
     {
       "category": "transport-security",
@@ -5302,7 +5905,8 @@
     {
       "category": "supply-chain",
       "cve_references": [
-        "CVE-2026-48039"
+        "CVE-2026-48039",
+        "CVE-2026-54549"
       ],
       "eu_ai_act": [
         "Art. 10 - Data Governance",
@@ -5974,6 +6578,32 @@
       "title": "Tool removed since last pin"
     },
     {
+      "category": "trust-boundary",
+      "cve_references": [
+        "CVE-2026-53710",
+        "CVE-2026-81096"
+      ],
+      "eu_ai_act": [
+        "Art. 10 - Data Governance",
+        "Art. 15 - Robustness & Security"
+      ],
+      "nsa_mcp_csi": [
+        "Choose supported MCP projects when possible (p.10)",
+        "Sign and verify MCP messages (p.12)",
+        "Track and patch MCP related vulnerabilities (p.13)",
+        "Scan local network for open or vulnerable MCP servers (p.14)"
+      ],
+      "owasp_agentic": [
+        "ASI04 Supply Chain Vulnerabilities"
+      ],
+      "owasp_mcp": [
+        "MCP01:2025 Token & Credential Mismanagement"
+      ],
+      "rule_id": "AAK-SANDBOX-DENYLIST-001",
+      "severity": "critical",
+      "title": "Deny-list of names used as a Python sandbox boundary, with the lookup builtins still reachable"
+    },
+    {
       "category": "supply-chain",
       "cve_references": [],
       "eu_ai_act": [
@@ -6360,6 +6990,24 @@
       "category": "tool-poisoning",
       "cve_references": [],
       "eu_ai_act": [
+        "Art. 9 - Risk Management",
+        "Art. 13 - Transparency"
+      ],
+      "nsa_mcp_csi": [],
+      "owasp_agentic": [
+        "ASI01 Agent Goal Hijacking"
+      ],
+      "owasp_mcp": [
+        "MCP05:2025 Tool Poisoning / Trust Boundary"
+      ],
+      "rule_id": "AAK-SKILL-006",
+      "severity": "high",
+      "title": "SKILL.md body hides an instruction in an HTML comment"
+    },
+    {
+      "category": "tool-poisoning",
+      "cve_references": [],
+      "eu_ai_act": [
         "Art. 10 - Data Governance",
         "Art. 13 - Transparency",
         "Art. 14 - Human Oversight",
@@ -6545,6 +7193,25 @@
       "rule_id": "AAK-SSRF-005",
       "severity": "high",
       "title": "Missing SSRF allowlist on outbound fetch"
+    },
+    {
+      "category": "transport-security",
+      "cve_references": [
+        "CVE-2026-80347"
+      ],
+      "eu_ai_act": [
+        "Art. 10 - Data Governance"
+      ],
+      "nsa_mcp_csi": [],
+      "owasp_agentic": [
+        "ASI06 Memory & Context Poisoning"
+      ],
+      "owasp_mcp": [
+        "MCP09:2025 SSRF / Network Boundary"
+      ],
+      "rule_id": "AAK-SSRF-BRACKETED-HOST-001",
+      "severity": "high",
+      "title": "SSRF guard classifies an IPv6 hostname it never unbracketed"
     },
     {
       "category": "transport-security",
@@ -6777,7 +7444,9 @@
     },
     {
       "category": "taint-analysis",
-      "cve_references": [],
+      "cve_references": [
+        "CVE-2026-90617"
+      ],
       "eu_ai_act": [
         "Art. 9 - Risk Management",
         "Art. 15 - Robustness & Security"
@@ -7095,7 +7764,7 @@
       ],
       "rule_id": "AAK-TRANSPORT-001",
       "severity": "critical",
-      "title": "MCP server uses HTTP instead of HTTPS"
+      "title": "MCP server uses a cleartext transport (http:// or ws://)"
     },
     {
       "category": "transport-security",
@@ -7342,67 +8011,67 @@
       "agentic-skill": 3,
       "composition": 3,
       "hook-injection": 17,
-      "legal-compliance": 12,
-      "mcp-config": 65,
+      "legal-compliance": 19,
+      "mcp-config": 68,
       "mcp-server-card": 4,
       "secret-exposure": 18,
-      "supply-chain": 101,
+      "supply-chain": 117,
       "taint-analysis": 14,
-      "tool-poisoning": 30,
-      "transport-security": 14,
-      "trust-boundary": 15
+      "tool-poisoning": 31,
+      "transport-security": 15,
+      "trust-boundary": 17
     },
     "by_eu_ai_act": {
-      "Art. 10 - Data Governance": 109,
-      "Art. 13 - Transparency": 31,
-      "Art. 14 - Human Oversight": 39,
-      "Art. 15 - Robustness & Security": 194,
-      "Art. 9 - Risk Management": 113
+      "Art. 10 - Data Governance": 124,
+      "Art. 13 - Transparency": 32,
+      "Art. 14 - Human Oversight": 40,
+      "Art. 15 - Robustness & Security": 211,
+      "Art. 9 - Risk Management": 120
     },
     "by_nsa_mcp_csi": {
-      "Choose supported MCP projects when possible (p.10)": 72,
-      "Constrain and sandbox tool execution (p.11)": 100,
-      "Design for boundaries (p.10)": 176,
-      "Filter and monitor output pipelines and chained execution (p.12)": 74,
-      "Instrument for logging and detection (p.13)": 34,
-      "Scan local network for open or vulnerable MCP servers (p.14)": 143,
-      "Sign and verify MCP messages (p.12)": 142,
-      "Track and patch MCP related vulnerabilities (p.13)": 83,
-      "Validate parameters (p.11)": 104
+      "Choose supported MCP projects when possible (p.10)": 85,
+      "Constrain and sandbox tool execution (p.11)": 106,
+      "Design for boundaries (p.10)": 183,
+      "Filter and monitor output pipelines and chained execution (p.12)": 77,
+      "Instrument for logging and detection (p.13)": 35,
+      "Scan local network for open or vulnerable MCP servers (p.14)": 157,
+      "Sign and verify MCP messages (p.12)": 156,
+      "Track and patch MCP related vulnerabilities (p.13)": 96,
+      "Validate parameters (p.11)": 110
     },
     "by_owasp_agentic": {
-      "ASI01": 14,
-      "ASI02": 47,
-      "ASI03": 73,
-      "ASI04": 66,
-      "ASI05": 53,
-      "ASI06": 45,
+      "ASI01": 15,
+      "ASI02": 50,
+      "ASI03": 74,
+      "ASI04": 79,
+      "ASI05": 56,
+      "ASI06": 48,
       "ASI07": 9,
       "ASI08": 5,
       "ASI09": 18,
-      "ASI10": 21
+      "ASI10": 22
     },
     "by_owasp_mcp": {
-      "MCP01:2025": 81,
+      "MCP01:2025": 88,
       "MCP02:2025": 14,
-      "MCP03:2025": 33,
+      "MCP03:2025": 38,
       "MCP04:2025": 40,
-      "MCP05:2025": 56,
-      "MCP06:2025": 16,
-      "MCP07:2025": 34,
-      "MCP08:2025": 7,
-      "MCP09:2025": 27,
-      "MCP10:2025": 11
+      "MCP05:2025": 58,
+      "MCP06:2025": 20,
+      "MCP07:2025": 37,
+      "MCP08:2025": 8,
+      "MCP09:2025": 29,
+      "MCP10:2025": 12
     },
     "by_severity": {
-      "critical": 76,
-      "high": 155,
+      "critical": 85,
+      "high": 163,
       "info": 5,
       "low": 9,
-      "medium": 82
+      "medium": 95
     },
-    "total_cves_covered": 177,
-    "total_rules": 327
+    "total_cves_covered": 229,
+    "total_rules": 357
   },
   "tool": "agent-audit-kit"
 }

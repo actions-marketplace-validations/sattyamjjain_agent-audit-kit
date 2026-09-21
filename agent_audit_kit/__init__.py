@@ -1,9 +1,9 @@
 """AgentAuditKit — Security scanner for MCP-connected AI agent pipelines."""
 from __future__ import annotations
 
-__version__ = "0.3.91"
-RULE_COUNT = 327
-SCANNER_COUNT = 95
+__version__ = "0.6.7"
+RULE_COUNT = 357
+SCANNER_COUNT = 103
 # Distinct public MCP server configs in the State-of-MCP-2026 corpus, measured from
 # research/state-of-mcp-2026/results.json (distinct_configs_scanned), fetched
 # 2026-07-26. Published in REPORT.md/PREVALENCE.md/etc.; guarded by

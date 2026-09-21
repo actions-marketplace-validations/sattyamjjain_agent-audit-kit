@@ -23,8 +23,8 @@
 > evidence output** — SARIF + OWASP MCP Top 10 + EU AI Act Article 15
 > + SOC 2 + ISO 27001 / 42001 + HIPAA + NIST AI RMF in one scan.
 >
-> agent-audit-kit is that. 327 deterministic rules. Zero cloud
-> dependencies, no auth required. MIT.
+> agent-audit-kit is that. 357 deterministic rules. Zero cloud
+> dependencies, no auth required. Apache-2.0.
 >
 > The leaderboard: we run the scanner weekly against 500 public MCP
 > servers and publish per-server grade cards. Findings are embargoed
@@ -44,7 +44,7 @@
 - **"Does it use an LLM?"**
   → No. The moat is deterministic rules. We keep an optional
   `--llm-scan` flag for semantic tool-description checks, but the core
-  327 detection rules are regex + AST patterns that run in <50 ms on a normal
+  357 detection rules are regex + AST patterns that run in <50 ms on a normal
   project.
 - **"What's your false-positive rate?"**
   → We scan 500 public MCP servers weekly. Ground-truth is unknown

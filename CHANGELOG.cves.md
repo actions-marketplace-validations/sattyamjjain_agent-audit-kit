@@ -16,6 +16,404 @@ open.
 > issue. The per-CVE latency figures in the tables are **measurements recorded at
 > the time**, kept as dated facts, not a standing promise.
 
+## 2026-09-19: ten disclosures, five new pins, and two false positives that had nothing to do with them
+
+The watcher opened ten `cve-response` issues across 2026-09-15 and 09-16
+(#745-#754). All ten were in scope — no Apache Storm, no MCP2221, no acronym
+collisions. Every one is a real MCP server or agent framework, so the watcher's
+keyword bias cost nothing this time.
+
+No new *shape* rule was authored. All ten fall into four classes the registry
+already owns — an unauthenticated network-bound MCP transport, SSRF through a
+caller-supplied URL, command injection through MCP server config, and path
+traversal in a tool argument — so the work was version pins, floors, and
+recording the CVEs against the rules whose shape they are.
+
+**The interesting half is what reaching them exposed.** Two false positives in
+the pin table, both live on `main`, neither related to this wave:
+
+*A pin had no idea which package registry it was talking about.* `_Pin` matched
+on name alone, and names are not unique across registries. PyPI publishes
+`praisonai` on a 4.6.x line; npm publishes an unrelated `praisonai` — the
+TypeScript agent framework — on 1.7.x. The 4.6.78 floor was therefore compared
+against npm's newest release, 1.7.4, found it lower, and reported a
+fully-patched install as vulnerable with remediation text naming a version npm
+has never published. `_Pin.ecosystem` now scopes a pin to `py` or `js`, and a
+manifest whose registry is not knowable from its filename — an `mcp.json` can
+name either — still matches every pin, so the scoping only ever removes a claim
+we could not make. `marimo` and `omnigent` were scoped at the same time: the
+file's own header called an old-npm-`marimo` hit "the accepted cost" of covering
+three real pip CVEs, and there is no longer a cost to accept.
+
+*A bare package name matched inside its own scoped sibling.* `_mk_re("frontmcp")`
+matched the `frontmcp` in `"@frontmcp/adapters": "1.5.7"`, captured no version
+because `/adapters` follows the name, and `_fires` reads a missing version as
+"unpinned" — so a patched sibling was reported. The scan loop breaks on the
+first pattern that *matches*, not the first that *fires*, so the unscoped name
+also shadowed the scoped pattern that would have read the version correctly.
+`_mk_bare_re` excludes `@` on the left and `/` on the right. The same pair
+existed for `better-auth` / `@better-auth/oauth-provider` and was also live: a
+patched `@better-auth/oauth-provider@1.6.13` reported as unpinned. A test now
+fails if any future pin names both a bare package and its scoped sibling without
+guarding the bare one.
+
+One smaller contract fix in the same file: `scan()` added a path to its
+`scanned` set only when that file produced a finding, so `files_scanned` counted
+matches rather than files read and a clean repository looked unscanned. Same
+class as the eight scanners corrected in v0.6.6.
+
+| CVE | CVSS | Package | What changed | Issue |
+|---|---|---|---|---|
+| CVE-2026-59971 | 10.0 | `mysql-mcp-server` | **New pin** `AAK-MCP-MYSQLMCP-CVE-2026-59971-001`, floor 0.4.2. `MCP_TRANSPORT=sse` builds `SseServerTransport` with neither `security_settings` nor `enable_dns_rebinding_protection`, the Starlette routes carry no auth, and the bind is 0.0.0.0 — so `execute_sql` is reachable directly or by DNS rebinding. Also recorded against `AAK-MCP-HTTP-NOAUTH-SERVER-001`. | #745 |
+| CVE-2026-53710 | 10.0 | `mcp-contextforge-gateway` | No new rule and no new pin. `python_sandbox_server` exposes raw `getattr` through `safe_builtins` and omits the `_getattr_` guard, so runtime-built dunder names traverse to `subprocess.Popen`. Fixed 1.0.2 — **below** the existing 1.0.9 floor, so every affected version already fires. Recorded in `cve_references`. | #746 |
+| CVE-2026-57139 | 9.8 | `praisonai` (npm, TypeScript) | **New pin** `AAK-MCP-PRAISONAI-TS-CVE-2026-57139-001`, floor 1.7.2. `MCPServer.startHttp()` binds with no host restriction and dispatches every POST without auth. This is the CVE that surfaced the registry collision above: it could not be pinned at all until `_Pin` learned which registry it meant. | #747 |
+| CVE-2026-59973 | 8.5 | `mcp-from-openapi`, `frontmcp`, `@frontmcp/adapters` | **New pin** `AAK-MCP-FROMOPENAPI-CVE-2026-59973-001`, floor 2.5.0, because `mcp-from-openapi` runs a 2.x line the `frontmcp` pin's 1.5.7 floor cannot express. The `frontmcp` half was fixed at 1.5.0, already under that floor; the pin gained the `@frontmcp/adapters` name it was missing. | #748 |
+| CVE-2026-91931 | 8.5 | `flowise` | **New pin** `AAK-MCP-FLOWISE-CVE-2026-91931-001`, floor 3.1.4. npx package names in `mcpServerConfig` invoke npx on attacker-chosen packages. | #749 |
+| CVE-2026-91932 | 8.5 | `flowise` | Same pin, same 3.1.4 release. A clean filename in `args` plus a controlled `cwd` bypasses the path validation. One floor, two CVEs. | #753 |
+| CVE-2026-61560 | 9.8 | `@zereight/mcp-gitlab` | **New pin** `AAK-MCP-GITLAB-ZEREIGHT-CVE-2026-61560-001`. `SSE=true` exposes every tool unauthenticated and `upload_markdown` reads any local file, so `/proc/self/environ` yields `GITLAB_PERSONAL_ACCESS_TOKEN`. The default for Docker deployments. Fixed 2.1.27. | #750 |
+| CVE-2026-61559 | 9.6 | `@zereight/mcp-gitlab` | Same pin. `ENABLE_DYNAMIC_API_URL=true` trusts `X-GitLab-API-URL` as the outbound base URL with no allowlist while still attaching the victim's `Private-Token`. Fixed 2.1.27. | #752 |
+| CVE-2026-61568 | 9.6 | `@zereight/mcp-gitlab` | Same pin, and it is this one that sets the floor at **2.1.30**: the Streamable HTTP endpoint has no effective Host/Origin allowlist, so DNS rebinding reaches MCP init. 2.1.27 does not close it. | #751 |
+| CVE-2026-54549 | 8.3 | `meta-ads-mcp` | **Floor raised 1.0.109 to 1.0.115.** `upload_ad_image` hands an attacker-controlled `image_url` to `try_multiple_download_methods()`, where `httpx.AsyncClient` runs `follow_redirects=True` and validates neither scheme, host nor resolved IP, and Meta credential validation happens only after the download. The fix is above the old floor, so 1.0.109 through 1.0.114 were vulnerable and silent — the case a `cve_references` line cannot cover. | #754 |
+
+Every package and fix version was verified against the live PyPI and npm
+registries before shipping, and every CVE re-verified against the NVD API
+(the HTML detail pages are JS-rendered and unusable for this).
+
+Dispositioned at 2026-09-19T04:59:40Z, shipped in v0.6.7.
+
+
+## 2026-09-16: ten disclosures, one new rule, four out of scope
+
+The watcher opened ten `cve-response` issues across 2026-09-14 and 09-15
+(#732-#741). Six were in scope. The four that were not are the more
+interesting half.
+
+**Four Apache Storm advisories, out of scope.** CVE-2026-82439 (DRPC memory
+exhaustion), CVE-2026-82428 (blob-key collision), CVE-2026-82427
+(`topology.blobstore.map` path traversal) and CVE-2026-82429 (setuid
+worker-launcher TOCTOU) are all Apache Storm, a distributed stream processor.
+None of it is MCP or an agent pipeline. They matched because every one of those
+advisories credits "the ASF, found using Claude agents to study the security of
+open-source projects": the watcher matched the word "agents" in an
+acknowledgement line. That is the same collision as CVE-2026-89622, where
+MCP2221, a Microchip USB-to-I2C bridge, matched on the acronym. Right bias for
+a watcher, wrong answer for a rule, and no rule records them.
+
+| CVE | CVSS | Package | What changed | Issue |
+|---|---|---|---|---|
+| CVE-2026-57124 | 9.8 | `praisonai` | No new rule. Unauthenticated `POST /api/mcp/connect` with caller-controlled `command`/`args` into `StdioMCPClient` and a 0.0.0.0 bind, which is `AAK-MCP-PRAISONAI-CVE-2026-61427-001`'s own shape. Fixed 4.6.59, below the existing 4.6.78 floor, so every affected version already fires. Recorded in `cve_references`. | #732 |
+| CVE-2026-73496 | 7.7 | `mcp-atlassian` | No new rule. Same unconfined `file_path`, this time in `jira_update_issue`. Fixed 0.22.0, the existing floor exactly. | #737 |
+| CVE-2026-73497 | 6.5 | `mcp-atlassian` | No new rule. `X-Atlassian-*-Url` resolved at middleware time and again at connect time with no IP pinning, so a rebinding name reaches cloud metadata. Same 0.22.0 fix release. | #740 |
+| CVE-2026-55837 | 6.8 | `dbt-mcp` | **Floor raised 1.17.1 to 1.20.0.** The local OAuth helper serves `GET /dbt_platform_context` unauthenticated with no Host validation, handing access and refresh tokens to anything reaching `127.0.0.1:6785`, and the missing `TrustedHostMiddleware` opens it to DNS rebinding. The fix is above the old floor, so 1.17.1 through 1.19.x were vulnerable and silent: this is the case a `cve_references` line cannot cover. | #739 |
+| CVE-2026-55253 | 7.7 | `langgraph-checkpoint-mongodb`, `langgraph-store-mongodb` | **Two new pins on the existing rule.** The same `$`-prefixed-key NoSQL injection as CVE-2026-48121, but in the PyPI distributions; the existing pin names the npm `@langchain/...` package and could not see either. Floors 0.3.0 and 0.4.0. | #738 |
+| CVE-2026-55235 | 5.9 | `langgraph-api` | **New rule** `AAK-MCP-LANGGRAPH-API-CVE-2026-55235-001`. A relative webhook target delivered over the in-process loopback transport skips the external auth context, so an authenticated user can create or modify a run on another user's thread. Floor 0.10.0. | #741 |
+
+Dispositioned at 2026-09-15T18:38:33Z, shipped in v0.6.6.
+
+## 2026-09-14: two disclosures, no new rules
+
+Both `cve-response` issues from this wave (#727, #728) map onto rules that
+already existed. They are recorded together because they arrived looking like
+two different bugs and are largely one: an MCP server on an HTTP transport,
+bound to every interface, with nothing asking the caller who they are.
+
+CVE-2026-90617 is the one that needed code. It is filed as os command
+injection, and it is that, but upstream issue #90 puts the root cause first:
+`interface/main.py` defaults `--host` to `0.0.0.0` and the Streamable-HTTP
+transport is built with no middleware, which is what makes `run_task`
+reachable at all. So the CVE is attached to both halves. Reaching the sink
+also exposed a real gap: `AAK-TAINT-001` has always claimed "os.system(),
+subprocess, or similar shell execution functions", but its sink set held only
+the blocking `subprocess` spellings, so `asyncio.create_subprocess_shell`, the
+call PentestAgent actually uses, went straight through it. That set now
+carries the asyncio form and the two `subprocess` shell helpers.
+`asyncio.create_subprocess_exec` is deliberately still not a sink: it takes an
+argv list and never reaches a shell, so treating it as one would report every
+correctly-fixed server in the corpus.
+
+| CVE | CVSS | Package | What changed | Issue |
+|---|---|---|---|---|
+| CVE-2026-90617 | 7.3 | `pentestagent` (rolling release, no pinnable version) | No new rule. `CVE-2026-90617` -> `AAK-TAINT-001` (parameter to shell sink) and `-> AAK-MCP-HTTP-NOAUTH-SERVER-001` (the unauthenticated 0.0.0.0 transport that makes it reachable). `AAK-TAINT-001` gained `asyncio.create_subprocess_shell`, `subprocess.getoutput` and `subprocess.getstatusoutput` as sinks, because it did not fire on the real shape. Positive and negative fixtures added. | #728 |
+| CVE-2026-38924 | 2.9 | `serena` (Oraios AI, before 1.0.0) | No new rule and no detector change. `CVE-2026-38924` -> `AAK-MCP-HTTP-NOAUTH-SERVER-001`. The rule is shape-based rather than vendor-gated, so a Serena-style entry point already satisfied its bind-all-plus-no-auth predicate; verified with a fixture rather than assumed. Upstream fixed it by defaulting to localhost (commit b00ae292). | #727 |
+
+Dispositioned at 2026-09-14T12:52:09Z, shipped in v0.6.5.
+
+### CVE-2026-90898 (#729): deferred 2026-09-14, closed 2026-09-15
+
+A third issue opened the same day, after the two above were already in flight:
+CVE-2026-90898 (maximhq/bifrost, CVSS 9.8, CWE-284/306). Bifrost registers MCP
+clients through a management API; a stdio client is a command plus args, and
+the gateway starts that program the moment the client is added. The default is
+`governance.auth_config.is_enabled=false`, so one unauthenticated
+`POST /api/mcp/client` runs a program as the gateway user. Fixed in
+`transports/v2.1.0`.
+
+The shape is one this project already describes in three places:
+`AAK-MCP-011` (remote MCP handler with no auth middleware),
+`AAK-MCP-HTTP-NOAUTH-SERVER-001` (network-bound MCP transport with no inbound
+credential), and the `AAK-MCP-STDIO-CMD-INJ-00x` family (stdio client
+parameters built from network-controlled input).
+
+None of them fire on it. That was measured, not assumed: a faithful Bifrost
+shaped project, a Go handler that decodes a JSON body and calls
+`exec.Command(req.StdioCommand, req.StdioArgs...)` beside a config with
+`is_enabled: false` and an `0.0.0.0` bind, produces **zero findings** from a
+full `run_scan`. The STDIO family has Python, TypeScript, Java and Rust arms
+and no Go arm; the no-auth config pass wants a placeholder secret rather than
+an auth-disabled flag; and there is no `go.mod` pin surface, so the fixed
+version cannot be asserted either.
+
+So the CVE is **not** added to those rules' `cve_references`. Recording
+coverage that does not exist is worse in a scanner than recording none: it is
+the same class of drift as a stale count, except the number that rots is a
+security claim. #729 is labelled `cve-deferred` with a target date, and the
+missing Go arm is tracked separately.
+
+**Closed 2026-09-15 (#731).** Both halves shipped, and the deferral is closed
+here rather than left standing beside its own fix.
+
+`AAK-MCP-STDIO-CMD-INJ-005` is the Go arm the family was missing. It is
+modelled on the Rust arm and carries the Rust arm's posture verbatim: regex and
+proximity, not data-flow analysis, stated in the rule text rather than implied.
+One precision guard earns its place, a string literal in argv[0], because the
+binary being chosen server-side is exactly what a patched handler looks like
+and without it the arm reports every server that decoded a request body in the
+preceding 2 KB.
+
+`AAK-MCP-NOAUTH-DEFAULT` gains a disabled-auth config arm. It wanted a
+placeholder secret plus a non-loopback bind; Bifrost's config carries no secret
+at all, only `governance.auth_config.is_enabled: false`, which is the same idea
+spelled differently and matched nothing.
+
+| CVE | CVSS | Package | What changed | Issue |
+|---|---|---|---|---|
+| CVE-2026-90898 | 9.8 | `bifrost` (`transports`, Go; fixed `transports/v2.1.0`) | **New rule** `AAK-MCP-STDIO-CMD-INJ-005` (Go arm of the STDIO command-injection family) plus a disabled-auth config arm on `AAK-MCP-NOAUTH-DEFAULT`. Positive and negative fixtures under `tests/fixtures/cves/cve-2026-90898-bifrost/`, the negative being the `transports/v2.1.0` posture so the arm cannot report every patched server. | #729, #731 |
+
+Benign-slice false positives are unchanged at 0 of 1 across 536 servers. That
+number is evidence for the config arm, which reads exactly the MCP config JSON
+the slice is made of, and is **not** evidence for the Go arm: the slice
+contains no Go source, so it never exercises it. The Go arm's precision
+controls are unit tests in `tests/test_cve_2026_90898_bifrost.py` instead, and
+saying which of the two the benchmark covers seemed better than quoting an
+unchanged number at both.
+
+Shipped at 2026-09-15T17:30:41Z in v0.6.6.
+
+
+## 2026-09-12: eight disclosures, one new rule
+
+The 2026-09-09..11 wave opened eight `cve-response` issues (#707–#714). Seven
+were in scope and six of those needed **no new rule**, because the pin table
+already covered the packages. Recorded because the reflex on a queue this size
+is to write eight rules.
+
+| CVE | CVSS | Package | What changed | Issue |
+|---|---|---|---|---|
+| CVE-2026-87911 | 9.6 | `awslabs.postgres-mcp-server` | Nothing in the version logic — the 1.1.7 floor already covered it. The rule's **threat description** changed: `COPY ... TO PROGRAM` OS command injection reachable by an unauthenticated actor, not the read-only-scope bypass the rule previously described. Severity MEDIUM → CRITICAL. | #707 |
+| CVE-2026-78573 | 9.8 | `mcp-contextforge-gateway` | Default credentials, 1.0.0–1.0.7, already under the 1.0.9 floor. Severity HIGH → CRITICAL. | #711 |
+| CVE-2026-85025 | 9.8 | `langflow` | Floor 1.11.3 → **1.11.6** | #710 |
+| CVE-2026-78575 | 8.8 | `langflow` | same floor | #712 |
+| CVE-2026-81941 | 8.8 | `langflow` | same floor | #713 |
+| CVE-2026-88938 | 6.5 | `knowns` | Floor **removed** — presence-only | #709 |
+| CVE-2026-87913 | 5.9 | `awslabs.security-agent-mcp-server` | **New rule** `AAK-MCP-AWSSECAGENT-CVE-2026-87913-001` | #708 |
+
+**#714 closed as out of scope.** CVE-2026-89622 is a use-after-free in the Linux
+kernel's `HID: mcp2221` driver. MCP2221 is a Microchip USB-to-I2C bridge chip.
+The acronym collides with Model Context Protocol and nothing else does. The
+watcher matched the string, which is the right bias for a watcher and the wrong
+answer for a rule.
+
+**`knowns` has no fix.** CVE-2026-88938 is scoped "through 0.33.0", and 0.33.0
+is the newest release on npm (published 2026-09-05). A floor would have been a
+fiction, so the pin became presence-only — the permanent state until upstream
+ships something, matching `postgres-mcp` and `mcp-florence2`. That exposed a
+latent bug: `_fires` returned True on `floor is None` **before** checking the
+`introduced` bound, which was unreachable while no presence-only pin carried
+one. `knowns` is the first that does, and it needs the 0.1.1 bound to stay off
+an unrelated PyPI `knowns` stub whose only release is 0.1.0. Without reordering
+the check, converting the pin would have revived a false positive that a comment
+in the table explicitly documents preventing.
+
+**Two floors were wrong in opposite directions.** Langflow's 1.11.3 was calling
+1.11.3, 1.11.4 and 1.11.5 patched when three advisories scope them as affected;
+1.11.6 exists and is the real floor. `knowns`' 0.30.0 was calling every release
+from 0.30.0 up patched when no patched release exists at all. Both were found by
+checking the registry rather than the advisory prose.
+
+## 2026-09-09: the first JVM entry in the pin surface
+
+CVE-2026-53937 is the first CVE this repository has covered on a Gradle/Maven
+coordinate, and the reason it took a new module rather than a new row is worth
+recording. `mcp_cve_pins_2026_07` is the pin table, and its `_CANDIDATE_NAMES`
+reads Python and npm manifests only — its own docstring records the cost of that
+("the crates.io twin `codewhale-tui` has the same defect but Cargo manifests are
+not in `_CANDIDATE_NAMES`", and "ArcadeDB on Maven" sits in the handled-elsewhere
+list). Widening that tuple would put roughly sixty unrelated package regexes to
+work against `pom.xml` and `build.gradle` for the sake of one CVE, which buys
+false-positive surface rather than coverage. `jvm_mcp_sdk_pins.py` is the narrow
+alternative: JVM manifests, MCP SDK coordinates, nothing else.
+
+**Version resolution was the actual work.** A JVM coordinate rarely carries its
+version inline any more, so a matcher that only reads `group:artifact:version`
+would miss most real projects. Four forms are resolved: a Gradle KTS `val`, a
+Groovy inline coordinate, a version catalog's `version.ref` against
+`[versions]`, and Maven's `${property}` against `<properties>`. The catalog arm
+shipped broken in its first draft and was caught by the fixtures — one regex with
+a lazy `[^\n]*?` and an optional trailing version group matches happily with that
+group empty, so every catalog resolved to "no version" and the arm silently never
+fired. Splitting coordinate-match from version-match removed the ambiguity. That
+is the failure mode a fixture exists to catch, and it did.
+
+**Range boundaries came from Maven Central, not from the advisory prose.** NVD
+says "0.7.0 through 0.12.0"; `io.modelcontextprotocol:kotlin-sdk-core` publishes
+0.7.0 as its *first* release. The range does not start at 0.7.0 because the bug
+was introduced there — it starts there because that is where the module
+containing `ReadBuffer.kt` was split out. Recorded in the rule so nobody later
+"corrects" the floor down to 0.1.0 on the theory that older releases must also be
+affected. There are no releases between 0.12.0 and 0.13.0, so one floor covers
+the range with no second arm needed.
+
+| CVE | Reference | AAK rule / disposition | Triaged |
+|---|---|---|---|
+| CVE-2026-53937 (MCP Kotlin SDK 0.7.0–0.12.0, CVSS 6.2 - `ReadBuffer.append` writes every stdio chunk into a `kotlinx.io.Buffer` with no size cap and only extracts a frame on `\n`, so a peer that never sends a newline grows it until the JVM is OOM-killed; `StdioServerTransport` / `StdioClientTransport` amplify it by queueing raw chunks through a `Channel<ByteArray>(Channel.UNLIMITED)` with no backpressure) | [NVD](https://nvd.nist.gov/vuln/detail/CVE-2026-53937) | **In scope, rule shipped** `AAK-MCP-STDIO-UNBOUNDED-BUFFER-001` (SUPPLY_CHAIN, **MEDIUM**): floor `io.modelcontextprotocol:kotlin-sdk >= 0.13.0`, `introduced=0.7.0`, matching `kotlin-sdk`, `kotlin-sdk-core` and `kotlin-sdk-jvm` and reporting once per manifest. First JVM pin in the repository; new scanner `jvm_mcp_sdk_pins.py` reads `build.gradle`, `build.gradle.kts`, `gradle/libs.versions.toml` and `pom.xml`. (#705) | 2026-09-09 |
+
+## 2026-09-08: nine issues close on five pins, and three registry checks changed the fix
+
+The queue carried twelve open `cve-response` issues, eleven of them dated
+deferrals. Nine close here. Every one had been dispositioned as *"a bug inside a
+third-party server's own binary — AAK scans a consumer's repository and cannot
+see it."* That reading is right about the **defect** and wrong about the
+**dependency**, which is the thing this scanner has pinned since the 2026-07
+wave. Re-reading them against that distinction is what moved them, and then three
+registry lookups changed what shipping actually meant.
+
+**`postgres-mcp` has no fixed version.** The deferral said "version floor to
+0.3.1+". There is no 0.3.1: upstream's newest tag is v0.3.0 (2025-05-16) and
+crystaldba/postgres-mcp#178 — the security issue itself — is still open, so every
+published release of that distribution is affected. A floor pointing at a
+non-existent version would have told users to upgrade to nothing. Worse, PyPI
+carries a separate `postgres-mcp-pro` (0.4.0–0.4.2) with the product's marketing
+name and an identical summary string, no declared repository, and no reference
+from the upstream project — the obvious "fix" is a package we cannot identify, so
+the rule does not name it as an upgrade target. The remediation is a
+least-privilege database role instead, because restricted mode is what failed.
+
+**The `postgres-mcp` floor exists to exclude npm, not to promise a fix.** npm
+carries an unrelated `postgres-mcp` — a type-safe multi-database MCP server on the
+1.0.x line. Presence-only (`floor=None`) would have flagged every one of that
+project's dependents, permanently, for someone else's CVE: the MCPHub trap from
+the 2026-09-04 wave, arriving from the opposite direction. A 0.4.0 floor separates
+the two identities by version line, so the whole vulnerable 0.x distribution fires
+and the npm project never does. Both directions are asserted in tests.
+
+**ContextForge's floor is one release above what any open source states.**
+CVE-2026-77822 has no CPE range in NVD at all, and the project's GitHub advisory
+list stops at a `v1.0.8` patched-version. IBM's own bulletin says affected
+`<= v1.0.8`, fixed `v1.0.9`. Taking the floor from either open source alone ships
+one release short and reports four vulnerable installs as patched. One floor
+covers four CVEs and four issues.
+
+**Langflow's existing pin was quietly wrong.** `AAK-MCP-LANGFLOW-CVE-2026-12940-001`
+carried a 1.11.0 floor, correct for the six CVEs it already cited. CVE-2026-9186
+affects 1.0.0–1.11.2, so 1.11.0, 1.11.1 and 1.11.2 were being reported as patched
+while exposed. Raising the floor on the existing rule — rather than adding a
+second langflow pin that would report one dependency twice — is the `@apify`
+shape. The three versions are named in a test so a later "simplification" back to
+1.11.0 fails loudly.
+
+**#656 (CVSS 10) closes on the pin, and the detector it was waiting for is now
+its own issue.** ToolUniverse's unauthenticated `python_code_executor` sandbox
+escape has a vendor fix at 1.3.0 — bearer-token auth, loopback bind, hardened
+attribute checks. The pin is true today for anyone who depends on the package.
+The *generic* deny-list-sandbox detector the deferral was actually waiting on is
+a rule to design, not a CVE response, and it was holding a CRITICAL issue open for
+five weeks while nothing about that CVE remained unanswered. The rule's
+`limitations` field says plainly that this is a dependency pin and not a
+sandbox-escape detector, so the coverage claim stays honest.
+
+One issue closes as out of scope: SiYuan (CVE-2026-85580) ships as a desktop
+binary and a Docker image. PyPI `siyuan` (0.1.2) is a third-party API client and
+npm `siyuan` (1.2.7) is the plugin-API type package — neither is the application,
+and both are on version lines that never approach 3.8.2, so a pin on either name
+would be a claim about software the dependent does not run.
+
+Two deferrals stay, both dated 2026-09-20, and both for the same reason: #693 and
+#699 are one class — a destination taken from MCP configuration and fetched
+server-side with no link-local/metadata guard — and one rule covers both. Neither
+product is pinnable (OGX is identified by commit; Rowboat's PyPI and npm names are
+unrelated projects), so a rule is the only response, and it needs design against
+fixtures rather than a pattern bolted on to clear a queue.
+
+| CVE | Reference | AAK rule / disposition | Triaged |
+|---|---|---|---|
+| CVE-2026-81096 (ToolUniverse <= 1.2.6, CVSS 10 - `python_code_executor` deny-lists attribute names while leaving the attribute-lookup builtins reachable, so a caller walks from a literal's class to its base and enumerates subclasses to reach `subprocess`; the HTTP and MCP servers bind every interface with debugging on and no authentication) | [NVD](https://nvd.nist.gov/vuln/detail/CVE-2026-81096) | **In scope, rule shipped** `AAK-MCP-TOOLUNIVERSE-CVE-2026-81096-001` (SUPPLY_CHAIN, **CRITICAL**): floor `tooluniverse >= 1.3.0`, the release that adds bearer-token auth, defaults the bind to loopback and hardens the attribute checks. The rule's `limitations` states it is a dependency pin, not a deny-list-sandbox detector; that detector is tracked separately. (#656) | 2026-09-08 |
+| CVE-2026-77822 / CVE-2026-18905 / CVE-2026-18486 / CVE-2026-18489 (IBM ContextForge MCP Gateway <= 1.0.8 - DNS-rebind SSRF via the A2A invoke endpoint and during tool invocation, improper jq-filter validation leaking credentials, and the Translate utility exposing data to the wrong session) | [NVD](https://nvd.nist.gov/vuln/detail/CVE-2026-77822) | **In scope, rule shipped** `AAK-MCP-CONTEXTFORGE-CVE-2026-77822-001` (SUPPLY_CHAIN, **HIGH**): floor `mcp-contextforge-gateway >= 1.0.9`. One floor, four CVEs, four issues. The floor comes from IBM's bulletin — NVD carries no CPE range for CVE-2026-77822 and the GitHub advisory list stops at v1.0.8, so either open source alone would have shipped one release short. (#691, #692, #696, #697) | 2026-09-08 |
+| CVE-2026-85620 (Postgres MCP Pro 0.3.0, CVSS 8.6 - restricted mode applies function-name validation to plain calls but not to `RangeFunction` nodes, so `pg_read_file` through FROM-clause syntax reads arbitrary files) | [NVD](https://nvd.nist.gov/vuln/detail/CVE-2026-85620) | **In scope, rule shipped** `AAK-MCP-POSTGRESMCP-CVE-2026-85620-001` (SUPPLY_CHAIN, **HIGH**): **no fixed release** — upstream issue #178 is open and v0.3.0 is still the newest tag, so the whole published 0.x line fires. The 0.4.0 floor exists to exclude the unrelated npm `postgres-mcp` (1.0.x), not to promise a fix; PyPI `postgres-mcp-pro` is deliberately not named as an upgrade target. Remediation is a least-privilege database role. (#690) | 2026-09-08 |
+| CVE-2026-85787 (awslabs postgres-mcp-server < 1.1.7, CVSS 6.5 - incomplete disallowed-input list in SQL validation lets crafted SQL write beyond read-only scope) | [NVD](https://nvd.nist.gov/vuln/detail/CVE-2026-85787) | **In scope, rule shipped** `AAK-MCP-AWSPOSTGRES-CVE-2026-85787-001` (SUPPLY_CHAIN, **MEDIUM**): floor `awslabs.postgres-mcp-server >= 1.1.7`, the vendor's stated fix. (#698) | 2026-09-08 |
+| CVE-2026-86439 (knowns < 0.30.0, CVSS 8.8 - the MCP doc and memory tools take a filesystem path from tool arguments without confining it to the project directory, so traversal reads, creates, overwrites and deletes files anywhere the process can reach) | [NVD](https://nvd.nist.gov/vuln/detail/CVE-2026-86439) | **In scope, rule shipped** `AAK-MCP-KNOWNS-CVE-2026-86439-001` (SUPPLY_CHAIN, **HIGH**): floor npm `knowns >= 0.30.0`, `introduced=0.1.1`. The bound is a name-collision fix, not a range statement: PyPI carries an unrelated `knowns` whose only release is 0.1.0, and npm's history also starts at 0.1.0, so bounding at 0.1.1 trades npm's single 0.1.0 release for never flagging the stub — 86 of 87 real versions still fire. (#703) | 2026-09-08 |
+| CVE-2026-9186 (IBM Langflow OSS 1.0.0-1.11.2, CVSS 6.5 - a spoofed `X-Forwarded-For: 127.0.0.1` satisfies the localhost-only guard on MCP-config installation, so a remote authenticated attacker writes arbitrary IDE config files such as `~/.cursor/mcp.json`) | [NVD](https://nvd.nist.gov/vuln/detail/CVE-2026-9186) | **In scope, existing pin floor moved** `AAK-MCP-LANGFLOW-CVE-2026-12940-001` from 1.11.0 to 1.11.3. The old floor called 1.11.0, 1.11.1 and 1.11.2 patched while all three are affected. Same package, same rule id — a second langflow pin would report one dependency twice. Note the asymmetry: AAK cannot see Langflow's header-trust bug, but the *outcome* — an attacker-written `.cursor/mcp.json` — is exactly what the MCP-config scanners already flag in the repository that receives it. (#695) | 2026-09-08 |
+| CVE-2026-85580 (SiYuan < 3.8.2, CVSS 6.5 - case-sensitive path matching in the MCP file-access handler lets `PublishAccess.json` read the guarded `publishAccess.json` on Linux) | [NVD](https://nvd.nist.gov/vuln/detail/CVE-2026-85580) | **Out of scope, no pinnable artifact.** SiYuan ships as a desktop binary and a Docker image. PyPI `siyuan` (0.1.2) is a third-party API client and npm `siyuan` (1.2.7) is the plugin-API type package; neither is the application, and both sit on version lines that never approach 3.8.2, so a pin on either name would report a CVE in software the dependent does not run. Closed `not planned`. (#694) | 2026-09-08 |
+
+## 2026-09-04: the deferral queue, drained by two registry lookups
+
+Eleven issues carried `cve-deferred` with a dated target. Nine of them are closed
+here, and what unblocked them was not more time — it was checking a registry.
+
+The MCPHub batch (eight advisories against one product) was held on a single
+question: is PyPI `mcphub` the same project as npm `@samanhappy/mcphub`? It is
+not. The npm package is a self-hosted MCP gateway on the 1.0.x line (latest
+1.0.34); the PyPI package is Cognitive-Stack's framework-integration library on
+0.1.x (latest 0.1.11), different author, different repository. That matters more
+than it sounds: PyPI `mcphub` will never reach a 1.0.32 floor, so a bare-token pin
+would not misfire occasionally, it would flag **every dependent, permanently**,
+for a CVE in software they do not run. The pin is keyed on the scoped npm name and
+a test asserts nothing fires on the PyPI package.
+
+The n8n advisory carried the other kind of trap. CVE-2026-85166 reads "before
+2.35.4 **and** 2.36.x before 2.36.2", and a single floor at 2.35.4 clears 2.36.0
+and 2.36.1 — which sort above it and are still vulnerable. That is the same
+two-branch shape as CVE-2026-65594, so the pin gains a second `introduced`-bounded
+arm under the same rule id rather than a fourth n8n rule. A test states the bug in
+the form it would have shipped in, so a later "simplification" back to one arm
+fails loudly instead of going quiet.
+
+Two deferrals stay deferred. CVE-2026-81096's sandbox-escape half needs a detector
+class that does not exist yet (target 2026-09-30), and it is the only one left.
+
+| CVE | Reference | AAK rule / disposition | Triaged |
+|---|---|---|---|
+| CVE-2026-79743 … CVE-2026-79750 (MCPHub, eight advisories in one batch - `PUT /api/system-config` with no authorization check (< 1.0.29); prompt/resource controllers with no role check on mutating routes (< 1.0.32); a `servers`-scoped bearer key accepted against a group route (< 1.0.31); non-admin ownership scoping enforced on list views but not everywhere (< 1.0.30); `POST /api/servers` creating server entries whose command is executed (< 0.12.15, CVSS 9.9); the MCPB upload handler trusting `manifest.json`'s `name` from an uploaded ZIP (< 0.12.13); and a custom `isBlockedIpv6` in `src/utils/ssrf.ts` that does not cover the address forms it needs to (< 1.0.32)) | [NVD](https://nvd.nist.gov/vuln/detail/CVE-2026-79748) | **In scope, rule shipped** `AAK-MCP-MCPHUB-CVE-2026-79748-001` (SUPPLY_CHAIN, **CRITICAL**): floor `@samanhappy/mcphub >= 1.0.32`, the highest of the eight fix versions, so one pin covers all eight rather than reporting one dependency eight times. **Keyed on the scoped npm name only** — PyPI `mcphub` is an unrelated project (Cognitive-Stack, 0.1.x) and a bare-token pin would flag its dependents forever for someone else's CVE. That identity question is what the deferral was held open on. (#671–#678) | 2026-09-04 |
+| CVE-2026-85166 (`n8n` < 2.35.4 and 2.36.x < 2.36.2 - nodes that execute an inline sub-workflow accept a credential reference in their inline workflow JSON without checking that the author owns it, and MCP is one of the named write paths, so a shared-workflow editor plants a node whose secret is resolved when the workflow later runs under an identity holding it) | [NVD](https://nvd.nist.gov/vuln/detail/CVE-2026-85166) | **In scope, existing pin floor moved** `AAK-MCP-N8N-CVE-2026-72768-001` from 2.34.1 to 2.35.4, **plus a second arm** at 2.36.2 bounded to `introduced=2.36.0`. The second arm is the whole point: 2.36.0 and 2.36.1 sort *above* 2.35.4 and are still affected, so a single floor would have read them as patched. Same shape as CVE-2026-65594's two-branch fix; still one n8n rule id, not a fourth. Both fix versions published on npm (latest 2.37.10). (#683) | 2026-09-04 |
+| CVE-2026-81845 (`mcp-sequential-thinking` <= 0.5.0, CVSS 3.1 6.3 - `import_session` / `export_session` in `mcp_sequential_thinking/server.py` take a `file_path` argument and do not confine it to a session directory, so a caller reads or writes arbitrary host paths; both are ordinary MCP tools, so the caller is anything that can steer tool selection) | [NVD](https://nvd.nist.gov/vuln/detail/CVE-2026-81845) | **In scope, rule shipped** `AAK-MCP-SEQTHINKING-CVE-2026-81845-001` (SUPPLY_CHAIN, **MEDIUM**): floor `mcp-sequential-thinking >= 0.6.0` (patch 2fad3ee, published on PyPI; latest 0.6.1). The straightforward one in this batch, and kept as the control that the other two are measured against. (#664) | 2026-09-04 |
+
+## 2026-09-02: three guards that were present and wrong
+
+The queue was 16. Every one was read against NVD, in CVSS order, and put in exactly
+one bucket: three NEW-RULE, twelve DEFERRED with a target date, one OUT-OF-SCOPE.
+
+The three that got rules have the same shape as each other, and it is not the shape
+the corpus was built for. Every SSRF rule here asks whether an allow-list exists.
+Every DoS rule asks whether a size limit exists. Every approval rule asks whether a
+check exists. In all three of these the thing exists. It is just wrong, and a
+detector keyed on absence cannot see a defence that is present and broken.
+
+Each shape was scanned against the whole engine before a rule was written. Nothing
+fired for any of the three, so no existing rule was extended and none was
+duplicated.
+
+Two deferrals stayed deferrals for the opposite reason. CVE-2026-81102 and
+CVE-2026-37006 need `AAK-DNS-REBIND-001` and the transport rules widened to Python
+FastMCP and to WebSocket. Those are the same claims over a language and a transport
+the detectors do not currently read, so they get a scanner path, not a second rule
+id.
+
+| CVE | Reference | AAK rule / disposition | Triaged |
+|---|---|---|---|
+| CVE-2026-80347 (`mcp-fetch`, CWE-918, CVSS 3.1 7.5 - `isSafeUrl` reads `.hostname` off a parsed URL, which keeps the brackets WHATWG puts round an IPv6 literal, and hands `[::1]` to `net.isIP`, which returns 0 for a bracketed value; the private-address branch is skipped and the guard falls through to its default-allow tail) | [NVD](https://nvd.nist.gov/vuln/detail/CVE-2026-80347) | **In scope, rule shipped** `AAK-SSRF-BRACKETED-HOST-001` (TRANSPORT_SECURITY, **HIGH**). The allow-list is present, which is why `AAK-MCP-SSRF-001` (no allow-list) and `AAK-LANGCHAIN-SSRF-REDIR-001` (redirect past a guard) both stay silent - verified by scanning the shape, not inferred. **JS/TS only**: Python's `urlsplit().hostname` strips the brackets before you see them, so the same code is not vulnerable there and is deliberately not flagged. Single-file pattern detection, no data flow. Benign fixture is the same guard calling `.replace(/^\[\|\]$/g, "")` first. (#649) | 2026-09-02 |
+| CVE-2026-84289 (`hermes-agent` <= 0.18.2, CWE-400 + CWE-789, CVSS 3.1 4.3 / CVSS 4.0 2.1 - `list_tools` in `tools/mcp_tool.py` reads every tool an upstream server returns into memory and builds a catalogue from it, with no bound on tool count or schema size) | [NVD](https://nvd.nist.gov/vuln/detail/CVE-2026-84289) | **In scope, rule shipped** `AAK-MCP-TOOLS-LIST-UNBOUNDED-001` (MCP_CONFIG, **MEDIUM**). `AAK-MCP-016` looked like the match and is not: it bounds the **inbound request body**, and this allocation is driven by the **upstream response**, a value arriving from the other direction that no body-size limit touches. A test asserts `AAK-MCP-016` does not fire on this shape, so if that ever changes somebody has to decide which rule owns it rather than both firing. Any bound clears it - a slice, a length check, a `max_*`, a `break`. (#681) | 2026-09-02 |
+| CVE-2026-19591 (OpenAI Codex CLI / Codex Desktop, CWE-150 - the command-safety parser interpreted PowerShell's stop-parsing token `--%` differently from PowerShell itself, so a command classified as safe ran a different command; a file-writing git command executes with no approval prompt and can rewrite Codex's own configuration, which is loaded on the next start) | [NVD](https://nvd.nist.gov/vuln/detail/CVE-2026-19591) · [upstream PR](https://github.com/openai/codex/pull/22643) | **In scope, rule shipped** `AAK-APPROVAL-PARSER-DESYNC-001` (TRUST_BOUNDARY, **HIGH**). A third route to an approval bypass, and the two near neighbours cover the other two: `AAK-POLICY-TRUNCATION-001` needs the value **cut to a fixed length**, `AAK-MCP-ARGV-TOCTOU-001` needs the argv **rebuilt after** the check. Here it is neither - the checker and the shell read the same bytes and disagree. **Scope stated rather than implied**: this knows one interpreter's stop-parsing token, not every shell's grammar, and a gate in front of bash is not flagged. Claiming to know every shell's parser is a claim a pattern scan cannot make. (#679) | 2026-09-02 |
+| CVE-2026-81846 (runZero Platform MCP service, CWE-639, CVSS 3.1 3.5 - authorization bypass through a user-controlled key, fixed server-side in 5.1.260826.0) | [NVD](https://nvd.nist.gov/vuln/detail/CVE-2026-81846) · [advisory](https://www.runzero.com/advisories/runzero-mcp-findings-summaries-data-leak-cve-2026-81846) | **Out of scope** - and a genuine MCP surface, which is why it is written down rather than waved off. runZero Platform is a hosted product: `runzero` resolves on neither npm nor PyPI, there is no `@runzero/mcp`, and the fix landed on the vendor's side. Nothing in a user's own repository can be pinned, patched or detected for it. Re-triageable if runZero ever ships a self-hosted MCP component through a registry this scanner reads. (#680) | 2026-09-02 |
+
 ## 2026-08-31: the credential that points the wrong way
 
 A CVSS 10.0 that the project's own no-auth rule read as authenticated.

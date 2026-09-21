@@ -1,9 +1,17 @@
 # agent-audit-kit — Roadmap to Top 1% (April 2026)
 
-> **Historical snapshot — authored 2026-04-12, not updated.** This is the April
-> 2026 plan, kept because the reasoning is still useful and deleting it would be
-> the dishonest version. Read it as a record of what was intended, not as a
-> statement of where the project is.
+> **Historical snapshot — authored 2026-04-12; the plan is not maintained.** This
+> is the April 2026 plan, kept because the reasoning is still useful and deleting
+> it would be the dishonest version. Read it as a record of what was intended, not
+> as a statement of where the project is.
+>
+> "Not updated" is what this line said until 2026-09-08, and it was not quite
+> true: §2 item 2 was amended at v0.3.0 to record the scanner rename, and it now
+> carries a 2026-09-08 annotation about issue #22. So the accurate claim is
+> narrower — **nobody re-plans this file**, and its figures and goals are left
+> exactly as authored, but factual corrections are appended in place and dated
+> rather than folded in silently. A banner that overstates its own discipline is
+> the same class of defect as the ones it is here to disclose.
 >
 > Its headline goal — "1,000+ GitHub stars and reference-implementation status
 > for the OWASP MCP Top 10 project within 90 days" — was not met. Four months on
@@ -44,6 +52,10 @@ Carried over from the earlier `DEEP_ANALYSIS.md` plus the new market context:
 
 1. **Exception handling around `engine.run_scan`** — today a single bad scanner crashes the whole scan. Add per-scanner try/except that emits an `AAK-INTERNAL-SCANNER-FAIL` INFO finding and continues.
 2. **TypeScript/Rust scanners: rename done, AST rewrite still open** — the two modules were renamed to `typescript_pattern_scan.py` / `rust_pattern_scan.py` (v0.3.0, with back-compat shims) and the docs no longer describe them as "taint analysis", so the source now matches the marketing (they are honest regex pattern scanners). The remaining half — a real tree-sitter AST rewrite that models source→sink reachability for TS/Rust — stays open as **issue #22**; do not restart it here.
+   >
+   > **Annotation, 2026-09-08 — #22 is closed, and it did not deliver what this line describes.** Same treatment as the banner: the sentence above is left as written because it records what was intended in April. Issue #22 was closed as completed on **2026-08-15**, after being scoped down from "replace all regex scanners with tree-sitter taint tracing across TS/JS, Python, Rust, Go" to a single slice — a tree-sitter TypeScript/JavaScript taint pass for `AAK-MCP-STDIO-CMD-INJ-002` alone. That slice shipped and is `agent_audit_kit/scanners/_ts_stdio_taint.py`: it replaces the proximity decision with reachability over a real parse for that one rule, keeps `tree_sitter` optional with a proximity fallback, and changes nothing about what the rule reports.
+   >
+   > Rust was never in the shipped slice and is still a regex pattern scan — `rust_pattern_scan.py` says so in its own docstring: "It does NOT model flow from user-controlled sources." So the "TS/Rust" reachability rewrite named above is **not** what #22 delivered, and no open issue tracks the rest of it. Read this item as: one rule got real taint, the general rewrite did not happen, and nobody is currently on it.
 3. **LLM-assisted scanner** (`llm_scan.py`) — today depends on Ollama silently. Wire it into Claude / OpenAI / Gemini with a `--llm claude-haiku-4-5` CLI flag and make it explicit-opt-in, not silent.
 
 ### 2.2 Must-add coverage for 2026 threat landscape

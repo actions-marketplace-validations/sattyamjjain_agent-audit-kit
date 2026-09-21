@@ -1,11 +1,15 @@
-# State of MCP Security 2026 — coverage & corpus (report seed)
+# MCP security coverage & crosswalk
 
-> **Seed, not the final report.** The coverage table below is generated from the
-> committed rule registry (`agent-audit-kit --emit-coverage`); the corpus section
-> is stubbed and cross-links the live data run. Regenerate with
+> **The corpus study is [`research/state-of-mcp-2026/REPORT.md`](https://sattyamjjain.github.io/agent-audit-kit/docs/research/state-of-mcp-2026/REPORT/) (v1.0, citable).**
+> This page is not a second report and does not restate its findings. It covers
+> what only lives here: the framework crosswalk generated from the committed rule
+> registry, the dated evidence anchors, and the reserved-surface status table for
+> MCP final 2026-07-28.
+>
+> Regenerate the coverage data with
 > `python -c "from agent_audit_kit.output.coverage_map import render_json; open('docs/coverage.json','w').write(render_json())"`.
 
-AgentAuditKit ships **<!-- rule-count:total -->327<!-- /rule-count --> deterministic rules**,
+AgentAuditKit ships **<!-- rule-count:total -->357<!-- /rule-count --> deterministic rules**,
 each mapped — rule by rule — to the framework control it evidences. The full,
 machine-readable crosswalk is [`docs/coverage.json`](coverage.json); the live
 per-framework counts (severity, OWASP MCP Top-10, OWASP Agentic Top-10 2026, NSA
@@ -25,22 +29,22 @@ the **EU AI Act** article it maps to. `docs/coverage.json` groups and counts by
 each framework. The NSA-CSI + OWASP-Agentic view is also in
 [`docs/crosswalk/nsa-csi-owasp-agentic.md`](crosswalk/nsa-csi-owasp-agentic.md).
 
-## We scanned N public MCP servers — here is what breaks
+## Corpus findings live in the report
 
-A reproducible, offline data run over **2,303 distinct public MCP server configs**
-(a GitHub crawl plus the official MCP Registry's latest-version servers, deduped by
-content) already exists — see
-[`research/state-of-mcp-2026/REPORT.md`](../research/state-of-mcp-2026/REPORT.md)
-and the raw [`results.json`](../research/state-of-mcp-2026/results.json). Headline
-from that run: **<!-- report:noauth-pct -->52.2<!-- /report -->% (<!-- report:noauth-n -->1,203<!-- /report -->/2,303) declare a remote server with no authentication,
-0% use RFC 9728 Protected-Resource-Metadata discovery, and 100% (421/421) of
-inline-auth remote configs hardcode a static credential.**
+The data run over **2,303 distinct public MCP server configs** — a GitHub crawl
+plus the official MCP Registry's latest-version servers, deduped by content — is
+published in full as [`research/state-of-mcp-2026/REPORT.md`](https://sattyamjjain.github.io/agent-audit-kit/docs/research/state-of-mcp-2026/REPORT/)
+(v1.0, with methods, limitations and a citation block), over the raw
+[`results.json`](https://sattyamjjain.github.io/agent-audit-kit/docs/research/state-of-mcp-2026/results.json). Per-rule prevalence
+is in [`PREVALENCE.md`](https://sattyamjjain.github.io/agent-audit-kit/docs/research/state-of-mcp-2026/PREVALENCE/).
 
-> **Stub for the next corpus run.** Re-run the harness and drop the refreshed
-> "what breaks" table here: top misconfigurations by config-hit-rate, grade
-> distribution (A–F), auth-posture split (no-auth / bearer / OAuth 2.1 / unknown),
-> and transport split (stdio / SSE / streamable-HTTP). The frozen baseline for
-> before/after is [`mcp-security-baseline-v1.0`](research/mcp-security-baseline-v1.0.md).
+One figure for orientation, generated from the same data:
+**<!-- report:noauth-pct -->52.1<!-- /report -->% (<!-- report:noauth-n -->1,201<!-- /report -->/2,303) of those configs declare a remote server with no authentication.**
+Everything else — grade distribution, auth-posture and transport splits, the top
+misconfigurations table — is in the report, and is deliberately not duplicated
+here. This page previously carried a stubbed "what breaks" section that competed
+with it; that is what let `100% (421/421)` sit on this page while the report said
+424.
 
 ## Evidence anchors (verified live 2026-07-24)
 
@@ -48,7 +52,7 @@ inline-auth remote configs hardcode a static credential.**
   core (removes `initialize` + `Mcp-Session-Id`), per-request `_meta` metadata
   transport, MCP Apps (server-rendered HTML in a sandboxed iframe), the Tasks
   extension (tool calls answered with task handles), and full JSON Schema 2020-12
-  tool schemas. [RC announcement](https://blog.modelcontextprotocol.io/posts/2026-07-28-release-candidate/).
+  tool schemas. [Key Changes](https://modelcontextprotocol.io/specification/2026-07-28/changelog).
 - **NSA MCP Security CSI** — *Model Context Protocol (MCP): Security Design
   Considerations for AI-Driven Automation*, U/OO/6030316-26 (NSA AISC, 2026-05-20).
   All 9 recommendation sections are crosswalked in `docs/coverage.json`.

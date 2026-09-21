@@ -7,6 +7,1899 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- **The 2,303-config corpus study has an address.**
+  `research/state-of-mcp-2026/` sits outside `docs/`, so MkDocs could not serve
+  it and the report every abstract, `CITATION.cff` and the OWASP outreach note
+  points a reader at had no https URL at all — the link from
+  `docs/STATE-OF-MCP-SECURITY-2026.md` answered 404 on the deployed site.
+  `scripts/mkdocs_hooks.py` now adds `REPORT.md`, `PREVALENCE.md`, both Black
+  Hat abstracts, `results.json`, the one-page PDF and the frozen baseline
+  snapshot to the build **from where they already live**. Nothing is copied into
+  `docs/`, so `make report` keeps its single path and
+  `scripts/check_report_figures.py`'s `MUST_AGREE` keeps asserting against the
+  one file it always has. The report is at
+  `https://sattyamjjain.github.io/agent-audit-kit/docs/research/state-of-mcp-2026/REPORT/`.
+
+  Those files are written to be read from the repository root, so they reach
+  siblings with `../../docs/x` and `../../CITATION.cff`; inside the built site
+  the docs directory *is* the root, so those climb out of it. An explicit
+  rewrite table maps each one — enumerated, not pattern-matched, so it can be
+  read and checked — and a test fails if a published file grows a relative link
+  the table does not cover.
+
+- **Every `nav:` entry is checked against the deployed site.**
+  `scripts/nav_liveness.py`, wired into `link-check.yml` as the `nav-liveness`
+  job, follows the pattern `description-liveness.yml` established: a claim only
+  the network can settle decays silently otherwise. Building the docs proves the
+  markdown parses; only a request proves a reader can reach the page. It runs on
+  a daily cron and on demand — deliberately **not** on pull requests or pushes,
+  because a page added in a branch 404s until it deploys, and a check that is
+  red for a legitimate reason gets ignored. Standard library only, so the check
+  does not depend on MkDocs being installed to run.
+
+### Fixed
+
+- **The report PDF had been stale for two months and nothing could tell.**
+  `state-of-mcp-security-2026.pdf` was last written 2026-07-26 while
+  `results.json` moved on 2026-08-17, 2026-09-14 and 2026-09-19. `make report`
+  did not regenerate it and no guard compared them, so the numbers in the
+  citable artifact disagreed with the corpus it claims to describe. Found while
+  giving it a permanent URL, which would have made a stale artifact easier to
+  cite rather than easier to spot. `make report` now re-renders it, `make
+  report-pdf-check` fails when it drifts, and — because reportlab stamps a
+  `/CreationDate` and no two renders are byte-identical — the guard compares a
+  recorded SHA-256 of the `results.json` it was built from rather than the file.
+
+- **Links from the docs site into the research tree returned 404.**
+  `docs/STATE-OF-MCP-SECURITY-2026.md`, `docs/DISTRIBUTION-CHECKLIST.md` and
+  `docs/research/mcp-security-baseline-v1.0.md` reached the report, the
+  prevalence page, `results.json` and the baseline snapshot with paths that
+  climbed above the docs root. Seven links, all dead on the deployed site.
+
+### Changed
+
+- **Pointers now name the published URL** in `CITATION.cff` (the citation
+  resolves to a rendered page, not a raw file), `funding.json` (a floss.fund
+  reader could not resolve the bare `docs/cve-triage.md` path),
+  `launch/owasp-outreach.md`, both `launch/awesome-list-prs/` entries, both
+  Black Hat abstracts and README.md. **No count moved:** 357 rules across 14
+  categories is unchanged, and the Briefings abstract keeps its 1,374-config
+  2026-07-19 basis, which `tests/test_corpus_n_single_source.py` excludes from
+  the corpus guard on purpose as a dated CFP artifact.
+
+## [0.6.7] - 2026-09-19
+
+### Added
+
+- **Ten MCP CVEs from the 2026-09-15..16 wave dispositioned** (issues
+  #745-#754), five of them CRITICAL. No new detection rule was needed: all ten
+  are shapes the registry already owns. Five new package pins
+  (`mysql-mcp-server` >= 0.4.2, npm `praisonai` >= 1.7.2, `@zereight/mcp-gitlab`
+  >= 2.1.30, `flowise` >= 3.1.4, `mcp-from-openapi` >= 2.5.0), one floor raised
+  (`meta-ads-mcp` 1.0.109 -> 1.0.115, because CVE-2026-54549 is fixed above the
+  old floor and 1.0.109-1.0.114 were vulnerable and silent), one name added to
+  an existing pin (`@frontmcp/adapters`), and one CVE recorded against a floor
+  that already covers it (`mcp-contextforge-gateway`, fixed 1.0.2, floor 1.0.9).
+  Every package and fix version verified against the live PyPI and npm
+  registries; every CVE re-verified against the NVD API. Rule count 352 -> 357.
+  Full per-CVE reasoning in `CHANGELOG.cves.md`.
+
+### Fixed
+
+- **A version pin did not know which package registry it was about, and
+  reported a fully-patched install as vulnerable.** `_Pin` matched on package
+  name alone. PyPI's `praisonai` runs a 4.6.x line; npm publishes an unrelated
+  `praisonai` — the TypeScript agent framework — on 1.7.x. The 4.6.78 floor was
+  compared against npm's newest release, 1.7.4, and flagged it, with remediation
+  text naming a version npm has never published. Found while trying to pin
+  CVE-2026-57139, which is *about* the npm package and could not be expressed at
+  all until the two were distinguishable. `_Pin.ecosystem` now scopes a pin to
+  `py` or `js`; a manifest whose registry the filename does not reveal (an
+  `mcp.json` can name either) still matches every pin, so the scoping only
+  removes claims that could not be made. `marimo` and `omnigent` were scoped in
+  the same pass — the pin table's own header had recorded an old-npm-`marimo`
+  hit as "the accepted cost" of covering three real pip CVEs, and there is now
+  no cost to accept.
+
+- **A bare package name matched inside its own scoped sibling and reported it
+  as unpinned.** `_mk_re("frontmcp")` matched the `frontmcp` inside
+  `"@frontmcp/adapters": "1.5.7"`, captured no version because `/adapters`
+  follows the name, and a missing version reads as "unpinned" — so a correctly
+  patched package was reported. The scan loop breaks on the first pattern that
+  *matches* rather than the first that *fires*, so the bare name also shadowed
+  the scoped pattern that would have parsed the version correctly. `_mk_bare_re`
+  excludes `@` on the left and `/` on the right. The identical pair existed for
+  `better-auth` / `@better-auth/oauth-provider` and was also live: a patched
+  `@better-auth/oauth-provider@1.6.13` reported as unpinned. A test now fails if
+  any future pin names both a bare package and its scoped sibling without
+  guarding the bare one.
+
+- **The CVE-pin scanner under-reported `files_scanned`.** `scan()` added a path
+  to its `scanned` set only when that file produced a finding, so the count
+  described matches rather than files read and a clean repository looked
+  unscanned. Same contract bug as the eight scanners corrected in v0.6.6.
+
+- **The two MCP-config crash shapes left open by v0.6.6 are hardened.**
+  `{"url": 42}` and `{"command": ["node"]}` were taking down four scanners —
+  `mcp_config` and `transport_security` on the int url, `mcp_config` and
+  `supply_chain` on the list command — plus the shared `find_line_number`
+  helper, which fed a value straight from parsed JSON into a substring search.
+  A field whose JSON type contradicts the MCP schema is reported by
+  `AAK-MCP-CONFIG-MALFORMED-001` and skipped by the rules that cannot evaluate
+  it: there is no honest answer to "does this command contain shell
+  metacharacters" when the command is a list, and coercing `["node"]` to its
+  repr would fire `AAK-MCP-002` on brackets the operator never wrote. **Note the
+  exit-code change:** these configs previously forced a non-zero exit through
+  the scanner-failure path, which was a crash acting as an accidental severity
+  floor. They now report at MEDIUM and answer to `--fail-on` like any other
+  MEDIUM finding, so a default-threshold run that used to fail on them now
+  passes. Use `--fail-on medium` if you want them to fail the build.
+
+- **The CVE-latency figure could report a negative fastest response.**
+  CVE-2026-53708 was dispositioned on 2026-08-16 from GHSA-9hgc-g3w5-67cm and
+  NVD published it 29 days later, so its measured latency is -29 days. Its
+  published date had been withheld from the ledger to keep `Fastest: -29` off
+  the page, which hid a real data point to protect a metric. Coverage that
+  predates the disclosure is now its own population — the same split the
+  deferred-backlog rows already had — reported separately with what it means,
+  and excluded from median/p90/fastest because there is no turnaround to measure
+  when the rule was already there. `scripts/build_coverage_page.py` uses the
+  same split, so the public page and `docs/cve-latency.md` can no longer
+  disagree about what the median describes. The negative-latency guard in the
+  test suite is now an allowlist carrying the advisory id that justifies each
+  exemption, so an unverified negative row still fails.
+
+- **`docs/comparisons.md` was wrong about the largest scanner in the
+  category, in every row that mentioned it.** The page README links as
+  "Comparison with other scanners" described `snyk/agent-scan` as
+  proprietary. It has been Apache-2.0 for some time, has 3,055 stars, and
+  was pushed to on the day this was checked. Re-verified on 2026-09-16 via
+  `curl https://api.github.com/repos/snyk/agent-scan` and against the
+  repository's own README and `docs/`.
+
+  Corrected: the licence cell; the account and cloud-round-trip cells, which
+  said "Yes" with no source and are now quoted from that project's README
+  (it does require `SNYK_TOKEN` "before running any scan", and its "Analysis
+  and Validation" section says component data goes to the Agent Scan API);
+  the rule count, which said `~15` with nothing behind it and is now 20
+  documented v0.5.x issue codes or 15 v0.6 risk indicators, with the counting
+  method and the caveat that a Snyk issue code and an AAK rule ID are not the
+  same unit; the OWASP cells, which claimed "Partial" where that project
+  advertises no OWASP mapping at all; and the "when to use each" line, which
+  described a cloud MDM product rather than the broadest agent discovery in
+  the category.
+
+  The five "what is empty in the category" claims were re-run rather than
+  restated. Four survived. **A pinning and drift primitive did not**, and is
+  withdrawn: `snyk/agent-scan` models a `ServerSignature` of the tool
+  surface, which is the ingredient a drift check needs. What it ships no
+  command for is the local fail-on-drift half, and that narrower claim is
+  what the page now makes.
+
+- **A compliance-framework count read 12 against a live 14, and the guard
+  could not see it.** The number sat alone in a markdown table cell, so the
+  phrase pattern `N compliance frameworks` in `scripts/check_counts.py` had
+  no phrase to match and `make count-check` reported clean for as long as the
+  cell was wrong. This is the blind spot that file's own docstring describes,
+  arriving through a shape instead of a phrasing.
+
+  Both halves are closed. The cell is now a `<!-- framework-count:total -->`
+  anchor written by `scripts/sync_rule_count.py` from
+  `pdf_report._FRAMEWORK_TITLES`, so it is injected rather than typed. And
+  `check_counts.find_table_cell_faults` reads the table shape — row label in
+  the first cell, this project's column located from the header rather than
+  assumed, since the two tables on that page put it in different positions —
+  so a bare governed count in any tracked markdown table is now checked for
+  every label already in `COUNTS`.
+
+- **The MCP Security Index snapshot date was stated twice and the two
+  disagreed.** The comparison page said 147 servers and a 2026-08-24
+  snapshot; the README, generated by `scripts/index_cadence.py`, said
+  2026-09-14. The live `history.json` says 145 servers, so both figures on
+  the comparison page were stale. Rather than teach the generator a second
+  output shape, the figures are removed from the comparison cell entirely and
+  it links to the README section that owns them.
+
+- **The page carried three review dates that had drifted apart** (an April
+  2026 framing line, a `Last reviewed: 2026-04-18`, and a
+  `Last updated: 2026-04-27`), leaving no way to tell which claim was checked
+  when. One date now, at the top.
+
+### Changed
+
+- **The comparison page no longer sorts the field by licence.** That split
+  stopped describing anything the moment the largest scanner in the category
+  turned out to be free and Apache-2.0. The sections are organised around
+  what actually differs — finding things versus producing evidence somebody
+  else will audit — and name the dated obligations behind that: EU AI Act
+  Article 50 since 2026-08-02, Colorado SB 26-189 ADMT from 2027-01-01, and
+  the [Regulation (EU) 2026/1744](https://eur-lex.europa.eu/eli/reg/2026/1744/oj)
+  Digital Omnibus, in force 2026-07-27, moving Annex III high-risk to
+  2027-12-02 and Annex I to 2028-08-02.
+
+## [0.6.6] - 2026-09-16
+
+### Fixed
+
+- **A run whose scanner crashed no longer reports success (#743).** One invalid
+  UTF-8 byte in `.mcp.json` killed four scanners. Each was filed as
+  `AAK-INTERNAL-SCANNER-FAIL` at INFO, INFO sits below the default reporting
+  floor of LOW, and the run exited 0 with an empty findings array, a 100/100 A
+  and a SARIF file with zero results. Every MCP config rule had been skipped
+  and the output was indistinguishable from a clean project.
+
+  Scanner failure now has its own exit path, ahead of and independent of
+  `--fail-on`: that flag asks whether the findings were bad enough, this asks
+  whether the scan ran at all, and the second question has to be settled first.
+  The opt-out is `--allow-scanner-failure`, a flag rather than the default, so
+  the safe state is what you get by not thinking about it. The failure is
+  exempt from the `--severity` floor by rule id, and surfaced in the console, the
+  JSON summary (`scannerFailures`, `complete`), SARIF
+  (`invocations[].executionSuccessful` plus `toolExecutionNotifications`) and
+  both score outputs.
+
+- **`filesScanned` counted rule ids (#743).** Eight scanners returned the set of
+  rule ids they evaluate as the second element of their tuple, so an empty
+  directory reported 15 files. All eight now return the files they actually
+  read, which is what the contract always said.
+
+- **Three scanner crashes on malformed input.** `args` as a scalar took down the
+  composition pass and is now reported as `AAK-MCP-CONFIG-MALFORMED-001`; a
+  `SKILL.md` at the scan root made the same pass compute a container above
+  `project_root` and raise. Two further shapes, `url` as a scalar and `command`
+  as a list, are not individually hardened and are pinned by a test asserting
+  they fail the run loudly rather than pass it.
+
+- **A wild-payload regex missed the commonest spelling of its own payload
+  (#742).** `IPI-2026-04-WILD-01` matched "ignore all instructions" and "ignore
+  previous instructions" but not "ignore all previous instructions". The
+  qualifier list is now repeatable. It still requires a sink, so it has not
+  become a phrase matcher.
+
+### Added
+
+- **The 2026-09-16 CVE queue, dispositioned (#732-#741).** Ten watcher issues:
+  four Apache Storm advisories closed as out of scope (they matched on the word
+  "agents" in a credit line, the same collision as MCP2221), three recorded
+  against floors that already covered them, one floor raised (`dbt-mcp` 1.17.1
+  to 1.20.0, since 1.17.1 through 1.19.x were vulnerable and silent), two new
+  pins for the PyPI LangGraph MongoDB packages the npm pin could not see, and
+  one new rule `AAK-MCP-LANGGRAPH-API-CVE-2026-55235-001`.
+
+- **`AAK-SKILL-006`**, hidden instruction in a `SKILL.md` body. `AAK-AGENT-005`
+  has flagged HTML-comment payloads in named instruction files since v0.2, but
+  skills were not on that list, `AAK-SKILL-005` reads only the frontmatter and
+  `AAK-SKILL-003` wants a code-level sink, so a plain-English exfiltration
+  instruction in a body comment fell between them (#742).
+
+- **`AAK-MCP-STDIO-CMD-INJ-005`**, the Go arm of the STDIO command-injection
+  family, which had Python, TypeScript, Java and Rust arms and no Go arm. Same
+  posture as the Rust arm and it says so: regex and proximity, not data-flow
+  analysis. Closes the CVE-2026-90898 deferral (#729, #731).
+
+- **A disabled-auth config arm on `AAK-MCP-NOAUTH-DEFAULT`.** The rule wanted a
+  placeholder secret plus a non-loopback bind; `auth.enabled: false` is the same
+  idea spelled differently and matched nothing.
+
+- **The artifact boundary, written down** in `docs/rules.md` and `docs/why.md`:
+  which artifact classes AAK reads, that free text inside them is in scope, that
+  markdown no agent loads by name is matched only against a known-payload
+  corpus, and that AAK does not classify arbitrary prose as hostile. The
+  English-only limit of that corpus is recorded as its own gap (#742).
+
+
+## [0.6.5] - 2026-09-14
+
+### Fixed
+
+The 2026-09-14 CVE queue, dispositioned against rules that already existed.
+Neither disclosure got a rule of its own, and the reason is recorded in
+`CHANGELOG.cves.md` rather than inferred from the diff.
+
+- **`AAK-TAINT-001` did not fire on the shape it advertises.** The rule has
+  always described "os.system(), subprocess, or similar shell execution
+  functions", but its sink set listed only the blocking `subprocess`
+  spellings. `asyncio.create_subprocess_shell` was not in it, which is the
+  call CVE-2026-90617 (GH05TCREW PentestAgent, CVSS 7.3) actually reaches:
+  the `run_task` MCP tool hands a caller-supplied string to it through
+  LocalRuntime. A positive fixture built on the real upstream shape stayed
+  silent, so the detector was fixed rather than the fixture.
+
+  The sink set now also carries `subprocess.getoutput` and
+  `subprocess.getstatusoutput`, which were missing for the same reason.
+  `asyncio.create_subprocess_exec` is deliberately excluded: it takes an argv
+  list and never reaches a shell, so making it a sink would report every
+  correctly-fixed server. The benign-slice false-positive benchmark is
+  unchanged at 0 of 1 across 536 servers.
+
+### Added
+
+- **CVE-2026-90617 mapped to both of its halves.** Upstream issue #90 names
+  the root cause as an MCP HTTP server defaulting `--host` to `0.0.0.0` with
+  no auth middleware, which is what makes `run_task` reachable. The CVE is
+  therefore attached to `AAK-MCP-HTTP-NOAUTH-SERVER-001` as well as to
+  `AAK-TAINT-001`, with fixtures covering both.
+
+- **CVE-2026-38924 (Oraios AI Serena before 1.0.0, CVSS 2.9) mapped to
+  `AAK-MCP-HTTP-NOAUTH-SERVER-001`.** The HTTP-mode listen address was
+  `0.0.0.0`; upstream changed the default to localhost in commit b00ae292.
+  That rule is shape-based rather than gated to a named vendor dependency, so
+  a Serena-style entry point already satisfied its predicate. Confirmed with a
+  fixture rather than assumed, and no rule family was created for it.
+
+## [0.6.4] - 2026-09-12
+
+### Fixed
+
+Four stale facts in files the count guard could not see, found by a parallel
+audit of the supporting documentation rather than by the guards themselves.
+
+- **`funding.json` claimed 332 rules and 12 compliance frameworks** against a
+  live 348 and 14 — drifted by 16 rules with every guard reporting clean. It is
+  published to FLOSS/fund through `.well-known/funding-manifest-urls`, so it is
+  a public claim, and `scripts/check_counts.py` was scoped to tracked `*.md`
+  because that is where prose lives. This file's `description` is a paragraph of
+  prose inside a JSON string.
+
+  Two separate blind spots, both closed. The guard now reads
+  `EXTRA_TRACKED_FILES` in addition to markdown, and a new pattern covers
+  `N rules across M categories` — the sibling of the existing
+  `N rules across M scanners`. The categories number in that sentence was
+  already guarded; the rules number matched nothing, so one number in the
+  sentence was checked and the other was free to rot. Verified by reverting the
+  stale value and watching the guard fail, then restoring it.
+
+- **`SECURITY.md` listed `Latest release (0.3.x)` as the supported version**
+  while the project shipped 0.6.3. A security policy is a poor place to be two
+  minor versions stale, and it is one of the first files a reviewing
+  organisation opens.
+
+- **`CONTRIBUTING.md` step 5 told contributors to "Update `docs/rules.md` with
+  the new rule".** That file's rule table sits between
+  `BEGIN/END rules-summary` markers written by `scripts/sync_rule_count.py`, so
+  anyone following the instruction would hand-edit generated content and have
+  the next sync silently overwrite the work. It now says to regenerate, and
+  names the script.
+
+- **`.github/dependabot.yml` documented the ruff pin as `>=0.15,<0.16`** where
+  `pyproject.toml` says `>=0.15,<0.17`. A comment explaining a constraint that
+  is not the constraint in force.
+
+### Added
+
+- Five assertions in `tests/test_readme_contract.py` covering the above:
+  `funding.json`'s counts against the live registry, the guard extension that
+  makes that enforceable rather than a one-off correction, the
+  `rules across categories` phrasing, the `SECURITY.md` version line derived
+  from `__version__`, and the `CONTRIBUTING.md` instruction.
+
+## [0.6.3] - 2026-09-12
+
+### Changed
+
+- **README rewritten: 7,056 words to 1,300.** The 2026 median is 800-1,500 and a
+  reader decides in under thirty seconds. It was roughly five times too long,
+  and length was not the worst of it: **11 badges**, the first runnable command
+  at **line 69**, and bullets running eight to ten lines *defending a number*
+  before the reader knew what the tool did. The "Mechanical fix recipes: 11 of
+  348 (3.2%)" bullet argued its own scope for ten lines above the fold. That
+  reads as anxious. The content was good and is all still here; it was in the
+  wrong place.
+
+  The category table was the single biggest offender — its "What it detects"
+  cells ran past 2,000 characters each, one cell longer than a whole good
+  README. Compressed to a phrase per category, with the detail in the rule
+  reference.
+
+  Order now follows the inverted pyramid: name, badges, demo, `pip install` and
+  a scan inside the first screen, then what it finds, then why not a hosted
+  scanner, then the evidence.
+
+- **42 relative links removed from the README.** `pyproject.toml` sets
+  `readme = "README.md"`, so the README *is* the PyPI long description, and PyPI
+  does not resolve repository-relative paths. Every one of those 42 rendered as
+  a broken link on the page where someone decides whether to install. Verified
+  against the built wheel's `METADATA`: 0 remaining.
+
+- **`docs/` made navigable.** 55 markdown files with 9 in the mkdocs nav and 14
+  orphans at top level. That is *why* the README was overloaded: content piled
+  onto the front page because there was nowhere reachable to put it. The nav now
+  carries 23 pages in six groups, and the three remaining orphans are
+  intentionally internal stubs. New pages `docs/cli.md`, `docs/github-action.md`
+  and `docs/why.md` hold what left the README.
+
+- `Development Status :: 3 - Alpha` to `4 - Beta` in `pyproject.toml`. At v0.6.3
+  with 348 rules, signed releases and a published latency figure, Alpha was
+  inaccurate downward, and PyPI shows it. Added `Documentation` and `Changelog`
+  to `[project.urls]`, which PyPI renders as sidebar links.
+
+- Moved the OpenAI grant application to `docs/grants/`. `DEEP_ANALYSIS.md` and
+  `ROADMAP_2026.md` stay at root: both are wired into `check_counts.py`'s
+  exclusion list, a test and a workflow, so moving them buys a tidier listing at
+  the cost of guard churn.
+
+### Added
+
+- **`tests/test_readme_contract.py`** — 23 assertions, and the reason the
+  rewrite was safe to attempt.
+
+  Five scheduled jobs write into `README.md` by locating an HTML-comment
+  marker: `sync_rule_count.py`, `sync_scanner_count.py`, `sync_fp_badge.py`,
+  `gen_owasp_coverage.py` and `index_cadence.py`. **32 markers in 8 families.**
+  A prose edit that drops one takes that number out of automation.
+
+  Most fail loudly. `gen_owasp_coverage.py` does not: it returns False and
+  writes nothing when its markers are absent, has no `--check` mode, and its
+  tests only assert the module exits 0. Losing that marker would have frozen the
+  OWASP coverage table with nothing to notice — the same shape as the
+  release-time latency guard fixed in 0.5.2. It now has a test of its own.
+
+  The contract also holds the phrasings `check_counts.py` matches, so a future
+  reword cannot silently stop the count guard; asserts the README has no
+  relative link, because PyPI renders it; caps it at 2,500 words with a message
+  saying to move content to `docs/` rather than trim meaning; keeps Quick start
+  above line 40; and checks every docs link and mkdocs nav target resolves to a
+  file.
+
+  Verified by running all six writers twice and diffing: byte-identical.
+
+## [0.6.2] - 2026-09-12
+
+Promises this project made in shipped code and then outlived. Found by a
+parallel sweep of the repository's own commitment surface.
+
+### Added
+
+- **PagerDuty and Linear notification sinks are implemented.** Both shipped in
+  v0.3.13 as `NotImplementedError` stubs whose docstrings said "full impl ships
+  in v0.4.0". They were still stubs at v0.6.1, two minor versions past that, and
+  `notify.py`'s module docstring had told users to build their
+  `.aak-notify.yaml` against the shape "ahead of v0.4.0" — so anyone who
+  followed that had a config that raised at runtime.
+
+  PagerDuty posts one Events API v2 `trigger` per finding with a `dedup_key` of
+  `aak:<rule_id>:<location>`, so a rule that keeps firing updates one incident
+  instead of opening a new one on every CI run. Linear creates one issue per
+  finding via the GraphQL `IssueCreate` mutation, and raises on a GraphQL
+  `errors` array, because that API answers 200 with an error body and a bad team
+  id would otherwise look like success. Both share a `_post_json` helper that
+  carries the server's response text into the exception; stdlib only, no new
+  dependency.
+
+  Linear has no dedup key, so re-running creates duplicate issues. That is
+  stated in the docstring rather than worked around: a client-side
+  search-before-create would race in CI and silently drop findings when it
+  guessed wrong.
+
+- **`agent-audit-kit rule lint --incident`.**
+  `docs/roadmap/ox-mcp-2026-05-01-batch.md` documented this as the
+  source-of-truth check for a disclosure batch and told readers to grep by hand
+  "until then". It had never been built, and the doc's Status line still read
+  "active (v0.3.14 → v0.3.16)" roughly forty releases later, handing readers a
+  command that did not exist. The filter now works, case-insensitively, and that
+  doc is marked closed with the two items that were never built recorded as
+  not-built rather than left as open boxes.
+
+### Fixed
+
+- **`AAK-LMDEPLOY-VL-SSRF-001` now names a version.** Its remediation read "see
+  GHSA for the exact version once NVD enrichment lands" from 2026-04-25 until
+  today — four and a half months and roughly ninety releases — on a CVE that was
+  exploited in the wild within about twelve hours of disclosure. It now says
+  upgrade to >= 0.12.3, cites GHSA-6w67-hwm5-92mq, and says the exposure is
+  urgent rather than routine. A remediation that points somewhere else is not a
+  remediation.
+
+- **User-facing rule text no longer tells readers to wait for closed issue #22.**
+  `AAK-MCP-STDIO-CMD-INJ-004`'s description said the Rust pass is regex-only
+  "until #22 lands tree-sitter-rust", and that text ships in `rules.json`. Issue
+  #22 closed on 2026-08-15 having delivered a TypeScript slice only; Rust was
+  never in it. The rule now states the limitation as the steady state and says
+  there is no open work item behind it. Same correction in
+  `mcp_stdio_params.py` and two deep-dive doc pages.
+
+- **Three more version promises that had passed**, all found by the new guard
+  rather than by reading: a rule description saying a rule "ships in v0.3.16"
+  when it had, a `supply_chain` comment in the same tense, and — the real one —
+  `gpt_researcher_transport_flip.py` promising that a vendor-agnostic
+  `AAK-MCP-TRANSPORT-FLIP-001` umbrella "ships in v0.3.16 (issue #162)". **No
+  such rule exists.** It was never built, the per-vendor scanners have stayed
+  parallel ever since, and the docstring now says so rather than describing a
+  migration that is not coming.
+
+- **`docs/RELEASING.md` said the cve-watcher dedup fix (#163) was "queued for
+  v0.3.17".** It shipped in v0.3.20, three patch releases later;
+  `scripts/cve_watcher.py` has said so in a comment the whole time.
+
+### Added (tests)
+
+- Six assertions in `tests/test_regulatory_dates.py`, including one that fails
+  on any *live* `ships in vX.Y.Z` promise in shipped code whose version has
+  passed. It found three of the six items above on its first run. It
+  deliberately permits "would ship in ... it was never built" and "shipped in",
+  because an accurate description of a broken promise has to stay sayable — the
+  same present-tense-versus-history distinction the release-candidate guard
+  draws, and one this test's own first version got wrong.
+
+## [0.6.1] - 2026-09-12
+
+### Added
+
+- **Deadbugz named on the rules that answer it.** The Deadbugz campaign
+  (Adversa AI, September 2026) pushed a malicious MCP server that shipped two
+  innocuous tools, behaved for exactly three tool calls, then rewrote the
+  metadata it returned into instructions to hunt SSH keys, AWS credentials,
+  shell history and Kubernetes config.
+
+  No new rule was needed. `AAK-RUGPULL-001` and `AAK-RUGPULL-002` already
+  compare the live tool surface against a pin taken at approval, which is
+  exactly the window the campaign attacks, so both now carry
+  `DEADBUGZ-2026-09` and say what the campaign shape is. A defence the project
+  already holds but never names is a credibility gap rather than a coverage
+  gap, and the fix for that is a citation, not a rule.
+
+  `examples/case-studies/deadbugz-delayed-metadata/` shows the `pin` + `verify`
+  pair and is explicit that scheduling is the load-bearing part: a campaign that
+  waits three calls is invisible to a one-off check at install time. It also
+  states what pinning does **not** catch — a server whose advertised surface
+  stays constant while its behaviour does not — because this is a static
+  scanner with no runtime proxy in the trusted path. Rule count unchanged at
+  348.
+
+### Changed
+
+- **The repo description is set by the release, not by hand.**
+  `docs/RELEASING.md` said "Manual is acceptable until v0.4.0; wire it then."
+  It stayed manual through v0.4.0, v0.5.0 and v0.5.1, and on 2026-09-12 it was
+  set by hand three times in one day.
+
+  `release.yml`'s final job now renders the line from `RULE_COUNT` and, when a
+  `REPO_ADMIN_TOKEN` secret is present, sets it with `gh repo edit` and verifies
+  the result with the same `--check-live` comparison the liveness job runs,
+  rather than trusting the write. With no such secret it prints the line to the
+  step summary and the release still succeeds, so a missing secret degrades to
+  the previous behaviour instead of breaking a tag. `REPO_ADMIN_TOKEN` is a
+  fine-grained PAT with Administration: write; the default `GITHUB_TOKEN`
+  cannot set a repo description, which is why this was manual at all.
+
+  The branch is in shell rather than a step-level `if:`, because the `secrets`
+  context is not dependable in step conditions and a condition that silently
+  evaluated false would reintroduce the manual step while looking automated.
+  That is the failure mode this repository keeps finding in its own guards, most
+  recently in the latency check fixed in 0.5.2.
+
+  The unmet deadline is recorded in `docs/RELEASING.md` rather than deleted.
+
+## [0.6.0] - 2026-09-12
+
+### Added
+
+- **EU AI Act Article 50 transparency pack** — the framework `eu-ai-act-art50`,
+  rules `AAK-AIACT50-001..003`, and the scanner
+  `agent_audit_kit/scanners/eu_ai_act_art50.py`.
+
+  **These obligations are already in force.** Article 50 of Regulation (EU)
+  2024/1689 has applied since **2026-08-02**, which is the opposite footing from
+  the Article 15 high-risk duties this project already maps: the AI Omnibus
+  deferred those to 2027-12-02 (Annex III) and 2028-08-02 (Annex I). Paragraph
+  numbers were read from the consolidated article on 2026-09-12, not from a
+  summary.
+
+  Three duties are evidenced. 50(1), on the provider: a system intended to
+  interact directly with natural persons is designed so those persons are
+  informed they are interacting with an AI. 50(2), on the provider: synthetic
+  audio, image, video or text output is marked machine-readably and detectably
+  as artificially generated. 50(4), on the deployer: deep-fake content and text
+  published to inform the public on matters of public interest are disclosed as
+  artificially generated or manipulated.
+
+  **50(3) has no rule, on purpose.** The deployer's duty to notify people
+  exposed to emotion-recognition and biometric-categorisation systems has no
+  honest static signal, and a rule that guessed would accuse a project under a
+  duty it may not hold. The framework arm says so where a control row would
+  otherwise sit, the same way the Colorado arm handles `a2a-protocol`. The
+  `transport-security` row likewise cites no paragraph: Article 50 governs what
+  is disclosed to a person, not how bytes move.
+
+  As with the Colorado pack, every row is **evidence toward a duty, never a
+  determination that it applies**. 50(1) exempts what is "obvious from context
+  to a reasonably informed person", and 50(2) and 50(4) exempt assistive
+  editing and artistic, satirical or editorially-reviewed work — none of which
+  can be settled by reading a repository. A test greps the rendered pack for
+  "compliant", "conforms" and "certified" and asserts none appears.
+
+  Detection reuses `healthcare_ai`'s conversational-surface and AI-disclosure
+  patterns rather than restating them, because `AAK-HEALTHCARE-AI-004` is the
+  same duty scoped to clinical text and the two have to agree on what a
+  conversational surface is.
+
+  **13 → 14 frameworks. 345 → 348 rules, 102 → 103 scanners.** No existing rule,
+  report or output changed.
+
+### Fixed
+
+- **83 false positives, caught before shipping by scanning this repository with
+  the new detector.** The first draft read every text file and gated Art. 50(1)
+  on the conversational-surface pattern alone, so this scanner's own rule
+  catalogue, its tests and its launch notes — which discuss personas and system
+  prompts constantly — all read as agent surfaces. Describing an agent surface
+  is not being one.
+
+  This is the second time that trap has been hit in two days, after the Colorado
+  ADMT scanner, and the fix is the same: declarations are read only from places
+  a developer states product intent — an agent-surface artifact such as
+  `SKILL.md` or an agent card, an MCP server or tool description, or a
+  tool-decorated function — reusing `admt_documentation`'s helpers rather than
+  duplicating them. 83 findings went to 0, and
+  `test_scanner_is_silent_on_this_repository` holds it there.
+
+  The narrowing then correctly rejected two of the new fixtures, because a bare
+  `def` and a README are not declarations of product intent. The fixtures were
+  made realistic rather than the scanner loosened.
+
+## [0.5.2] - 2026-09-12
+
+### Fixed
+
+- **A drift guard that could not detect drift.** The `cve-latency` job in
+  `release.yml` ran `python scripts/cve_latency.py`, which *writes*
+  `docs/cve-latency.md`, immediately before running `--check` on it. The check
+  compared a freshly generated file against the ledger it had just been
+  generated from, so it passed by construction. The job has `contents: read` and
+  never committed anything, so the regeneration was discarded and the committed
+  doc was free to drift release after release. It had: on 2026-09-12 the
+  published figure was excluding **12 CVEs for want of a published date, seven of
+  them shipped that same day**.
+
+  This is the third guard in this repository found reporting clean while the
+  number it guards rotted, after `check_counts.py`'s phrase list and
+  `declared_since()`'s pickaxe. The shape is always the same: the check was
+  reading something other than the artifact users see.
+
+  The regenerate step is gone, so `--check` now tests the committed file.
+  `docs/data/cve-published.json` was refreshed from NVD and the doc regenerated.
+  The measured population went from **69 to 77 rows** and the undated exclusion
+  from 12 to 4; median response is **1.0 day**, p90 4 days. Including today's
+  wave improved the figure rather than worsening it, which is the point of
+  measuring rather than asserting.
+
+- **The CRA reporting date, which this project got wrong in v0.4.0.**
+  `docs/vex.md` said the Cyber Resilience Act's reporting obligations start on
+  11 December 2027. They started on **11 September 2026** — Article 14 of
+  Regulation (EU) 2024/2847, with a 24-hour early warning, 72-hour technical
+  notification and 14-day final report, applying to products already on the EU
+  market. 11 December 2027 is the Annex I date: machine-readable SBOM and CE
+  marking.
+
+  The error was wrong by fifteen months in the direction that lets a reader
+  relax, in a compliance tool, about a deadline that is now live. The correct
+  pair was already recorded in this file in the v0.3.65 entry before the v0.4.0
+  entry contradicted it. The v0.4.0 entry is left standing with a dated
+  correction appended beside it rather than rewritten, the same treatment
+  `ROADMAP_2026.md` gives its own unmet claims.
+
+- **The MCP 2026-07-28 specification is ratified, and the rules now say so.**
+  Twenty mentions across rule text, scanner docstrings, the preset and the
+  README called it a release candidate and cited the RC blog post. The labelling
+  was deliberate and the intent was recorded at the time: keep "release
+  candidate" "rather than being relabelled 'ratified' prematurely". The spec
+  published on 2026-07-28, so this is that relabelling, with citations moved to
+  `modelcontextprotocol.io/specification/2026-07-28/changelog`. Archived
+  changelogs and the dated readiness report keep their original wording.
+
+- **A limitation that forwarded readers to work which had already shipped.**
+  `AAK-MCP-TOOLUNIVERSE-CVE-2026-81096-001` said a general deny-list-sandbox
+  detector was "tracked separately". `AAK-SANDBOX-DENYLIST-001` shipped for
+  issue #704. It now names that rule.
+
+### Added
+
+- `tests/test_regulatory_dates.py` — eight assertions holding the above in
+  place, including one that fails if the release workflow ever regenerates the
+  latency doc before checking it, and one that caps how many CVEs the published
+  figure may silently exclude. Two of these exist because the claim was wrong in
+  a shipped release, not because it might one day be. The README carried a
+  present-tense "stays labelled release candidate" that only the new test found.
+
+## [0.5.1] - 2026-09-12
+
+### Fixed
+
+- **`admt_documentation` now reads MCP configs recursively**, as it already read
+  tool declarations. `_iter_files` uses rglob, so a covered-domain declaration in
+  a tool docstring was found anywhere in the tree, while the identical
+  declaration in an MCP server description was found only if the config sat at
+  the project root. The same project answered differently depending on which
+  surface carried the declaration, and a monorepo whose ADMT service lives in a
+  subdirectory was invisible.
+
+  Found by the 0.5.0 smoke test. Running the published wheel against
+  `examples/vulnerable-configs` rendered a valid pack that named the retention
+  duty and printed no conformity conclusion, which is what the smoke test
+  asserted, but contained no AAK-ADMT findings at all, because the declaration
+  sat one directory down in `12-colorado-admt/`. The assertions passed and the
+  feature was not exercised.
+
+  `test_a_declaration_in_a_subdirectory_is_found` and
+  `test_scanning_the_examples_root_reaches_the_colorado_fixture` hold it.
+
+## [0.5.0] - 2026-09-12
+
+### Added
+
+- **Colorado SB 26-189 developer-documentation pack** — the framework
+  `colorado-admt`, the rule family `AAK-ADMT-001..004`, and the scanner
+  `agent_audit_kit/scanners/admt_documentation.py`. This is the first Colorado
+  surface in the repository; a case-insensitive grep for `colorado`, `ADMT` and
+  `SB 26-189` across a fresh clone of `main` returned nothing beforehand.
+
+  The statute is C.R.S. 6-1-1702, "Developer responsibilities - documentation",
+  enacted by SB 26-189 (signed 2026-05-14, Chapter 131). SECTION 5 of the act:
+  "Except as otherwise provided in subsection (2) of this section, this act takes
+  effect January 1, 2027", and "(3) This act applies to consequential decisions
+  made on or after January 1, 2027." Every section number in the pack was read
+  from the signed act on 2026-09-12
+  (https://leg.colorado.gov/bill_files/116489/download), not from a summary.
+
+  **The pack produces evidence toward a duty. It never determines that the duty
+  applies.** 6-1-1702 binds the developer of a "covered ADMT", which 6-1-1701(5)
+  defines as an ADMT used to materially influence a consequential decision. That
+  turns on whether the operator does business in Colorado and on facts about
+  deployment, none of which a static configuration scan reaches. Control rows are
+  phrased as evidence, the rule text says so in terms, and
+  `tests/test_admt_documentation.py` greps the rendered report for "compliant",
+  "conforms" and "certified" and asserts none appears.
+
+  **The trigger is the statute's own test.** 6-1-1702(3) limits the duty to an
+  ADMT "MARKETED, ADVERTISED, CONFIGURED, CONTRACTED, SOLD, OR LICENSED TO BE
+  USED TO MATERIALLY INFLUENCE A CONSEQUENTIAL DECISION", and 6-1-1702(5)
+  attaches it where the developer "INTENDED, DOCUMENTED, MARKETED, ADVERTISED,
+  CONFIGURED, OR CONTRACTED" it for that use. Both test what was *declared*, so
+  the scanner fires only where an MCP server description or a tool-decorated
+  function's name and docstring name both an inference and a 6-1-1701(6) covered
+  domain. Where nothing declares it, nothing is emitted.
+
+  One row deliberately carries no subsection. `a2a-protocol` has no developer
+  duty in 6-1-1702 behind it: 6-1-1703 is the deployer's retention duty and
+  6-1-1705 the consumer's human-review right, and neither binds the developer. A
+  control number there would cite a duty the row does not evidence, so the row
+  says what it is instead. A test holds that.
+
+  Covered domains come from 6-1-1701(6) verbatim: education, employment creating
+  an employer-employee relationship, the lease or purchase of residential real
+  estate in Colorado, financial or lending services, insurance, health care, and
+  essential government services and public benefits. **Legal services are not a
+  covered domain under this act**, and essential government services are, which
+  is a pair worth stating because the obvious reading of "consequential decision"
+  gets both backwards.
+
+  **12 to 13 frameworks.** 341 to 345 rules, 101 to 102 scanners. No existing
+  rule, report or output changed: `colorado-admt` is a new key in
+  `_FRAMEWORK_TITLES` and a new arm in `_CATEGORY_TO_CONTROL`, and the only edit
+  to an existing surface is one more entry in the `report --framework` choice
+  list.
+
+  This is a new control family rather than an extension of
+  `AAK-STATE-PRIVACY-001..003`. Those check a privacy policy for opt-out-of-sale
+  language, consumer rights and a controller contact, which is the CCPA lineage.
+  SB 26-189 is not that law: it is a documentation duty on the developer of a
+  technology, and it attaches whether or not any privacy policy exists.
+
+  Timing: the duty starts 2027-01-01.
+
+### Fixed
+
+- Three false positives found by scanning this repository with the new detector
+  before shipping it, each fixed in the vocabulary rather than by an ignore rule:
+  `hire` matched inside "acqui-hire" and `qualif` inside "qualified inbound"
+  (KILL-CRITERIA.md read as a declared lending surface), `premium` matched
+  "premium brandable domains" in a cached research page, and `admission` matched
+  "admission control" in this README. Both alternations now use a `(?<![\w-])`
+  lookbehind, the same bounding the CVE pin table uses on package names.
+
+  The larger fix was narrowing the declaration surface itself. An earlier draft
+  read whole files, which meant this scanner's own rule catalog — prose about
+  prior-authorization denials and insurance coverage decisions — read as a
+  declared covered-domain surface. Describing a decision system is not declaring
+  one, so declarations are now read only from MCP server descriptions and from
+  functions carrying a tool decorator, via AST rather than line matching.
+  `test_scanner_is_silent_on_this_repository` holds it.
+
+## [0.4.0] - 2026-09-12
+
+### Added
+
+- **`agent-audit-kit vex`** and **`agent_audit_kit/output/vex.py`** — an OpenVEX
+  v0.2.0 exploitability document emitted beside the SBOM. This is the first VEX
+  or CSAF surface in the repository; nothing was extended.
+
+  The SBOM answers what you ship. This answers whether you are exploitable.
+  Products are the *same* purls `emit_cyclonedx` already emits, because both
+  call `_discover_mcp_packages`, so the two documents join on string equality
+  with no mapping table. Stdlib only, no new dependency, offline like the rest
+  of the tool.
+
+  **The emitter never writes `not_affected`, and that is structural rather than
+  a gap.** The spec requires a `not_affected` statement to carry a
+  `justification` from a closed enum — `component_not_present`,
+  `vulnerable_code_not_present`, `vulnerable_code_not_in_execute_path`,
+  `vulnerable_code_cannot_be_controlled_by_adversary`,
+  `inline_mitigations_already_exist` — or a free-text `impact_statement`. Every
+  one of those is a claim about runtime reachability or deployed mitigation. A
+  static read of dependency manifests and MCP config files establishes none of
+  them. Emitting it anyway is the exact failure the document exists to prevent:
+  a downstream consumer drops a real exposure from their queue because an
+  upstream tool asserted safety it never established. So where a human analyst
+  would write "not affected", this writes nothing. VEX has no completeness
+  requirement, and an absent statement asserts nothing. The reasoning sits in
+  the module docstring so it cannot be removed without an argument, and
+  `tests/test_vex.py` sweeps all 326 fixture directories asserting the string
+  never appears.
+
+  Two decisions worth recording, because both were traps:
+
+  - **The CVE universe is not drawn from findings alone.** A package pinned at
+    or above its fix floor produces no finding at all, so a findings-only
+    universe makes `fixed` unreachable by construction — and `fixed` is the
+    single most useful thing a VEX document can say. The universe is the union
+    of the CVEs the scan surfaced and the CVEs the pin table ties to a
+    discovered package. `tests/test_vex.py::test_fixed_is_reachable_without_any_finding`
+    pins this: the fixture it uses has zero CVE-carrying findings and still
+    emits two `fixed` statements.
+  - **Range decisions delegate to the scanner's own `_fires` predicate** rather
+    than reimplementing version comparison, so the VEX document and the scan
+    cannot disagree about what "vulnerable" means. The one place that must not
+    delegate is an unparseable version: `_fires` treats it as "fire", which is
+    right for a scanner that should warn and wrong for a document that would
+    then assert exposure it never established. That case is routed to
+    `under_investigation` before `_fires` is consulted. The `introduced` bound
+    is handled explicitly too — a version predating the affected range is
+    `not_affected`, which is refused, so the statement is dropped rather than
+    mislabelled `fixed`.
+
+  The document `@id` is a SHA-256 over the sorted (product purl, CVE, status)
+  triples, so the same tree and scan produce a byte-identical document and CI
+  re-runs do not churn the artifact. Ids are minted under the project's own
+  GitHub Pages origin rather than under `openvex.dev`, for the reason already
+  recorded against `documentNamespace` in `emit_spdx`: a namespace the emitter's
+  author does not control cannot guarantee uniqueness.
+
+  Timing: the EU Cyber Resilience Act's reporting obligations start on
+  11 December 2027, and an SBOM alone does not answer the question a regulator
+  or customer actually asks.
+
+  > **Correction appended 2026-09-12.** The sentence above is wrong and is left
+  > standing rather than rewritten. CRA Article 14 reporting started
+  > **11 September 2026**, not 11 December 2027; the December 2027 date is the
+  > Annex I obligations including the machine-readable SBOM and CE marking. The
+  > correct pair was already recorded in this file, in the v0.3.65 entry, before
+  > this entry contradicted it. Corrected in `docs/vex.md` and guarded by
+  > `tests/test_regulatory_dates.py`.
+
+### Changed
+
+- `sbom_cmd`'s docstring and `--format` help now name `agent-audit-kit vex` as
+  the companion exploitability document and state that the two join on purl.
+  **No existing output changed.** `_discover_mcp_packages` grew a `source` key
+  recording which config declared each package, which the VEX emitter needs to
+  tell whether a finding landed on the artifact that declares a product; no SBOM
+  emitter reads it, and `tests/test_vex.py::test_source_key_does_not_change_sbom_output`
+  asserts it never reaches CycloneDX or SPDX output.
+- Version bumped to 0.4.0 rather than 0.3.100: this adds a new public CLI
+  command, it is purely additive, and the patch series had run out at .99.
+
+### Security
+
+- **CVE queue drained: eight disclosures (#707–#714), one new rule.** Seven were
+  in scope; six needed no new rule because the pin table already covered the
+  packages. Full table in `CHANGELOG.cves.md`.
+
+  - `awslabs.postgres-mcp-server` — CVE-2026-87911 (CRITICAL 9.6). The 1.1.7
+    floor already covered it, so no version logic moved. What moved is the
+    rule's **threat description**: `COPY ... TO PROGRAM` OS command injection
+    reachable by an unauthenticated actor, not the read-only-scope bypass the
+    rule previously described. Severity MEDIUM → CRITICAL, and the remediation
+    now names the database role that stops it (`pg_execute_server_program`).
+  - `mcp-contextforge-gateway` — CVE-2026-78573 (CRITICAL 9.8), default
+    credentials at 1.0.0–1.0.7, already under the 1.0.9 floor. Severity
+    HIGH → CRITICAL.
+  - `langflow` — floor 1.11.3 → **1.11.6** for CVE-2026-85025 (CRITICAL 9.8),
+    CVE-2026-78575 and CVE-2026-81941 (both HIGH 8.8), all scoped 1.0.0–1.11.5.
+    The old floor was calling 1.11.3, 1.11.4 and 1.11.5 patched.
+  - `knowns` — CVE-2026-88938 is scoped "through 0.33.0" and 0.33.0 is the
+    newest release on npm, so **no fix exists** and the pin became
+    presence-only. This exposed a latent bug in `_fires`, which returned True on
+    `floor is None` before checking the `introduced` bound — unreachable while
+    no presence-only pin carried one. `knowns` is the first that does, and it
+    needs that bound to stay off an unrelated PyPI `knowns` stub. Reordered, with
+    no behaviour change for pins that have a floor.
+  - **New rule** `AAK-MCP-AWSSECAGENT-CVE-2026-87913-001` (MEDIUM, SUPPLY_CHAIN)
+    — `awslabs.security-agent-mcp-server` < 0.2.0 writes scan output to an S3
+    bucket whose ownership it never verifies, with a name derived from a public
+    account identifier. The remediation says plainly that upgrading is not
+    sufficient, because it does not release a bucket name someone else has
+    already registered. **340 → 341 rules.**
+  - #714 closed as out of scope: CVE-2026-89622 is a use-after-free in the Linux
+    kernel's `HID: mcp2221` driver. MCP2221 is a Microchip USB-to-I2C bridge
+    chip, unrelated to Model Context Protocol.
+
+### Docs
+
+- New `docs/vex.md` covering the three statuses, the refusal of `not_affected`,
+  the purl join, and a worked `sbom` + `vex` pair. Added to the mkdocs nav.
+- `docs/index.md` and `docs/ci-cd.md` gained the `sbom` + `vex` pair. Neither
+  file mentioned SBOM at all beforehand, so the commands were added together
+  rather than slotted beside an existing mention.
+
+## [0.3.99] - 2026-09-09
+
+### Added
+
+- **`AAK-MCP-STDIO-UNBOUNDED-BUFFER-001`** (MEDIUM, SUPPLY_CHAIN) — CVE-2026-53937,
+  closes #705. MCP Kotlin SDK 0.7.0–0.12.0 appends every stdio chunk into a
+  `kotlinx.io.Buffer` with no size cap and only extracts a frame once it sees a
+  `\n`, so a peer that streams bytes without ever sending a newline grows the
+  buffer until the JVM is OOM-killed. `StdioServerTransport` and
+  `StdioClientTransport` amplify it by queueing raw chunks through a
+  `Channel<ByteArray>(Channel.UNLIMITED)` with no backpressure. Fixed in 0.13.0.
+
+  **This is the repository's first JVM pin**, and it needed a new scanner rather
+  than a new row. `mcp_cve_pins_2026_07`'s `_CANDIDATE_NAMES` reads Python and npm
+  manifests only — its own docstring records what that costs, with the crates.io
+  twin of `codewhale` and "ArcadeDB on Maven" both listed as out of reach.
+  Widening that tuple would set roughly sixty unrelated package regexes loose on
+  `pom.xml` and `build.gradle` for one CVE. `jvm_mcp_sdk_pins.py` is the narrow
+  alternative: JVM manifests, MCP SDK coordinates, nothing else.
+
+  Version resolution is the substance. A JVM coordinate rarely carries its version
+  inline, so four forms resolve: a Gradle KTS `val`, a Groovy inline coordinate, a
+  version catalog's `version.ref` against `[versions]`, and Maven's `${property}`
+  against `<properties>`. The catalog arm shipped broken in its first draft and
+  the fixtures caught it — one regex with a lazy `[^\n]*?` and an optional
+  trailing version group matches with that group empty, so every catalog resolved
+  to "no version" and the arm silently never fired.
+
+  Boundaries came from Maven Central, not from advisory prose:
+  `io.modelcontextprotocol:kotlin-sdk-core` publishes **0.7.0 as its first
+  release**, so NVD's range start is a module-split boundary rather than the
+  commit that introduced the defect. Recorded in the rule so nobody later
+  "corrects" the floor down. No releases exist between 0.12.0 and 0.13.0, so one
+  floor covers the range with no second arm.
+
+  All three artifact names that publish the same code (`kotlin-sdk`,
+  `kotlin-sdk-core`, `kotlin-sdk-jvm`) are matched, and a manifest naming two of
+  them reports **once** — one dependency, not two.
+
+  Deliberately conservative: a finding requires a version that actually resolved
+  into 0.7.0–0.12.0. A dynamic version (`0.+`, `latest.release`) or a
+  `version.ref` pointing outside the scanned tree is not reported, and the rule's
+  `limitations` says so rather than leaving the reader to discover it.
+
+  Rules 339 → 340, scanners 100 → 101.
+
+### Fixed
+
+- **`Link check` had been red on `main` since 2026-09-06 and three releases
+  shipped over it.** Not a broken link — the same workflow carries the MCP
+  Security Index staleness guard, and `scripts/index_cadence.py --check` was
+  failing because the README's rendered cadence line said "2026-08-31 (4
+  snapshots)" while the live history had published a fifth on 2026-09-07. The
+  guard fires on the *mismatch*, not only on age, which is why 8 days inside a
+  10-day tolerance still failed.
+
+  Regenerated. Worth naming the reason it went unnoticed: the release workflow
+  gates on its own job list and does not depend on `Link check`, so a red
+  workflow on `main` never blocked a tag. Three releases went out with it red
+  because nothing looked, which is the same "a check nobody reads is not a check"
+  problem the CVE ageing gate was designed around.
+
+- `CLAUDE_PROMPT.md`'s note about the unregistered index domain rewritten to stop
+  restating the dead hostname; it points at `SECURITY.md` instead.
+
+
+## [0.3.98] - 2026-09-08
+
+Clears the standing backlog: both deferred rule tasks are built, and the four
+loose ends flagged over the last two releases are closed. 337 → 339 rules,
+98 → 100 scanners. Both rules came out of the 2026-09-08 NVD triage and carry the
+fixtures that triage specified — neither is net-new surface invented to fill a
+release.
+
+### Added
+
+- **`AAK-MCP-DEST-UNVALIDATED-001`** (HIGH, MCP_CONFIG) — closes #693 and #699,
+  eight days ahead of their 2026-09-20 target. One rule, two arms, because
+  re-reading NVD showed the pair are the two ends of one defect rather than
+  duplicates:
+
+  - **Asymmetry** (CVE-2026-85666, OGX, 7.5): the guard *exists* and is called —
+    OGX applies `validate_url_not_private()` to its other URL inputs — and simply
+    is not applied to `server_url`. That is a within-file inconsistency, and the
+    same class this scanner already detects at two other layers (`AAK-MCPWN-001`,
+    `AAK-MCP-TOOLGATE-ASYMMETRY-001`). It is the higher-precision arm: the
+    negative case is a module that guards every destination, which is exactly
+    what it passes.
+  - **Absence** (CVE-2026-86122, Rowboat, 5.0): nothing guards anything, so there
+    is no correct sibling call to compare against and the asymmetry arm can never
+    fire.
+
+  Deliberately narrow, because ten `AAK-SSRF-*` rules already exist: the
+  destination must be configuration-shaped (`server_url`, `webhook_url`, …), the
+  file must be MCP-relevant, and guard recognition is *imported* from
+  `ssrf_toctou` rather than re-listed, so the two scanners cannot drift apart. A
+  caller-supplied URL arriving as a tool argument stays `AAK-MCP-SSRF-001`'s
+  surface, and the rule says so in its `limitations`.
+
+  `base_url` was in the destination vocabulary until the first self-scan fired it
+  on a `negative/` fixture whose whole job is to be clean. The fixture was right:
+  `base_url` in an API client is the service's own address, configured once and
+  not caller-steerable. Dropped rather than special-cased.
+
+- **`AAK-SANDBOX-DENYLIST-001`** (CRITICAL, TRUST_BOUNDARY) — closes #704, the
+  detector #656 was actually deferred for. Fires only when four signals combine:
+  a deny-list of dangerous *names* held as strings, checked against a value, an
+  in-process exec of that value, **and** a still-reachable lookup primitive
+  (`getattr`, `__getattribute__`, `vars`, `globals`). The fourth is what makes it
+  a defect rather than a style choice — a deny-list that also denies the lookups
+  is merely fragile; one that leaves them reachable is bypassable by construction.
+
+  The blocker named on #656 was precision: telling a deny-list sandbox from a
+  real one *without firing on every codebase that mentions `eval`*. Four
+  negatives hold that line, three of them #704's own acceptance list — an
+  allow-list sandbox, a subprocess-isolated executor, ordinary `eval` on trusted
+  input — plus the one that matters most here: a module that merely *mentions*
+  the vocabulary, which is what a security scanner's own rule text does. A test
+  runs the scanner over `agent_audit_kit/` itself and asserts zero findings.
+
+  Covers CVE-2026-81096 (ToolUniverse, CVSS 10) and CVE-2026-53710
+  (RestrictedPython `getattr` bypass in mcp-context-forge) — two products, which
+  is what makes it a class.
+
+### Fixed
+
+- **The documented scanner contract in `CLAUDE.md` was wrong.** It said `scan()`
+  returns `(findings, evaluated_rule_ids)`. The engine does
+  `all_scanned_files.update(files)` and reports `len(all_scanned_files)` as
+  `files_scanned`, so a scanner written to that contract would have inflated the
+  file count with rule-id strings. It returns **scanned file paths**.
+  `rules_evaluated` is computed separately from the active rule set and no
+  scanner contributes to it. Caught while writing the two scanners above, which
+  is exactly the audience the line misleads.
+
+- **`ROADMAP_2026.md`'s banner overstated its own discipline.** It said "not
+  updated"; §2 item 2 was amended at v0.3.0 and now carries a dated annotation.
+  Narrowed to what is true — nobody re-plans the file, and its figures and goals
+  are left as authored, but factual corrections are appended in place and dated.
+  A banner that overstates its own honesty is the same class of defect as the
+  ones it exists to disclose.
+
+- **`CLAUDE_PROMPT.md` offered `index.agentauditkit.dev` as an alternative host.**
+  Same unregistered-domain family as the security contact retired in v0.3.97.
+  Struck, pointing at the Pages origin that actually resolves.
+
+### Changed
+
+- **Branch cleanup: 17 stale branches removed, 5 of them after verifying their
+  content had landed.** Twelve were fully merged into `main`. The other five
+  showed as unmerged only because they were squash-merged, and each was checked
+  by artifact before deletion rather than by title — `.well-known/funding-manifest-urls`
+  and `scripts/check_cve_ageing.py` for `chore/cve-ageing-gate`, `scanners.json`
+  for `fix/release-unblock-and-derivable-claims`, and so on. That last one was
+  the reason this mattered: its head commit was "bump to 0.3.70", and merging it
+  would have walked the published version backwards by 27 releases.
+
+  `origin` now carries `main` and `gh-pages` and nothing else.
+
+
+## [0.3.97] - 2026-09-08
+
+### Fixed
+
+- **A rule shipped yesterday overstated its own CVE.**
+  `AAK-MCP-KNOWNS-CVE-2026-86439-001` said the traversal reaches files "anywhere
+  the server process can reach". NVD does not say that. It says the traversal
+  reads, creates, overwrites and deletes files *outside the project directory*,
+  and then scopes the reach to "arbitrary Markdown files accessible to the server
+  process" — which follows from where the defect sits, in two Markdown-backed
+  stores (`internal/storage/doc_store.go`, `internal/storage/memory_store.go`).
+
+  The gap is small and the direction is what matters. This scanner's entire claim
+  is that a finding traces to something real; a rule that outruns its advisory is
+  one a reader cannot check. Found by re-reading NVD after shipping, not before,
+  so `tests/test_cve_deferral_queue_2026_09_08.py` now asserts the corrected
+  wording rather than leaving a comment. Description-only: no rule added, no rule
+  removed, count stays at 337.
+
+- **The dead security contact is gone from every live route.**
+  `security@agentauditkit.io` has never received mail — `agentauditkit.io` is
+  unregistered, NXDOMAIN with no MX — and `CODE_OF_CONDUCT.md` was still offering
+  it as the enforcement contact, so conduct reports bounced silently.
+
+  It now names `sattyamjain96@gmail.com`, the address already published in
+  `funding.json`, on a domain that accepts mail; GitHub's report-abuse form as the
+  route for a report that concerns the maintainer; and a pointer to `SECURITY.md`
+  because a vulnerability is not a conduct report. Both replacements were checked
+  before being written: gmail.com resolves with MX records, and the advisory form
+  returns HTTP 200 with private vulnerability reporting enabled on the repo.
+
+  `CHANGELOG.md` history is untouched, deliberately. Rewriting past entries to
+  hide the mistake would be worse than the mistake. `SECURITY.md` keeps the one
+  remaining live mention, and it is the explanation — updated here, because it
+  claimed the address "still appears in `CODE_OF_CONDUCT.md`", which stopped being
+  true in this release. The `mailto:`/domain exclusion in `link-check.yml` stays
+  and its comment now says why it is permanent rather than calling the address
+  "aspirational".
+
+- **`ROADMAP_2026.md` pointed at issue #22 as open work; #22 closed 2026-08-15.**
+  Annotated in the banner's own voice rather than silently updated — the file's
+  honesty is the asset, and a roadmap edited to look current is worth less than
+  one that says what it got wrong.
+
+  The annotation records something the bare issue state does not: #22 was closed
+  as completed, but only after being scoped down from "replace all regex scanners
+  with tree-sitter taint tracing across TS/JS, Python, Rust, Go" to a single
+  slice. That slice shipped and is `agent_audit_kit/scanners/_ts_stdio_taint.py`
+  — tree-sitter reachability for `AAK-MCP-STDIO-CMD-INJ-002` alone, with
+  `tree_sitter` optional and a proximity fallback. Rust was never in it and is
+  still a regex pattern scan, as `rust_pattern_scan.py` says in its own docstring.
+  So the "TS/Rust reachability rewrite" the roadmap line describes is not what
+  #22 delivered, and no open issue tracks the rest of it.
+
+### Changed
+
+- **CVE-response queue re-verified against NVD, not against its own issue bodies.**
+  Two issues remain open (#693, #699), both dated 2026-09-20 — the other ten
+  closed in v0.3.96. Both were checked at
+  `nvd.nist.gov/vuln/detail/<CVE-ID>` and both bodies match NVD verbatim, which
+  they should: `cve-watcher.yml` generates them from NVD's own `descriptions`
+  field. The check that mattered was whether the *disposition* described the same
+  defect, and re-reading sharpened the rule spec in a way worth recording:
+
+  - **#693 (CVE-2026-85666, OGX)** is a *guard-application asymmetry*, not a
+    missing guard. `validate_url_not_private()` exists and is applied to OGX's
+    other URL inputs — just not to `server_url`. That is the same class as
+    CVE-2026-33032 (auth middleware on `/mcp` but not `/mcp_message`) and
+    CVE-2026-46519 (gate checked in `tools/list` but not `tools/call`), both of
+    which this scanner already detects at other layers. It also forwards
+    attacker-supplied headers and bearer tokens to the chosen destination, so it
+    is credential exfiltration and not only topology enumeration.
+  - **#699 (CVE-2026-86122, Rowboat)** is *absence*: no destination validation at
+    all, and no correct sibling call to compare against.
+
+  A detector written for only one of those shapes misses the other. That is the
+  design problem the pair has been deferred on, and it is now stated on both
+  issues rather than implied.
+
+  Also verified, because a past run got it wrong and the correction is worth
+  confirming rather than assuming: **CVE-2026-33032 is described correctly
+  throughout this repo.** NVD describes twin endpoints where `/mcp` carries
+  `AuthRequired()` and `/mcp_message` carries only an IP allowlist that defaults
+  to empty and is treated as allow-all. The repo calls it middleware asymmetry
+  and empty-allowlist-as-allow-all, in `AAK-MCP-MIDDLEWARE-*`, README and
+  `mcp_auth_patterns.py`. It is not described as a `0.0.0.0` binding anywhere.
+
+
+## [0.3.96] - 2026-09-08
+
+### Changed
+
+- **Relicensed from MIT to Apache License 2.0.** Apache-2.0 carries an express
+  patent grant (§3) and MIT does not. This is a security tool, and the
+  organisations that adopt one are the kind that ask. It stays fully open source
+  and nothing is gated; Apache-2.0 grants a superset of MIT's permissions.
+
+  Provenance was checked before applying rather than assumed. `git log` returns
+  six author identities: two belong to the maintainer (`sattyamjain96@gmail.com`
+  and the GitHub noreply address), two are this repo's own automation (`aak-bot`,
+  `agent-audit-kit-bot`), one is the company address `sattyam.jain@attri.ai`
+  — the same identity agent-airlock raised and confirmed as not employer-owned
+  before its own relicense — and one is `dependabot[bot]`. All 32
+  `Signed-off-by` trailers are dependabot's. Neither dependabot nor either bot
+  has authored a single commit touching `agent_audit_kit/`; their commits are
+  manifest bumps and generated count/coverage syncs. No third-party human has
+  authored source here. The `Co-authored-by: Claude` trailers are tooling
+  attribution, not a copyright claim.
+
+  `LICENSE` is the canonical Apache-2.0 text fetched from apache.org (202 lines,
+  sha256 `cfc7749b96f63bd31c3c42b5c471bf756814053e847c10f3eb003417bc523d30`) with
+  the appendix boilerplate filled in as `Copyright 2026 Sattyam Jain`. The result
+  is byte-identical to agent-airlock's, sha256
+  `d102e62d1a9e4c6b5030334eb87c41e54ca35533e4bcbe5c6833e06cd29b33cb`.
+
+  Packaging metadata verified by building the wheel, not by reading the source:
+
+  ```
+  License-Expression: Apache-2.0
+  License-File: LICENSE
+  Classifier: License :: OSI Approved :: Apache Software License
+  ```
+
+  27 further edits move every downstream statement of the licence so nothing keeps
+  telling readers MIT: the contributor grant, the README badge and both comparison
+  rows, `CITATION.cff` (both the software and the report), the OCI
+  `image.licenses` label on the release and nightly Docker builds, `funding.json`'s
+  SPDX tag, the VS Code extension manifest, and the live outreach and research
+  drafts. Every edit asserts an exact single match before writing.
+
+  An inventory matching bare `MIT` reported 67 files; word-boundary matching cut
+  that to 29, because the rest were `LIMIT` / `COMMIT` / `SUBMIT` substrings.
+  Seven of the 29 keep their MIT strings deliberately: Microsoft AGT's licence in
+  the comparison tables and in `scripts/gen_coverage.py`, frozen history under
+  `docs/changelog/archive/` and `releases/`, the three dated drafts the repo's own
+  `check_counts.py` already treats as historical, upstream licences in
+  `tests/fixtures/LICENSES.md`, and the synthetic `package.json` payloads in
+  `tests/test_legal_compliance.py` — that last one is a test's *input data*, and
+  editing it would change what the test exercises.
+
+- **`scan` moved out of `cli.py`** into `agent_audit_kit/commands/scan.py`
+  (closes #701). `cli.py` was 1,618 lines for 23 top-level commands, of which
+  `scan` and its private `_run_scan` were 440 — a quarter of the file for one
+  command. `cli.py` is now 1,105 lines.
+
+  Behaviour is unchanged, verified rather than asserted: `scan --help` and
+  `cli --help` were captured from a clean `git worktree` at the pre-split commit
+  and again from the working tree through the same harness, and diff
+  byte-identically (sha256 `33aaf9c2288c43ce87a8` and `0bef561f95318d927cd3`).
+  The installed console script matches too.
+
+  `tests/test_cli_scan_extraction.py` locks the surface structurally — the full
+  parameter set, every option's help text, the defaults — rather than against a
+  golden `--help` capture, because rendered help also depends on terminal width
+  and the click version. It also asserts from the AST that no module under
+  `commands/` imports `cli`: that direction is a cycle, which is why the shared
+  constants moved to `commands/_common.py`. `cli` re-exports all eight names, so
+  `from agent_audit_kit.cli import SEVERITY_MAP` keeps resolving.
+
+### Added
+
+- **Nine `cve-response` issues close on five new dependency pins and one raised
+  floor** — #656, #690, #691, #692, #695, #696, #697, #698 and #703. Rule count
+  332 → 337. Full per-CVE detail in `CHANGELOG.cves.md`.
+
+  Every one of them had been deferred on the reading that a bug inside a
+  third-party server's own binary has no consumer-side signal. That is true of
+  the *defect* and false of the *dependency*, which is what this scanner has
+  pinned since the 2026-07 wave. Re-reading the queue against that distinction
+  released nine issues; three registry lookups then changed what shipping meant.
+
+  - `AAK-MCP-TOOLUNIVERSE-CVE-2026-81096-001` (**CRITICAL**) — `tooluniverse >= 1.3.0`.
+    Closes #656, open since 2026-08-27 at CVSS 10. The deferral was waiting on a
+    *generic* deny-list-sandbox detector; the CVE itself has had a vendor fix the
+    whole time. The rule's `limitations` says plainly that it is a dependency pin
+    and not a sandbox-escape detector, so the coverage claim stays honest, and the
+    detector is now tracked on its own issue where a date means something.
+  - `AAK-MCP-CONTEXTFORGE-CVE-2026-77822-001` (**HIGH**) —
+    `mcp-contextforge-gateway >= 1.0.9`. One floor, four CVEs, four issues. The
+    floor comes from IBM's bulletin: NVD carries no CPE range for CVE-2026-77822
+    and the project's GitHub advisory list stops at a v1.0.8 patched-version, so a
+    floor from either open source alone reports four vulnerable installs as patched.
+  - `AAK-MCP-POSTGRESMCP-CVE-2026-85620-001` (**HIGH**) — **no fixed release.**
+    Upstream's newest tag is v0.3.0 and crystaldba/postgres-mcp#178 is still open,
+    so the whole published 0.x line fires. The 0.4.0 floor exists to exclude the
+    unrelated npm `postgres-mcp` (1.0.x), not to promise a fix; PyPI
+    `postgres-mcp-pro` is deliberately not named as an upgrade target because it
+    declares no repository and is not referenced upstream. Remediation is a
+    least-privilege database role.
+  - `AAK-MCP-AWSPOSTGRES-CVE-2026-85787-001` (**MEDIUM**) —
+    `awslabs.postgres-mcp-server >= 1.1.7`.
+  - `AAK-MCP-KNOWNS-CVE-2026-86439-001` (**HIGH**) — npm `knowns >= 0.30.0`,
+    `introduced=0.1.1` to resolve a one-version name collision with an unrelated
+    PyPI stub.
+  - `AAK-MCP-LANGFLOW-CVE-2026-12940-001` floor raised 1.11.0 → 1.11.3 for
+    CVE-2026-9186. The old floor was reporting 1.11.0, 1.11.1 and 1.11.2 as
+    patched while all three are affected.
+
+- One issue closes as out of scope: SiYuan (CVE-2026-85580, #694) ships as a
+  desktop binary and a Docker image. PyPI `siyuan` is a third-party API client and
+  npm `siyuan` is the plugin-API type package; both sit on version lines that never
+  approach 3.8.2, so a pin on either name would report a CVE in software the
+  dependent does not run.
+
+- Two deferrals remain, both dated **2026-09-20**: #693 and #699 are the same
+  unvalidated-MCP-destination SSRF class from two products, neither pinnable, so a
+  rule is the only response and it needs design against fixtures.
+
+### Fixed
+
+- `docs/cve-latency.md` regenerated: p90 2 → 4 days and slowest 7 → 12 days. That
+  is what a five-week CRITICAL costs, and the number is published rather than
+  smoothed.
+
+
+## [0.3.95] - 2026-09-06
+
+### Added
+
+- **An unmarked copy of a governed figure now fails the build.** This is the root
+  cause of the 421/424 split below. `tests/test_report_headline_numbers.py` locks
+  every `report:` marker to `results.json`, but it can only see numbers that
+  already carry a marker — a second, unmarked copy is structurally invisible to
+  it, and an unmarked copy is what writing prose produces.
+
+  `scripts/check_report_figures.py` closes that gap, wired into
+  `make report-figures-check` and run in CI beside `count-check`.
+
+  **It was verified red before the fix was applied.** Run against `main` with
+  only the generator modified and no document touched, it failed on exactly four
+  lines — `README.md:55`, `README.md:573`,
+  `docs/STATE-OF-MCP-SECURITY-2026.md:36` and
+  `research/state-of-mcp-2026/PREVALENCE.md:95` — while every existing marker
+  test stayed green throughout. A guard that is green on its first run has not
+  been shown to work.
+
+  Two decisions make it survivable rather than switched-off-in-a-week:
+
+  - **Matching is anchored to the claim, never to bare digits.** A first draft
+    used an un-anchored `N% (M)` pattern and matched all nine rows of REPORT.md's
+    top-misconfiguration table. The inline-auth ratio is now recognised only next
+    to the words "of inline-auth", the OAuth row only next to `AAK-OAUTH-008`. A
+    blanket "no integer outside a marker" rule would fire on every rule ID, RFC
+    number and version string in the tree.
+  - **`REPORT.md` is judged differently.** It is the source document the markers
+    are pinned *to* — prose-asserted, never generated — so an unmarked figure
+    there is expected and only a *disagreeing* one is reported. That is what
+    makes its `AAK-OAUTH-008` cell governed at all: no other test reads it, which
+    is how it drifted from PREVALENCE.md unnoticed.
+
+  A correct-but-unmarked value is reported too, and the message says why: a
+  hand-typed `424` is the same defect as a hand-typed `421`, one corpus run away
+  from being wrong.
+
+- **An ageing gate for the CVE queue, and severity bands to age against.** The
+  release gate asks whether every disclosure has been *looked at* — a binary
+  question, answerable in one label. It cannot ask how long the queue has been
+  sitting, and it must not: a tag that could not be cut is exactly what made
+  `cve-deferred` the cheapest way out of it, and a second gate holding the same
+  lever would produce the second such label.
+
+  So the ageing check runs on its own daily cron in `cve-watcher.yml` (job
+  `age-gate`) and blocks nothing — not a tag, not a merge, not a publish. It is
+  a standing red check and that is the whole design.
+
+  - The watcher now applies a `sev/*` label when it opens an issue, parsed from
+    the CVSS score in the title: `sev/critical` (≥ 9.0), `sev/high` (7.0–8.9),
+    `sev/medium` (4.0–6.9), `sev/low` (< 4.0). A score that will not parse gets
+    `sev/unknown` and a note in the issue body saying so, rather than a guessed
+    band.
+  - Budgets, counted from issue creation: critical 3 days, high 7, medium 21,
+    low 60. `sev/unknown` is held to the *critical* budget — the disclosure
+    nobody has classified is the one that should surface fastest, and the fix
+    (correct the title) is cheap.
+  - `cve-deferred` now moves an issue between two accounting systems rather than
+    switching one off: exempt from its band's budget, judged against the date it
+    names. Holding a dated deferral to the budget as well would fail a correctly
+    deferred critical on day four regardless of what anyone did, scoring the
+    honest disposition and the dishonest one the same.
+  - `deferred-until: YYYY-MM-DD` joins `target date:` and the legacy
+    `**Target: …**` prose form as an accepted spelling. Added by alternation,
+    not by replacement — switching outright would have convicted every dated
+    deferral already in the queue.
+  - Past-due deferrals are now fatal on the cron, while `check_cve_deferrals.py`
+    continues only to report them at tag time. Same fact, two readings: one runs
+    where a scheduling note must not kill an unrelated release, the other does
+    not.
+  - `docs/cve-triage.md` publishes the bands, the budgets, the deferral rule and
+    the queue depth — the answer to "what is your triage latency".
+
+  The label applied in JS at creation and the budget enforced in Python on the
+  cron read the same title through the same regex, pinned byte-for-byte by
+  `tests/test_cve_ageing_gate.py` so the two cannot drift into an issue that
+  carries `sev/high` while ageing as `sev/medium`.
+
+- **`.well-known/funding-manifest-urls`, and the `funding.json` it points at.**
+  FLOSS/fund discovers a project's funding manifest through a pointer in the
+  repository and then fetches the manifest itself, which must return 200 and
+  validate against the v1.0.0 schema. `.github/FUNDING.yml` is a different
+  mechanism that it does not read.
+
+  The manifest is served from the GitHub Pages origin, which is the only origin
+  this project has. That forced its source into the repo root rather than a
+  hosted-elsewhere copy: gh-pages is rebuilt by `git init` + `git push --force`
+  on every snapshot, so a file committed to that branch is destroyed by the next
+  Monday's deploy. `mcp-security-index.yml` stages it instead, and a test fails
+  if that line is ever removed — otherwise the URL reverts to 404 silently.
+
+  One schema subtlety worth recording: any URL whose hostname differs from the
+  manifest's own needs a `wellKnown` proof-of-control pointer. An entity webpage
+  on `github.com` therefore cannot be used, because serving
+  `https://github.com/.well-known/…` is not possible. The entity and project
+  pages are the Pages origin; `repositoryUrl` is `github.com` by necessity and
+  carries the repo-file pointer, which is exactly what
+  `.well-known/funding-manifest-urls` is for.
+
+### Fixed
+
+- **`424` and `421` were both published, in the same repository, for the same
+  metric.** `results.json` says 424 of 424 inline-auth remote configs hardcode a
+  static credential, and 18.4% (424) for `AAK-OAUTH-008`. Two surfaces rendered
+  that from the marker generator. Four stated a literal beside it:
+
+  | Site | Published |
+  |---|---|
+  | `README.md:55` | `100% (421/421) of inline-auth …` |
+  | `README.md:573` | `100% (421/421) of inline-auth …` |
+  | `docs/STATE-OF-MCP-SECURITY-2026.md:36` | `100% (421/421) of inline-auth …` |
+  | `research/state-of-mcp-2026/PREVALENCE.md:95` | `… 421 … 18.3% …` |
+
+  The last contradicted `REPORT.md:37` — 18.4% (424) — inside the same
+  directory. All four are now wrapped in the `report:` markers
+  `scripts/sync_rule_count.py` already owns, and the values were written by
+  `make report` rather than typed. `AAK-OAUTH-008`'s count and share are new
+  governed keys (`oauth008-n`, `oauth008-pct`) sourced from
+  `top_misconfigurations`, so that row cannot be hand-edited back.
+
+- **Neither documented security-reporting channel worked.** `SECURITY.md` listed
+  `security@agentauditkit.io` first — a domain that has never been registered,
+  NXDOMAIN with no MX, so reports bounced — and GitHub Security Advisories
+  second, with private vulnerability reporting *disabled*, which makes
+  `/security/advisories/new` maintainer-only. A security scanner had no working
+  coordinated-disclosure path.
+
+  Private vulnerability reporting is now enabled, so the advisory form is open
+  to any GitHub account, and `SECURITY.md` leads with it. The dead address is
+  kept in the document only to state plainly that it bounces, because it still
+  appears in `CODE_OF_CONDUCT.md` and the changelog history and a reader who
+  finds it there should learn that from the policy rather than from a bounce.
+
+- **Every SARIF `helpUri` pointed at a domain nobody has registered.**
+  `agent-audit-kit.dev` is NXDOMAIN — no NS, A or MX record — so the "more
+  info" link the GitHub Security tab offers on every finding this tool has ever
+  reported was dead, as was the SPDX `documentNamespace` on every SBOM it
+  emitted. SPDX does not require that namespace to resolve, but it does require
+  it to be under a namespace the creator controls, and an unregistered domain is
+  one a stranger can take.
+
+  Both now point at the published docs site, served from `gh-pages`.
+
+  Deep-linking every rule was the obvious fix and is wrong: 13 of 332 rules have
+  a hand-written page under `docs/rules/` and the rest do not, so per-rule URLs
+  everywhere would swap a link that fails uniformly for one that fails 96% of
+  the time — harder to notice, not better. A rule is deep-linked only when its
+  page exists; the other 319 get the rules index, which resolves for all of
+  them.
+
+  `docs/` is not shipped in the wheel, so the set of rules with pages is frozen
+  into the package by `scripts/sync_rule_doc_pages.py` and guarded by
+  `make count-check`. Adding `docs/rules/AAK-FOO-001.md` and re-running it
+  upgrades that rule's helpUri automatically.
+
+### Changed
+
+- **`docs/STATE-OF-MCP-SECURITY-2026.md` is a pointer page, not a second report.**
+  It opened with "**Seed, not the final report.**" and carried a "**Stub for the
+  next corpus run.**" block, while `research/state-of-mcp-2026/REPORT.md` is v1.0
+  with a published date, a methods block, a citation section and a
+  `CITATION.cff` naming it `preferred-citation`. Two documents with the same
+  title, one self-labelled a stub, is the drift shape that produced the 421/424
+  split — and one of the four stale literals was sitting on the stub.
+
+  Reduced rather than deleted: four test modules and `scripts/sync_rule_count.py`
+  reference the path, and it carries material that exists nowhere else — the
+  generated framework crosswalk, the dated evidence anchors, and the
+  reserved-surface table for MCP final 2026-07-28. The stubbed corpus section and
+  the seed banner are gone, replaced by one marker-driven orientation figure and
+  a link to the report. It keeps its markers, so it stays in the marker-file
+  list. README's inbound link no longer calls it a "report seed".
+
+- **The CVE queue is dispositioned.** All eleven open `cve-response` issues now
+  carry `cve-deferred` with a target date, so `make cve-deferral-check` reports
+  eleven dated deferrals, the ageing gate is inside budget, and the release gate
+  counts zero untriaged blockers. #656 already carried `target date: 2026-09-30`
+  and needed no change — it was exempt legitimately, not on a technicality. The
+  2026-09-04/05 wave (#690–#699) sorted into three classes, and only one earns a
+  rule:
+
+  - **#693, #699** — an MCP server or webhook destination taken from
+    configuration and fetched server-side with no link-local/metadata guard. One
+    rule covers both products, so it is a class rather than a surface widening;
+    queued for design against fixtures rather than authored to clear a queue.
+  - **#691, #692** — DNS rebinding in IBM ContextForge, already detected by
+    `AAK-DNS-REBIND-001/002` and `AAK-MCP-SIDECAR-REBIND-001`. Needs a version
+    floor, not a second rule for a covered class.
+  - **#690, #694, #695, #696, #697, #698** — validator bugs inside third-party
+    server binaries. AAK scans a consumer's repository and cannot see them; a
+    rule claiming otherwise would fire on nothing real. Version floors only.
+    #695 is the instructive one: its impact — an attacker-written
+    `~/.cursor/mcp.json` — is already what the MCP-config scanners flag in the
+    repository that receives it.
+
+- **`cli_modules/` is gone; `rule_lint.py` sits at the package root.** The
+  package held one 108-line module against a 1,618-line `cli.py`, so it read as
+  a refactor that had stalled rather than a boundary anyone was working to. Its
+  stated purpose — keeping heavy imports out of CLI start-up — was never what
+  did the work: the laziness comes from the function-local import inside
+  `rule_lint_cmd`, which is unchanged and still function-local.
+
+  No public CLI surface changes: `aak rule lint` is byte-identical, and the
+  command count stays 26. The only breaking move is the internal import path
+  `agent_audit_kit.cli_modules.rule_lint` → `agent_audit_kit.rule_lint`.
+  Finishing the split instead is tracked in #700, which is explicitly allowed
+  to conclude that `cli.py` stays one file.
+
+## [0.3.94] - 2026-09-04
+
+### Added
+
+- **Two rules, and the nine deferred CVEs they close.** Rules 331 and 332.
+  `AAK-MCP-MCPHUB-CVE-2026-79748-001` (SUPPLY_CHAIN, **CRITICAL**) and
+  `AAK-MCP-SEQTHINKING-CVE-2026-81845-001` (SUPPLY_CHAIN, **MEDIUM**).
+
+  Nine issues had sat under `cve-deferred` with dated targets. What released them
+  was not the clock, it was checking a registry, and in both cases the check
+  changed what got written.
+
+  **MCPHub** was held open on one question: is PyPI `mcphub` the same project as
+  npm `@samanhappy/mcphub`? It is not. The npm package is a self-hosted MCP
+  gateway on the 1.0.x line (latest 1.0.34); PyPI `mcphub` is Cognitive-Stack's
+  framework-integration library on 0.1.x (latest 0.1.11), different author,
+  different repository. That distinction is load-bearing rather than pedantic:
+  PyPI `mcphub` can never reach a 1.0.32 floor, so a bare-token pin would not
+  misfire occasionally — it would flag **every dependent, permanently**, for a CVE
+  in software they do not run. The pin is keyed on the scoped npm name and a test
+  asserts nothing fires on the PyPI package. Eight advisories
+  (CVE-2026-79743…79750) fixed across six versions, so one floor at the highest of
+  them covers all eight rather than reporting one dependency eight times.
+
+- **A second arm on the n8n pin, which is the part that would have been missed.**
+  `AAK-MCP-N8N-CVE-2026-72768-001`'s floor moves 2.34.1 → 2.35.4 for
+  CVE-2026-85166, and gains a second `introduced`-bounded arm at 2.36.2.
+
+  The advisory reads "before 2.35.4 **and** 2.36.x before 2.36.2". A single 2.35.4
+  floor clears 2.36.0 and 2.36.1 — versions that sort *above* it and are still
+  vulnerable — so the obvious one-line floor bump would have silently marked
+  vulnerable installs as patched. This is the same two-branch shape
+  CVE-2026-65594 already uses, so it stays one n8n rule id rather than becoming a
+  fourth. A test states the bug in the form it would have shipped in, so a later
+  "simplification" back to one arm fails loudly instead of going quiet.
+
+### Fixed
+
+- **`CITATION.cff` said 0.3.83 while the repo shipped 0.3.93.** Ten releases of
+  drift on the file GitHub renders as "Cite this repository" — the one surface
+  whose entire job is telling a stranger which version produced the numbers they
+  are about to quote.
+
+  It drifted for the ordinary reason. Its header comment read "Bump `version` and
+  `date-released` with each release", which is an instruction to a human, and
+  nothing read it: `test_version_consistency` enumerates four surfaces (pyproject,
+  `__version__`, the README pins, the newest tag) and stops there. Neither field
+  is hand-written now. `version` comes from pyproject and `date-released` from the
+  CHANGELOG heading for exactly that version — the release date is already written
+  down there, and asking a human to retype it elsewhere only creates a second
+  place to be wrong. `sync_repo_metadata.py --check` fails the build on drift.
+
+  The guard is anchored to the top-level key on purpose. `preferred-citation`
+  carries its own `version: "1.0"` — the *report's* identity, which moves when a
+  measurement changes, not when software ships — and an unanchored pattern would
+  stamp the package version over it on every release, silently claiming the report
+  had been revised. A test asserts the pattern matches exactly once.
+
+## [0.3.93] - 2026-09-04
+
+### Added
+
+- **`cve-deferred` now has to say when.** The label is the single thing that
+  switches the release gate off. It was added on 2026-09-01 for a good reason —
+  the watcher's 6-hour cron outran the triage rate, so `count == 0` became a
+  state the repo could not reach on purpose and v0.3.91 sat unpublished for a day
+  — and `docs/RELEASING.md` §5 asked deferrals to carry "a disposition comment
+  naming what is queued and why". Prose, read by nobody.
+
+  Every deferral in the 2026-08-31 wave did carry a `**Target: YYYY-MM-DD.**`
+  line, so the convention was real and working. That is exactly why nobody
+  noticed it was unenforced: a label whose only obligation is a convention is one
+  busy afternoon away from being a mute button, and a deferral with no date is
+  not a deferral, it is a silent drop with a label on it.
+
+  `scripts/check_cve_deferrals.py` runs inside the CVE-response gate and refuses
+  the tag when a `cve-deferred` issue names no target date. It accepts the older
+  `**Target: …**` spelling as well as the structured `target date:` field —
+  rejecting the prose form would have convicted ten issues that did the right
+  thing on the day the guard landed, teaching the one lesson a guard must never
+  teach. `.github/workflows/cve-deferral-date.yml` says the same thing at label
+  time, and deliberately does not strip the label: labelling first and writing
+  the disposition second is the natural order, and a bot that yanks the label out
+  from under that is a bot people route around. Warn there, refuse the tag here.
+
+  A target date in the **past** is listed on every run and fails nothing. Making
+  it fatal was the obvious next step and is a trap: it turns every scheduling
+  note in the tree into a time bomb that detonates during an unrelated release,
+  on a morning nobody chose.
+
+  All 14 open `cve-response` issues were dispositioned in the same pass. The four
+  untriaged ones: n8n CVE-2026-85166 deferred to a floor bump on the existing
+  `AAK-MCP-N8N-CVE-2026-72768-001` pin (2.35.4 and 2.36.2 are both published);
+  Helicone CVE-2026-85178 and two WordPress plugin advisories closed out of scope
+  on the boundary this repo has recorded five times before — the vulnerable code
+  is in a hosted platform server or a wordpress.org plugin, and the artifact that
+  *does* resolve on npm/PyPI (`helicone`, "a wrapper for the OpenAI API that logs
+  all requests") is a client SDK that does not contain it.
+
+### Fixed
+
+- **The benign-slice false-positive rate was 50%, and no rule was at fault.** The
+  published badge read `2/4 (50.0%)` on a 536-config slice. Re-adjudicating the four
+  HIGH/CRITICAL findings against primary data — the cached registry pages the corpus
+  was built from — found no rule defect at all. All four were `AAK-MCP-001` ("remote
+  MCP server without authentication"), and the rule was correct about every config it
+  was handed. The configs were wrong.
+
+  The mechanism is a disagreement inside the corpus builder that nothing compared.
+  `fetch_registry._auth_mode()` looks across **every** remote a registry record
+  publishes and reports `static-credential` if any of them declares a secret header.
+  `_to_config()` built the scannable config from `remotes[0]` **only**. A server that
+  publishes an anonymous or login entry point first and its credentialled endpoint
+  second was therefore labelled `static-credential` while being handed to the scanner
+  with no auth on it at all. `co.curie/commerce` and `co.huggingface/hf-mcp-server`
+  each declare `Authorization` on remote 1; `app.thoughtspot/mcp-server` resolves to a
+  `/bearer/mcp` remote declaring `Authorization` + `X-TS-Host`.
+
+  `_to_config()` was fixed on 2026-08-24 to prefer the first remote that declares
+  headers, but the committed manifest predated the fix and went on carrying the broken
+  configs while every test passed. `RESULTS.md` deliberately did not bundle the
+  regeneration into a precision fix, so the number would not move for two reasons at
+  once. This is that regeneration, on its own.
+
+  Re-derived from the same cached 2026-07-26 registry snapshot rather than from the
+  live registry, so the slice size and the fetch date are unchanged and the two runs
+  are directly comparable. **3 of 1,641 configs change, 0 `auth_mode`s change**, and
+  the patched manifest was asserted equal to a full re-derivation. Total findings are
+  unchanged at 1,158: the three configs stopped firing `AAK-MCP-001` (CRITICAL) and
+  started firing `AAK-OAUTH-008` (LOW), the expected posture finding for a
+  static-credential server with no RFC 9728 discovery. The scanner did not go quieter,
+  it went more accurate, and the severity mix is the evidence.
+
+  **Benign-slice HIGH/CRITICAL false-positive rate: 2/4 (50.0%) → 0/1 (0.0%)**; Wilson
+  95% CI [15.0%, 85.0%] → [0.0%, 79.3%]. The interval is wide because the denominator
+  is 1, and it is published rather than buried — a 0.0% point estimate on one
+  adjudicated finding is not evidence that the scanner is never wrong. No rule
+  severity was downgraded and no matcher was narrowed: the standing true positive
+  (`ai.spala/public-mcp`) still fires, and a test asserts it, because a lower
+  false-positive rate bought with a false negative is not an improvement.
+
+  `tests/test_registry_corpus_auth_consistency.py` is the guard the class was missing:
+  **no server labelled `static-credential` may have a config with no auth header.** It
+  reads only committed data, so it fails on a stale manifest even when `_to_config`
+  itself is correct — which is exactly the state that shipped.
+
+  The corrected corpus moves the State of MCP Security 2026 headline by those same
+  three configs: critical 1,215 → 1,212 (52.8% → 52.6%), no-auth 1,203 → 1,200 (52.2%
+  → 52.1%), inline-auth 421 → 424 (still 100%). README, REPORT.md, PREVALENCE.md,
+  CITATION.cff, `docs/STATE-OF-MCP-SECURITY-2026.md` and
+  `docs/DISTRIBUTION-CHECKLIST.md` all follow.
+
+- **`AAK-DNS-REBIND-001` read straight past every Python FastMCP server**
+  (CVE-2026-81102, #660). The Dash MCP server bound its listener to loopback and never
+  checked the `Host` a request named, so a name rebound to loopback still reached it
+  and could drive its tools under the credential the server holds. The detector matched
+  `StreamableHTTPSessionManager`, `streamable_http` and `StreamableHTTPServerTransport`.
+  FastMCP names none of them: it is built as `FastMCP(...)` and selects its transport
+  with `run(transport="streamable-http")` — a **hyphenated string literal**, where the
+  detector looked for `streamable_http` with an underscore.
+
+  Extended, not duplicated. Same rule id, same mitigation marker (`allowed_hosts=`
+  already covered FastMCP's `TransportSecuritySettings`), same remediation, following
+  the 2026-09-02 triage note that these are "the same claims over a language and a
+  transport the detectors do not currently read, so they get a scanner path, not a
+  second rule id". **stdio is deliberately not flagged**: FastMCP defaults to stdio, a
+  stdio server has no listener to rebind onto, and the advisory says only the network
+  mode was reachable — requiring an explicit network transport is what keeps this from
+  firing on essentially every FastMCP server written. **Binding to loopback is not a
+  mitigation** and does not clear the rule, because CVE-2026-81102 was loopback-bound;
+  the Host allow-list is the control. Fixtures: `python-fastmcp-unguarded` fires,
+  `python-fastmcp-guarded` and `python-fastmcp-stdio` stay silent, and every
+  pre-existing fixture keeps its verdict.
+
+- **The transport rules did not recognise WebSocket, and did not say which transports
+  they covered** (CVE-2026-37006, #662). Measured rather than assumed: `AAK-MCP-001`
+  already treated a `ws://` URL as remote and unauthenticated, so the unauthenticated
+  half was covered. `AAK-TRANSPORT-001` (cleartext transport) was not — it matched
+  `^http://` only, so a `ws://` MCP server was silently exempt from the project's
+  cleartext-transport rule while a byte-identical `http://` server was CRITICAL.
+  `ws://` is not a milder form of the defect: the handshake is an unencrypted HTTP
+  upgrade, so its headers and every frame after it are on the wire in clear. `wss://`
+  is the encrypted counterpart and is not flagged, and the loopback carve-out now
+  applies to both schemes rather than one.
+
+  The second half of the gap was documentation. `AAK-TRANSPORT-001` through `-004` each
+  now state **which transports they apply to and which they do not**, including where
+  stdio stands, instead of leaving a reader to infer "stdio or http" from a regex —
+  which is how WebSocket went unread across four rules at once. A test asserts every
+  rule in the family carries both statements. `AAK-TRANSPORT-001`'s title changes to
+  "MCP server uses a cleartext transport (http:// or ws://)", because the old title
+  named only one of the two schemes it now reads.
+
+- **A standing report that read as current, checked by nothing.**
+  `docs/reports/mcp-2026-07-28-readiness.md` is written as a live artifact: no
+  historical banner, linked as a current finding, closing with a promise to
+  re-run "on ratification day (2026-07-28) and on a rolling basis". It was
+  generated once, in July, and never re-derived.
+
+  Its nine numbers all still reproduce exactly — the corpus has not moved and
+  `AAK-OAUTH-006/007/008` are all still in the registry. That is luck. The corpus
+  is a directory any PR may add to, and the day one does, the report becomes a
+  confident wrong number carrying a citation, which is worse than no report.
+  `tests/test_readiness_report_is_current.py` now asserts the rendered table
+  against a fresh `scripts/mcp_2026_07_28_readiness.py` run, so the promise of a
+  rolling re-run is kept by a test rather than by intention. It skips where
+  `benchmarks/data/` is absent — the corpus is gitignored, so a bare CI checkout
+  cannot measure the report at all and zeros there would mean "unmeasurable",
+  not "wrong". The guard therefore bites on a maintainer checkout and any job
+  that fetches the corpus, which is where a change to it can actually originate.
+  Written out rather than described as "guarded by CI", because that would claim
+  a gate the check does not have.
+
+  Its tense was wrong independently of its numbers. The report described the
+  2026-07-28 specification as a release candidate whose "final publication
+  [is] scheduled" — true when written, and read after that date, an artifact
+  that is wrong about the calendar invites a reader to discount the parts that
+  are right. It now records publication as having happened, carries a
+  **Re-validated: 2026-09-04** stamp, and a test fails if the "scheduled"
+  phrasing ever comes back.
+
+- **`Category` (12 members) in `CLAUDE.md`, while the enum had 14.** The fourth
+  instance of the same blind spot, after "N existing rules" (v0.3.72), "N
+  registered scanners" (v0.3.81) and the category count itself (v0.3.84).
+  `check_counts.py` matches phrasings, not numbers: the category pattern is
+  anchored on the headline "rules … across N categories" form, so it never looked
+  at the backticked-enum form, and the corroboration sweep reads `README.md` and
+  `docs/**` while this claim lives in `CLAUDE.md`. The result was one file
+  asserting "330 rules across 14 security categories" on line 8 and "`Category`
+  (12 members)" on line 137 with `make count-check` reporting clean — a count
+  wrong in the one file that tells the next reader the counts are guarded. The
+  number is corrected and the phrasing is now in `PATTERNS`, anchored on the
+  backticked symbol so it only ever matches a claim about the enum itself.
+
+## [0.3.92] - 2026-09-02
+
+### Added
+
+- Three rules. `AAK-SSRF-BRACKETED-HOST-001` for CVE-2026-80347,
+  `AAK-MCP-TOOLS-LIST-UNBOUNDED-001` for CVE-2026-84289, and
+  `AAK-APPROVAL-PARSER-DESYNC-001` for CVE-2026-19591. Rules 327 to 330. Scanners
+  95 to 98.
+
+  All three sit next to a rule that looks like it should already cover them. None
+  of them does, and the reason is the same every time. The defence is present, so
+  a detector keyed on the defence being missing stays quiet. mcp-fetch has an SSRF
+  allow-list. It hands `net.isIP` a bracketed IPv6 literal, which returns 0, so
+  the private-address branch never runs and the guard allows. Hermes bounds
+  nothing on the upstream tool catalogue, and `AAK-MCP-016` bounds the inbound
+  request body, which is a value arriving from the other direction. Codex parses a
+  command before approving it, and pwsh reads `--%` as stop-parsing, so the
+  command that was approved is not the command that runs.
+
+  Every shape was scanned against the whole engine before a rule was written.
+  Nothing fired for any of them. Each rule has a positive fixture and a benign
+  fixture, and the benign one is a single line different from the positive. Zero
+  hits on the 536-server benign slice, so the published false-positive rate is
+  unchanged and needed no re-adjudication.
+
+### Changed
+
+- Triaged all 16 open `cve-response` issues, CVSS descending, NVD entry read for
+  each. Three came out NEW-RULE and were written today. Twelve are DEFERRED with a
+  target date. One is OUT-OF-SCOPE and closed. The 13 that already carried
+  `cve-deferred` all had a disposition comment, but none carried a date, so all 13
+  were re-dispositioned with one.
+
+  The closed one is #680. runZero Platform's MCP service is a genuine MCP surface
+  and a genuine authorization bypass. It is also a hosted product. `runzero`
+  resolves on neither npm nor PyPI, and the fix landed server-side, so there is
+  nothing in a user's own repository to pin, patch, or detect.
+
+  Two deferrals stayed deferrals deliberately. #660 and #662 need an existing
+  detector widened, not a new rule id. `AAK-DNS-REBIND-001` does not fire on
+  Python FastMCP, and the transport rules do not recognise WebSocket. Giving
+  either shape its own rule id would report one defect class under two ids.
+
+  The three NEW-RULE issues stay open and carry no `cve-deferred`, so they keep
+  blocking the release gate until the rules merge. That is deliberate. Deferred
+  work and today's work are not the same thing.
+
+
+- **The CVE watcher has a limit.** It filed one release-gating issue per CVE on a
+  6-hour cron with no upper bound and opened 27 in five days, eight of them one
+  product's advisory batch in a single run. At most 5 new issues per run, most
+  severe first, and none while 10+ untriaged issues are already open. The
+  pre-filter was deliberately left alone: all 27 were genuine MCP CVEs, so
+  tightening relevance would have dropped true positives to fix a rate problem.
+  The cap lives in `collect_new_cves`, not in the workflow step that creates
+  issues, because `state["filed_cves"]` records everything the function returns —
+  capping after the fact would mark held CVEs as filed and lose them. The NVD
+  window widened 48h → 7 days so a held CVE is still findable when the queue
+  drains; that is what separates back-pressure from data loss, and it has a test.
+- The 27-issue queue was triaged to 13: 10 closed as already covered by a shipped
+  rule (each confirmed by scanning a fixture of that shape, not asserted from the
+  rule title), 3 closed as unreachable, 1 closed as out of scope, and 13 left
+  open under `cve-deferred` with the queued work named. Two of the deferrals are
+  gaps the fixture testing found rather than assumed: `AAK-DNS-REBIND-001` does
+  not fire on Python FastMCP's `streamable_http_app()`, and `AAK-MCP-SSRF-001`
+  cannot fire on mcp-fetch because the SSRF guard is present and bypassed rather
+  than absent.
+
+### Fixed
+
+- The gate can no longer be switched off by labelling. `cve-deferred` exempts an
+  issue from the release gate, and docs/RELEASING.md §5 said the label is only
+  honest on an issue that has a disposition comment. That was prose, and prose
+  does not fail a build. Two tests now read the tracker and fail if a deferred
+  issue has no maintainer comment, or no `## Disposition` comment. When the
+  tracker cannot be read they skip and say they did not check, rather than
+  passing. The predicates are unit-tested on synthetic data, so the check still
+  holds on a machine with no network.
+- Verified the registry parity gate catches the defect it was written for.
+  Declared 0.3.91 against a registry serving 0.3.90, on the real git clock, exits
+  1 and prints both versions. A wrong declared version fails. A registry ahead of
+  the repository fails. An unreachable registry warns that it did not compare. No
+  defect in the failure path, so nothing needed fixing there.
+
+- **0.3.91 was written and never shipped, and nothing could see it.** pyproject
+  said 0.3.91, the CHANGELOG had a dated 0.3.91 section, the counts were synced,
+  the tests passed and main was pushed — while PyPI served 0.3.90. The proximate
+  cause was that the tag was never pushed (no `[skip ci]` on the bump commit;
+  `on: push: tags: ['v*']` would have fired; no release run exists to have failed
+  quietly — the workflow simply never ran). The **root cause** is that pushing it
+  could not have worked: the CVE-response gate refused to release while *any*
+  `cve-response` issue was open, and the watcher opens them on a 6-hour cron with
+  no back-pressure. The queue reached 27, so `count == 0` had stopped being a
+  state the repository could reach on purpose. The gate had quietly changed
+  meaning from "every disclosure has been looked at" to "never ship".
+- The gate now blocks on **untriaged** issues. `cve-deferred` marks one that has
+  been read, dispositioned in a comment and scheduled; anything without a
+  disposition still blocks exactly as before. `docs/RELEASING.md` §5 carries the
+  disposition table and says plainly that the label is only honest on an issue
+  that has the comment — a label without one turns the gate off rather than
+  satisfying it.
+- **Every version check this repo owned compared one in-repo surface to another.**
+  pyproject against `__version__`, the CHANGELOG heading against the newest tag,
+  the README's Action pin against both. All of them passed for a full day while
+  the declared version did not exist on PyPI. The repo can be perfectly
+  self-consistent about a version nobody can install, and was.
+  `scripts/check_registry_parity.py` compares the declared version to the
+  **registry**, and runs daily as well as on push — on push,
+  0.3.91-declared-vs-0.3.90-published is correct for ten minutes and a defect
+  after a day, the two states produce an identical diff, and a release that never
+  happens produces no push to check at all. The age clock is read from git rather
+  than the CHANGELOG's own date, so a back-dated heading cannot hide it. An
+  unreachable registry is a loud SKIP, never a silent pass.
+- **The repo description was checked on a clock that only ticks during a
+  release.** It read "326 rules" against a live count of 327 because the check
+  lives inside `release.yml` and 0.3.91 never released — the same root cause as
+  above, in a second surface. There is now a daily `description-liveness`
+  workflow.
+- **The description writer and its own checker disagreed about the text.**
+  `sync-repo-metadata.yml` writes `sync_repo_metadata._description_string()`,
+  which composed its own string; `description-liveness` compares against
+  `render_repo_metadata.render()`, which folds the template in
+  `.github/repo-metadata.yml`. A successful write would have set a description
+  the next release rejected. It never surfaced only because the write step has
+  never run — it needs a `METADATA_SYNC_TOKEN` that does not exist. Two latent
+  bugs were cancelling out. The writer now delegates to the renderer, one test
+  fails if they diverge, and the comparison itself moved into
+  `render_repo_metadata.py --check-live` so `release.yml` and the scheduled
+  workflow cannot drift apart either.
+- `render_repo_metadata.py` could not import the package it reads counts from
+  unless the caller set `PYTHONPATH=.`. `python scripts/x.py` puts *scripts/* on
+  `sys.path`, not the repo root, so `from agent_audit_kit import RULE_COUNT`
+  fails in any job that has not pip-installed the package. `release.yml` carried
+  a `PYTHONPATH=` workaround and a comment calling the omission the reason "a
+  stale description survived three release cycles undetected";
+  `sync-repo-metadata.yml` had none, so making it a dependency of
+  `sync_repo_metadata --description` broke that job in the v0.3.91 release run.
+  The module now puts the repo root on `sys.path` itself, which fixes it for
+  every caller instead of once per workflow. Regression test runs both scripts
+  under `python -S`, so the editable install's `.pth` is not read and the
+  reproduction is real — without the fix it raises `ModuleNotFoundError`.
+- `render_repo_metadata.py` ignored its own command line: `main()` defaults argv
+  to `[]` for deterministic parsing under pytest, so `__main__` has to pass
+  `sys.argv[1:]` and did not — `--check-live` silently rendered instead of
+  checking. Third occurrence of this pattern in the repo, so it is now commented
+  where the next person will read it.
+
+
 ## [0.3.91] - 2026-08-31
 
 ### Added

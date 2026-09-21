@@ -69,6 +69,42 @@ available) before shipping:
     `deepseek-tui` is the pre-rename name, deprecated, pinned at its own 0.8.41 boundary.
     The crates.io twin `codewhale-tui` has the same defect but Cargo manifests are not in
     _CANDIDATE_NAMES, so it is out of this detector's reach)
+  - tooluniverse                    >= 1.3.0   (CVE-2026-81096; affected up to 1.2.6)
+  - mcp-contextforge-gateway        >= 1.0.9   (CVE-2026-77822, CVE-2026-18905,
+    CVE-2026-18486, CVE-2026-18489 — one floor, four CVEs, four issues; 1.0.9 is
+    from IBM's bulletin, which is the only source that carries the range)
+  - postgres-mcp                    <= 0.3.0   (CVE-2026-85620; no fixed release —
+    upstream issue #178 open, v0.3.0 still the newest tag)
+  - awslabs.postgres-mcp-server     >= 1.1.7   (CVE-2026-85787)
+  - knowns                          presence-only (CVE-2026-86439 fixed in 0.30.0,
+    but CVE-2026-88938 is scoped "through 0.33.0" and 0.33.0 is the newest npm
+    release, so there is no floor left to pin to)
+  - langflow                        >= 1.11.6  (CVE-2026-9186 raised the 1.11.0
+    floor of CVE-2026-12940; CVE-2026-85025 / CVE-2026-78575 / CVE-2026-81941,
+    all scoped 1.0.0–1.11.5, then raised it again — same package, same rule)
+  - awslabs.postgres-mcp-server     >= 1.1.7   (CVE-2026-85787 + CVE-2026-87911;
+    the second is OS command injection through a crafted COPY-to-PROGRAM
+    statement, CRITICAL 9.6, and the floor was already correct — only the rule's
+    threat description moved. Written without the literal SQL here on purpose:
+    `AAK-LLM-SQL-RCE-001` matches that syntax, and this repo scans itself, so
+    the exact clause in prose fails the self-scan on a finding that is a
+    docstring)
+  - mcp-contextforge-gateway        >= 1.0.9   (+ CVE-2026-78573 default
+    credentials, 1.0.0–1.0.7; already under the existing floor)
+  - awslabs.security-agent-mcp-server >= 0.2.0   (CVE-2026-87913; unverified S3
+    bucket ownership for scan output)
+  - mysql-mcp-server               >= 0.4.2   (CVE-2026-59971; SSE transport with no
+    security_settings and a 0.0.0.0 default reaches execute_sql unauthenticated)
+  - praisonai (npm, TypeScript)    >= 1.7.2   (CVE-2026-57139 — a DIFFERENT project
+    from the 4.6.x PyPI `praisonai` above. Same name, two registries, two version
+    lines, which is why `_Pin.ecosystem` exists)
+  - @zereight/mcp-gitlab           >= 2.1.30  (CVE-2026-61560, CVE-2026-61559 fixed
+    2.1.27; CVE-2026-61568 fixed 2.1.30 — one pin at the highest floor)
+  - flowise                        >= 3.1.4   (CVE-2026-91931, CVE-2026-91932; npx
+    package names and an unvalidated cwd in the Custom MCP node)
+  - mcp-from-openapi               >= 2.5.0   (CVE-2026-59973; external-$ref SSRF on
+    its own 2.x line — `frontmcp`/`@frontmcp/adapters` carry the same defect but
+    were fixed at 1.5.0, already under that pin's 1.5.7 floor)
 
 CVEs without a pinnable PyPI/npm artifact (aerostack-mcp SSRF, MaxKB stdio
 command-injection, mastergo-magic-mcp path-traversal/SSRF with no vendor fix,
@@ -159,6 +195,24 @@ _LANGBOT_RE = re.compile(r"(?<![\w./-])langbot(?![\w-])" + _VER_OPT, re.IGNORECA
 # CVE pin for a package the project does not depend on. Found while writing the
 # mcp-florence2 fixtures, whose comment used the word "declined".
 _CLINE_RE = re.compile(r"(?<![\w./-])cline(?![\w-])" + _VER_OPT, re.IGNORECASE)
+# A bare package name that is ALSO a substring of a scoped sibling needs a
+# boundary on both sides. `_mk_re("frontmcp")` matched the `frontmcp` inside
+# `"@frontmcp/adapters": "1.5.7"`, captured no version because `/adapters`
+# follows the name, and `_fires` reads a missing version as "unpinned" and
+# reports it -- so a correctly patched sibling was flagged as vulnerable. The
+# scan loop breaks on the first pattern that MATCHES, not the first that FIRES,
+# so the unscoped name also shadowed the scoped pattern that would have read the
+# version correctly. Excluding `@` on the left and `/` on the right keeps the
+# bare pattern on the bare package and lets the scoped pattern own the scoped
+# name. `better-auth` / `@better-auth/oauth-provider` is the same pair.
+def _mk_bare_re(name: str) -> re.Pattern[str]:
+    """Like `_mk_re`, but refuses to match inside an `@scope/name` sibling."""
+    return re.compile(
+        r"(?<![\w./@-])" + re.escape(name) + r"(?![\w/-])" + _VER_OPT,
+        re.IGNORECASE,
+    )
+
+
 # `n8n` fixed to exclude the distinct `n8n-mcp` package (right boundary).
 _N8N_RE = re.compile(r"(?<![\w./-])n8n(?![\w-])" + _VER_OPT, re.IGNORECASE)
 # `browse-mcp` (npm, That1Drifter). PyPI carries an unrelated `browse-mcp` -- an
@@ -168,6 +222,37 @@ _N8N_RE = re.compile(r"(?<![\w./-])n8n(?![\w-])" + _VER_OPT, re.IGNORECASE)
 # manifest depending on it stays quiet; the bounded form keeps this off
 # `browse-mcp-client`-style siblings.
 _BROWSE_MCP_RE = re.compile(r"(?<![\w./-])browse-mcp(?![\w-])" + _VER_OPT, re.IGNORECASE)
+# MCPHub. Keyed on the SCOPED npm name and never on the bare token, because
+# `mcphub` on PyPI is a different project by a different author: npm
+# `@samanhappy/mcphub` is a self-hosted MCP gateway on the 1.0.x line (latest
+# 1.0.34), PyPI `mcphub` is Cognitive-Stack's framework-integration library on
+# 0.1.x (latest 0.1.11). A bare-token pin would report a 1.0.32 floor against a
+# package whose highest release is 0.1.11 -- every dependent flagged, forever,
+# for someone else's CVE. This is the `mcp-shell` failure mode the deferral was
+# held open to avoid, and confirming the two identities is what released it.
+_MCPHUB_RE = re.compile(
+    r"(?<![\w./-])@samanhappy/mcphub(?![\w-])" + _VER_OPT, re.IGNORECASE
+)
+# `mcp-sequential-thinking` (PyPI, arben-adm). Bounded on the right so it stays
+# off any `mcp-sequential-thinking-*` sibling.
+_SEQTHINKING_RE = re.compile(
+    r"(?<![\w./-])mcp-sequential-thinking(?![\w-])" + _VER_OPT, re.IGNORECASE
+)
+# `postgres-mcp` (PyPI, crystaldba — the "Postgres MCP Pro" server). The right
+# boundary excludes a trailing hyphen so this stays off `postgres-mcp-server`,
+# `awslabs.postgres-mcp-server` and the separate `postgres-mcp-pro` distribution.
+_POSTGRES_MCP_RE = re.compile(
+    r"(?<![\w./-])postgres-mcp(?![\w-])" + _VER_OPT, re.IGNORECASE
+)
+# `knowns` (npm, knowns-dev). Bounded on both sides; PyPI carries an unrelated
+# `knowns` stub, handled by the `introduced` bound on the pin rather than here.
+_KNOWNS_RE = re.compile(r"(?<![\w./-])knowns(?![\w-])" + _VER_OPT, re.IGNORECASE)
+# `tooluniverse` (PyPI, mims-harvard). Bounded so it stays off any
+# `tooluniverse-*` sibling; the GitHub project name is `ToolUniverse`, which the
+# IGNORECASE flag already covers.
+_TOOLUNIVERSE_RE = re.compile(
+    r"(?<![\w./-])tooluniverse(?![\w-])" + _VER_OPT, re.IGNORECASE
+)
 
 
 @dataclass(frozen=True)
@@ -179,6 +264,17 @@ class _Pin:
     introduced: _Ver | None = None   # fire only if version >= introduced
     fix_label: str = ""
     regexes: tuple[re.Pattern[str], ...] = field(default=(), compare=False)
+    # Which package registry this pin's version line belongs to: "py", "js", or
+    # None for "do not care". Names are not unique across registries, and a pin
+    # is a claim about ONE project's version line, so matching a same-named
+    # package from the other registry compares two unrelated numbering schemes.
+    # `praisonai` is the case that forced this: PyPI's line is 4.6.x and npm's
+    # is 1.7.x, so the 4.6.78 floor reported a fully-patched npm praisonai@1.7.4
+    # as vulnerable and told the reader to upgrade to a version npm has never
+    # published. Only set this where a real twin exists; None keeps the old
+    # behaviour, and a manifest whose registry is not knowable (an MCP config)
+    # still matches every pin regardless.
+    ecosystem: str | None = None
 
     def compiled(self) -> tuple[re.Pattern[str], ...]:
         return self.regexes or tuple(_mk_re(n) for n in self.names)
@@ -207,7 +303,12 @@ _PINS: tuple[_Pin, ...] = (
     # --- 2026-07-13..15 wave ---
     _Pin("AAK-MCP-HEALTHLAKE-CVE-2026-15643-001", "awslabs.healthlake-mcp-server",
          ("awslabs.healthlake-mcp-server",), (0, 0, 14), fix_label="0.0.14"),
+    # ecosystem="py": npm publishes an unrelated `praisonai` (the TypeScript
+    # agent framework, 1.x line) whose CVE and floor are the separate pin below.
+    # Without the scope, npm praisonai@1.7.4 -- the newest release there -- was
+    # reported vulnerable against this 4.6.78 PyPI floor.
     _Pin("AAK-MCP-PRAISONAI-CVE-2026-61427-001", "praisonai", ("praisonai",), (4, 6, 78),
+         ecosystem="py",
          fix_label="4.6.78"),
     _Pin("AAK-MCP-APPIUM-CVE-2026-58500-001", "appium-mcp", ("appium-mcp",), (1, 85, 10),
          fix_label="1.85.10"),
@@ -221,7 +322,12 @@ _PINS: tuple[_Pin, ...] = (
     # validated; fixed 1.6.13), which 1.6.11/1.6.12 are still exposed to. Also cites
     # CVE-2026-67336 (weak crypto defaults, fixed 1.6.11 — already ⊆ this floor).
     _Pin("AAK-MCP-BETTERAUTH-CVE-2026-53512-001", "better-auth",
-         ("better-auth", "@better-auth/oauth-provider"), (1, 6, 13), fix_label="1.6.13"),
+         ("better-auth", "@better-auth/oauth-provider"), (1, 6, 13),
+         fix_label="1.6.13",
+         # Same substring-shadowing pair as frontmcp above, and it was live: a
+         # patched `@better-auth/oauth-provider@1.6.13` reported as "unpinned".
+         regexes=(_mk_re("@better-auth/oauth-provider"),
+                  _mk_bare_re("better-auth"))),
     # --- 2026-07-15..17 wave ---
     _Pin("AAK-MCP-SDK-CVE-2026-52869-001", "mcp (MCP Python SDK)", ("mcp",), (1, 28, 1),
          fix_label="1.28.1", regexes=(_MCP_SDK_RE,)),
@@ -229,8 +335,12 @@ _PINS: tuple[_Pin, ...] = (
          fix_label="0.5.2"),
     _Pin("AAK-MCP-N8NMCP-CVE-2026-54052-001", "n8n-mcp", ("n8n-mcp",), (2, 57, 4),
          fix_label="2.57.4", regexes=(_N8N_MCP_RE,)),
-    _Pin("AAK-MCP-DBTMCP-CVE-2026-44968-001", "dbt-mcp", ("dbt-mcp",), (1, 17, 1),
-         fix_label="1.17.1"),
+    # Floor raised 1.17.1 -> 1.20.0 on 2026-09-16 for CVE-2026-55837: the local
+    # OAuth helper serves GET /dbt_platform_context unauthenticated with no Host
+    # validation, handing out access and refresh tokens. 1.17.1 through 1.19.x
+    # were vulnerable and, at the old floor, silent.
+    _Pin("AAK-MCP-DBTMCP-CVE-2026-44968-001", "dbt-mcp", ("dbt-mcp",), (1, 20, 0),
+         fix_label="1.20.0"),
     # Floor moved 0.9.21 -> 0.10.11 for CVE-2026-50143 (Actor path-authority token
     # leak). Same package, same rule: a second pin on the same name would report the
     # one dependency twice, and the higher floor already covers the lower one.
@@ -292,9 +402,17 @@ _PINS: tuple[_Pin, ...] = (
     # BASHOPTS / PS4 → unauthenticated env-var-injection RCE (CVE-2026-12940,
     # CRITICAL 9.8). Fixed 1.11.0 (the first release after the affected 1.10.1;
     # introduced-bounded at 1.0.0 so pre-MCP 0.x releases clear).
+    # Floor raised 1.11.0 -> 1.11.3 for CVE-2026-9186 (HIGH 6.5): Langflow OSS
+    # 1.0.0-1.11.2 trusts a spoofed `X-Forwarded-For: 127.0.0.1` to satisfy its
+    # localhost-only guard on MCP-config installation, so a remote authenticated
+    # caller writes arbitrary IDE config files (`~/.cursor/mcp.json` and friends).
+    # 1.11.0 through 1.11.2 are exposed to it, so the old floor would have marked
+    # three vulnerable releases patched. Same package, same rule, higher floor --
+    # the `@apify` shape; a second pin on the name would report one dependency
+    # twice.
     _Pin("AAK-MCP-LANGFLOW-CVE-2026-12940-001", "langflow", ("langflow",),
-         (1, 11, 0), introduced=(1, 0, 0),
-         fix_label="1.11.0 (affected 1.0.0–1.10.1)"),
+         (1, 11, 6), introduced=(1, 0, 0),
+         fix_label="1.11.6 (affected 1.0.0–1.11.5)"),
     # --- 2026-08-01 wave ---
     # gemini-bridge (PyPI) 1.0.0–1.3.0: `consult_gemini_with_files` inline mode reads
     # any file path in the `files` argument without confining it to the working
@@ -321,6 +439,23 @@ _PINS: tuple[_Pin, ...] = (
     _Pin("AAK-MCP-LANGGRAPH-MONGO-CVE-2026-48121-001",
          "@langchain/langgraph-checkpoint-mongodb",
          ("@langchain/langgraph-checkpoint-mongodb",), (1, 3, 1), fix_label="1.3.1"),
+    # CVE-2026-55253 (HIGH 7.7) is the same defect in the *PyPI* distributions,
+    # which the npm pin above does not see: MongoDBSaver.list/alist and
+    # MongoDBStore.search fold caller-controlled filter dicts into the query
+    # without recursively rejecting `$`-prefixed keys, so `$regex` / `$where`
+    # defeat the equality filter a multi-tenant deployment relies on. Two
+    # packages, two fix releases, so two pins rather than one.
+    _Pin("AAK-MCP-LANGGRAPH-MONGO-CVE-2026-48121-001",
+         "langgraph-checkpoint-mongodb",
+         ("langgraph-checkpoint-mongodb",), (0, 3, 0), fix_label="0.3.0"),
+    _Pin("AAK-MCP-LANGGRAPH-MONGO-CVE-2026-48121-001",
+         "langgraph-store-mongodb",
+         ("langgraph-store-mongodb",), (0, 4, 0), fix_label="0.4.0"),
+    # langgraph-api < 0.10.0: a relative webhook target delivered over the
+    # in-process loopback transport skips the external auth context, so an
+    # authenticated user can create or modify a run on another user's thread.
+    _Pin("AAK-MCP-LANGGRAPH-API-CVE-2026-55235-001", "langgraph-api",
+         ("langgraph-api",), (0, 10, 0), fix_label="0.10.0"),
     # --- 2026-08-06 wave ---
     # awslabs.documentdb-mcp-server (PyPI) < 1.0.12: write-capable aggregation
     # pipeline stages bypass read-only-mode enforcement → unauthorized writes
@@ -331,8 +466,15 @@ _PINS: tuple[_Pin, ...] = (
     # frontmcp (npm) < 1.5.7: the sandboxed codecall:execute tool reaches the host
     # Zod schema's Function constructor and runs arbitrary code as the server user;
     # default public auth mode serves it unauthenticated (CVE-2026-67531). Fixed 1.5.7.
+    # `@frontmcp/adapters` added 2026-09-19 for CVE-2026-59973: the OpenAPI
+    # adapter's external-$ref guard checks hostname strings without resolving,
+    # pinning or revalidating addresses. It ships from the same repo on the same
+    # version line and was fixed in 1.5.0 -- at or below this 1.5.7 floor, so no
+    # floor move is needed, only the name the pin was missing.
     _Pin("AAK-MCP-FRONTMCP-CVE-2026-67531-001",
-         "frontmcp", ("frontmcp",), (1, 5, 7), fix_label="1.5.7"),
+         "frontmcp", ("frontmcp", "@frontmcp/adapters"), (1, 5, 7),
+         fix_label="1.5.7", ecosystem="js",
+         regexes=(_mk_re("@frontmcp/adapters"), _mk_bare_re("frontmcp"))),
     # --- 2026-08-08 wave ---
     # langgraph-checkpoint-postgres / -sqlite (PyPI) < 3.1.1: namespaces stored as a
     # dot-joined string and read by simple prefix match → a scoped read spills into a
@@ -345,8 +487,15 @@ _PINS: tuple[_Pin, ...] = (
     # requests without a 401, and a failed Graph API call serialises the request URL
     # (with the access_token) into the response → unauth tool invocation + token leak
     # (CVE-2026-48039, CVSS 9.1). Fixed 1.0.109.
+    # Floor raised 1.0.109 -> 1.0.115 on 2026-09-19 for CVE-2026-54549:
+    # upload_ad_image hands an attacker-controlled image_url to
+    # try_multiple_download_methods(), where httpx.AsyncClient runs with
+    # follow_redirects=True and validates neither scheme, host nor resolved IP,
+    # and Meta credential validation happens only AFTER the download. 1.0.109
+    # through 1.0.114 were vulnerable and, at the old floor, silent.
     _Pin("AAK-METAADS-CVE-2026-48039-001",
-         "meta-ads-mcp", ("meta-ads-mcp",), (1, 0, 109), fix_label="1.0.109"),
+         "meta-ads-mcp", ("meta-ads-mcp",), (1, 0, 115), fix_label="1.0.115",
+         ecosystem="py"),
     # --- 2026-08-09 wave ---
     # @adenot/mcp-google-search (npm) <= 0.3.1: the `read_webpage` tool
     # (`src/index.ts`) fetches the caller-supplied `url` argument with no host or
@@ -389,8 +538,22 @@ _PINS: tuple[_Pin, ...] = (
     # would then report the same dependency five times. CVE-2026-77068 names two
     # lines ("before 2.33.4 and 2.34.x before 2.34.1"); a single 2.34.1 floor covers
     # both, and CVE-2026-77073 is "before 2.34.1" outright.
-    _Pin("AAK-MCP-N8N-CVE-2026-72768-001", "n8n", ("n8n",), (2, 34, 1),
-         fix_label="2.34.1", regexes=(_N8N_RE,)),
+    # Floor moved again, 2.34.1 -> 2.35.4, for CVE-2026-85166: inline sub-workflow
+    # JSON (the Workflow Tool node) is persisted without validating that the caller
+    # owns the credentials it references, and MCP is one of the named write paths,
+    # so a shared-workflow editor plants a node that resolves someone else's secret
+    # when the workflow next runs under an identity holding it.
+    #
+    # Two arms, not one, and the second is the whole point. NVD reads "before
+    # 2.35.4 and 2.36.x before 2.36.2" -- a lone 2.35.4 floor clears 2.36.0 and
+    # 2.36.1, which are *vulnerable*, because they sort above it. That is the shape
+    # already used for CVE-2026-65594 above: same rule_id, one arm per fix line,
+    # the second bounded by `introduced` so 2.36.2+ clears and nothing below 2.36.0
+    # ever reaches it. Both fix versions are published on npm (latest 2.37.10).
+    _Pin("AAK-MCP-N8N-CVE-2026-72768-001", "n8n", ("n8n",), (2, 35, 4),
+         fix_label="2.35.4", regexes=(_N8N_RE,)),
+    _Pin("AAK-MCP-N8N-CVE-2026-72768-001", "n8n", ("n8n",), (2, 36, 2),
+         introduced=(2, 36, 0), fix_label="2.36.2", regexes=(_N8N_RE,)),
     # claude-code-templates (npm) < 1.29.4: the `--studio` option launches the Claude Code
     # Studio server (`cli-tool/src/sandbox-server.js`) bound to 0.0.0.0:3444 with CORS open
     # and no authentication. `POST /api/execute` (the `prompt` body field) and
@@ -520,8 +683,13 @@ _PINS: tuple[_Pin, ...] = (
     # marimo CVEs at `< 0.23.0` (GHSA-2679-6mx9-h9xc, pre-auth RCE) and `< 0.23.9`
     # (GHSA-8m59-7xv8-735h, reflected XSS), so "any marimo below 0.23.15 is exposed"
     # is a true statement about the package rather than an over-reach on this one CVE.
+    # ecosystem="py": npm carries an unrelated `marimo` test runner. The note at
+    # the top of this file called an old-npm-marimo hit "the accepted cost" of
+    # covering three real pip CVEs on the same name; scoping the pin to PyPI
+    # means there is no longer a cost to accept.
     _Pin("AAK-MCP-MARIMO-CVE-2026-75149-001", "marimo", ("marimo",),
-         (0, 23, 15), fix_label="0.23.15", regexes=(_MARIMO_RE,)),
+         (0, 23, 15), fix_label="0.23.15", regexes=(_MARIMO_RE,),
+         ecosystem="py"),
     # --- 2026-08-21 wave ---
     #
     # omnigent: PUT /sessions/{id}/agent checks LEVEL_EDIT on the session but does
@@ -529,8 +697,11 @@ _PINS: tuple[_Pin, ...] = (
     # an editor swaps the shared bundle, adds a stdio MCP server, and every later
     # session using that shared agent launches an attacker-chosen command.
     # GHSA-jrrm-9hc7-2v3h: pip `omnigent` < 0.3.0, patched 0.3.0.
+    # ecosystem="py": npm carries an unrelated `omnigent` agent platform whose
+    # only release is 2.0.0, well above this floor either way.
     _Pin("AAK-MCP-OMNIGENT-CVE-2026-62674-001", "omnigent", ("omnigent",),
-         (0, 3, 0), fix_label="0.3.0", regexes=(_OMNIGENT_RE,)),
+         (0, 3, 0), fix_label="0.3.0", regexes=(_OMNIGENT_RE,),
+         ecosystem="py"),
     # --- 2026-08-20 wave ---
     #
     # neo.mjs: command injection in the file-system MCP server (checkSyntax /
@@ -574,6 +745,168 @@ _PINS: tuple[_Pin, ...] = (
          ("sublinear-time-solver",), (1, 6, 0), fix_label="1.6.0"),
     _Pin("AAK-MCP-SUBLINEAR-CVE-2026-55609-001", "consciousness-explorer",
          ("consciousness-explorer",), (1, 1, 2), fix_label="1.1.2"),
+    # --- 2026-08-27..31 wave (deferred 2026-09-03, shipped 2026-09-04) ---
+    # Two pins closing nine watcher-filed issues. Both were held under
+    # `cve-deferred` with a dated target rather than shipped blind, and both were
+    # released by a registry lookup rather than by the clock.
+    #
+    # MCPHub: eight advisories against one product (CVE-2026-79743..79750), fixed
+    # across 0.12.13, 0.12.15, 1.0.29, 1.0.30, 1.0.31 and 1.0.32. One floor at the
+    # highest of those covers all eight, which is why this is one pin and not
+    # eight: reporting a single dependency eight times is noise, not coverage.
+    _Pin("AAK-MCP-MCPHUB-CVE-2026-79748-001", "@samanhappy/mcphub",
+         ("@samanhappy/mcphub",), (1, 0, 32), fix_label="1.0.32",
+         regexes=(_MCPHUB_RE,)),
+    _Pin("AAK-MCP-SEQTHINKING-CVE-2026-81845-001", "mcp-sequential-thinking",
+         ("mcp-sequential-thinking",), (0, 6, 0), fix_label="0.6.0",
+         regexes=(_SEQTHINKING_RE,)),
+    # --- 2026-09-04..07 wave (deferred 2026-09-06, shipped 2026-09-08) ---
+    # Seven watcher-filed issues close on these five pins plus the langflow floor
+    # raise above. Every one was held under `cve-deferred` on the reading that a
+    # bug inside a third-party server's own binary has no consumer-side signal --
+    # true of the *defect*, and false of the *dependency*, which is the thing this
+    # module pins. Registry lookups changed two of the five outcomes.
+    #
+    # ToolUniverse (PyPI `tooluniverse`) through 1.2.6: `python_code_executor`
+    # deny-lists attribute names while leaving the attribute-lookup builtins
+    # reachable, so a caller walks from a literal's class to its base and
+    # enumerates subclasses to reach `subprocess`; the HTTP and MCP servers bind
+    # every interface with debugging on and no authentication, so reaching the
+    # port is enough. 1.3.0 adds bearer-token auth, defaults the bind to loopback,
+    # and hardens the attribute checks. The *generic* deny-list-sandbox detector
+    # is a separate rule to design and is tracked on its own issue; this pin is
+    # the part that is true today for anyone who depends on the package.
+    _Pin("AAK-MCP-TOOLUNIVERSE-CVE-2026-81096-001", "tooluniverse", ("tooluniverse",),
+         (1, 3, 0), fix_label="1.3.0 (affected up to 1.2.6)",
+         regexes=(_TOOLUNIVERSE_RE,)),
+    # IBM ContextForge MCP Gateway (PyPI `mcp-contextforge-gateway`) <= 1.0.8.
+    # One floor, four CVEs, four issues: CVE-2026-18905 (DNS rebinding during tool
+    # invocation, <= 1.0.6), CVE-2026-18486 (improper jq filter validation leaking
+    # credentials, <= 1.0.7), CVE-2026-18489 (Translate utility exposing data to
+    # the wrong session, <= 1.0.8) and CVE-2026-77822 (DNS rebinding via the A2A
+    # invoke endpoint, <= 1.0.8).
+    #
+    # 1.0.9 came from IBM's own bulletin, and it had to: NVD carries no CPE range
+    # for CVE-2026-77822 at all, and the project's GitHub advisory list stops at a
+    # v1.0.8 patched-version. A floor inferred from either source alone would have
+    # shipped one release short and called four vulnerable installs patched.
+    _Pin("AAK-MCP-CONTEXTFORGE-CVE-2026-77822-001", "mcp-contextforge-gateway",
+         ("mcp-contextforge-gateway",), (1, 0, 9),
+         fix_label="1.0.9 (affected <= 1.0.8)"),
+    # Postgres MCP Pro (PyPI `postgres-mcp`) 0.3.0: restricted ("read-only") mode
+    # applies function-name validation to plain function calls but not to
+    # RangeFunction nodes, so `pg_read_file` reached through FROM-clause syntax
+    # reads arbitrary files despite the restriction.
+    #
+    # There is no fixed release. Upstream's newest tag is v0.3.0 (2025-05-16) and
+    # crystaldba/postgres-mcp#178 -- the security issue itself -- is still open, so
+    # every published version of this distribution is affected. The separate PyPI
+    # name `postgres-mcp-pro` (0.4.0-0.4.2) carries the product's marketing name
+    # and the same summary string but declares no repository and is not referenced
+    # by the upstream project, so it is deliberately NOT offered as the upgrade
+    # target: pointing users at an unverified same-named package is the failure
+    # mode this detector exists to catch, not one to commit.
+    #
+    # The floor is 0.4.0 rather than `None` (presence-only) for one reason: npm
+    # carries an unrelated `postgres-mcp` -- a type-safe multi-database MCP server
+    # on the 1.0.x line -- and a presence-only pin would flag every dependent of
+    # that project, permanently, for someone else's CVE. That is the MCPHub trap.
+    # A 0.4.0 floor separates the two by version line: every release of the
+    # vulnerable 0.x distribution fires, and the npm project's 1.0.x never does.
+    _Pin("AAK-MCP-POSTGRESMCP-CVE-2026-85620-001", "postgres-mcp", ("postgres-mcp",),
+         (0, 4, 0),
+         fix_label="no fixed release — upstream issue #178 is open and v0.3.0 is "
+                   "still the newest tag; stop treating restricted mode as a "
+                   "security boundary and use a least-privilege database role",
+         regexes=(_POSTGRES_MCP_RE,)),
+    # Amazon awslabs postgres-mcp-server (PyPI) before 1.1.7: the SQL validation
+    # component's disallowed-input list is incomplete, so crafted SQL reaching it
+    # through content an authenticated user interacts with writes beyond the
+    # read-only scope. Vendor fix is 1.1.7.
+    _Pin("AAK-MCP-AWSPOSTGRES-CVE-2026-85787-001", "awslabs.postgres-mcp-server",
+         ("awslabs.postgres-mcp-server",), (1, 1, 7), fix_label="1.1.7"),
+    # knowns (npm, knowns-dev) before 0.30.0: the MCP doc and memory tools take a
+    # filesystem path straight from tool arguments without confining it to the
+    # project directory, so traversal sequences read, create, overwrite and delete
+    # files anywhere the server process can reach. Fixed in v0.30.0.
+    #
+    # `introduced=(0, 1, 1)` is not a range statement -- every release before
+    # 0.30.0 is affected -- it resolves a name collision. PyPI carries an unrelated
+    # `knowns` whose only release is 0.1.0 ("Add your description here"), and npm's
+    # own history also starts at 0.1.0, so the two overlap at exactly one version.
+    # Bounding at 0.1.1 keeps the pin off the PyPI stub at the cost of npm's single
+    # 0.1.0 release -- the cheaper of the two errors, since 86 of the real
+    # project's 87 published versions still fire.
+    # CVE-2026-88938 (2026-09-10) reopened the same class on the `code.find` tool
+    # and is scoped "through 0.33.0" -- which is the newest published release
+    # (npm, 2026-09-05). There is no fixed version to pin to, so the floor drops to
+    # None and the pin becomes presence-only. That is the permanent state until
+    # upstream ships a fix, the same as `postgres-mcp` and `mcp-florence2` above.
+    # The 0.1.1 `introduced` bound still matters and is still honoured -- see the
+    # ordering note in `_fires`.
+    _Pin("AAK-MCP-KNOWNS-CVE-2026-86439-001", "knowns", ("knowns",), None,
+         introduced=(0, 1, 1), fix_label="no fixed release (0.33.0 is newest and affected)",
+         regexes=(_KNOWNS_RE,)),
+    # --- 2026-09-10..11 wave ---
+    # AWS Security Agent MCP server (PyPI) before 0.2.0 writes scan output to an S3
+    # bucket it never verifies the ownership of, and the bucket name derives from a
+    # publicly known account id. Vendor fix is 0.2.0; latest is 0.2.1.
+    _Pin("AAK-MCP-AWSSECAGENT-CVE-2026-87913-001", "awslabs.security-agent-mcp-server",
+         ("awslabs.security-agent-mcp-server",), (0, 2, 0), fix_label="0.2.0"),
+    # --- 2026-09-15..16 wave (dispositioned 2026-09-19) ---
+    #
+    # mysql-mcp-server (PyPI) < 0.4.2: with MCP_TRANSPORT=sse, server.py builds
+    # SseServerTransport with neither security_settings nor
+    # enable_dns_rebinding_protection, the Starlette routes /, /sse and
+    # /messages/ carry no authentication, and the service binds 0.0.0.0 by
+    # default. execute_sql is then reachable directly from the network, or via
+    # DNS rebinding through a victim's browser. With FILE privileges on the
+    # MySQL account the same access reads and writes server files. The default
+    # stdio transport is unaffected (CVE-2026-59971, CVSS 10.0).
+    _Pin("AAK-MCP-MYSQLMCP-CVE-2026-59971-001", "mysql-mcp-server",
+         ("mysql-mcp-server", "mysql_mcp_server"), (0, 4, 2), fix_label="0.4.2",
+         ecosystem="py"),
+    # praisonai (npm) < 1.7.2 -- the TypeScript framework, NOT the 4.6.x PyPI
+    # package of the same name pinned above. MCPServer.startHttp() in
+    # src/praisonai-ts/src/mcp/server.ts binds with no host restriction and
+    # forwards every POST to handleRequest() with no authentication, so any
+    # network client reaches tools/call, resources/read and prompts/get with
+    # server-side credentials (CVE-2026-57139, CVSS 9.8). NVD gives the range as
+    # 1.5.0 until 1.7.2 and calls 1.7.2 an initial remediation, so the floor is
+    # 1.7.2 and not a later release.
+    _Pin("AAK-MCP-PRAISONAI-TS-CVE-2026-57139-001", "praisonai (npm, TypeScript)",
+         ("praisonai",), (1, 7, 2), fix_label="1.7.2", ecosystem="js"),
+    # @zereight/mcp-gitlab: three CVEs, one pin at the highest floor. 2.1.27
+    # fixes CVE-2026-61560 (SSE=true exposes every tool unauthenticated, and
+    # upload_markdown reads any local file via an unsanitised file_path, so
+    # /proc/self/environ yields GITLAB_PERSONAL_ACCESS_TOKEN -- the default for
+    # Docker deployments) and CVE-2026-61559 (ENABLE_DYNAMIC_API_URL=true makes
+    # the server trust the X-GitLab-API-URL request header as the outbound base
+    # URL with no allowlist, attaching the victim's Private-Token to a request
+    # aimed at an attacker's host). 2.1.30 fixes CVE-2026-61568 (Streamable HTTP
+    # with no effective Host/Origin allowlist, so DNS rebinding reaches the MCP
+    # init path). 2.1.30 is the higher, and a second pin on the same name would
+    # report one dependency twice.
+    _Pin("AAK-MCP-GITLAB-ZEREIGHT-CVE-2026-61560-001", "@zereight/mcp-gitlab",
+         ("@zereight/mcp-gitlab",), (2, 1, 30), fix_label="2.1.30",
+         ecosystem="js"),
+    # flowise (npm) < 3.1.4: two authenticated-RCE paths through the Custom MCP
+    # node, both fixed in the same release. CVE-2026-91931 takes npx package
+    # names from mcpServerConfig and invokes npx on attacker-chosen npm
+    # packages; CVE-2026-91932 bypasses the path validation with a clean
+    # filename in args while controlling cwd. One floor, two CVEs.
+    _Pin("AAK-MCP-FLOWISE-CVE-2026-91931-001", "flowise", ("flowise",),
+         (3, 1, 4), fix_label="3.1.4", ecosystem="js"),
+    # mcp-from-openapi (npm) < 2.5.0: the same external-$ref SSRF as
+    # CVE-2026-59973's frontmcp half, but on its own 2.x version line, so the
+    # frontmcp pin's 1.5.7 floor cannot express it. loadOpenAPISpec() forwards
+    # untrusted url/spec and refResolution into OpenAPIToolGenerator, whose
+    # guard compares hostname strings without resolving addresses, pinning the
+    # validated address, revalidating redirect targets, or normalising
+    # IPv4-mapped IPv6 -- so DNS-to-loopback, redirect-to-loopback and ::ffff:
+    # forms all reach internal services from the backend origin.
+    _Pin("AAK-MCP-FROMOPENAPI-CVE-2026-59973-001", "mcp-from-openapi",
+         ("mcp-from-openapi",), (2, 5, 0), fix_label="2.5.0", ecosystem="js"),
 )
 
 _CANDIDATE_NAMES = (
@@ -585,16 +918,56 @@ _CANDIDATE_GLOBS = ("requirements*.txt", "*.mcp.yaml", "*.mcp.yml")
 _MAX_FILE_BYTES = 2_000_000
 
 
+# Manifests whose registry is unambiguous from the filename alone. Anything not
+# listed here -- .mcp.json, claude_desktop_config.json, *.mcp.yaml -- can name a
+# package from either registry (`npx -y @scope/x` next to `uvx y`), so it stays
+# unclassified and every pin is still tried against it.
+_PY_MANIFESTS = frozenset({
+    "pyproject.toml", "pipfile", "pipfile.lock", "poetry.lock", "uv.lock",
+})
+_JS_MANIFESTS = frozenset({
+    "package.json", "package-lock.json", "pnpm-lock.yaml", "yarn.lock",
+})
+
+
+def _ecosystem_of(path: Path) -> str | None:
+    """Return "py" / "js" for a registry-specific manifest, else None."""
+    name = path.name.lower()
+    if name in _PY_MANIFESTS:
+        return "py"
+    if name in _JS_MANIFESTS:
+        return "js"
+    if name.startswith("requirements") and name.endswith(".txt"):
+        return "py"
+    return None
+
+
+def _pin_applies(pin: _Pin, file_ecosystem: str | None) -> bool:
+    """False only when the file's registry is known AND the pin names another."""
+    if pin.ecosystem is None or file_ecosystem is None:
+        return True
+    return pin.ecosystem == file_ecosystem
+
+
 def _fires(pin: _Pin, version: _Ver | None) -> bool:
+    # `introduced` is checked FIRST, before the presence-only shortcut. It used to
+    # sit last, which was unreachable for a presence-only pin (`floor is None`
+    # returned True immediately) -- harmless only for as long as no presence-only
+    # pin carried an `introduced` bound. `knowns` is the first that does: it is
+    # presence-only because CVE-2026-88938 has no fixed release, and it needs the
+    # 0.1.1 bound to stay off the unrelated PyPI `knowns` stub whose only release
+    # is 0.1.0. Without this ordering that false positive comes straight back.
+    #
+    # No behaviour changes for the pins that have a floor: `introduced` is always
+    # below `floor`, so a version at or above the floor is also at or above
+    # `introduced`, and the early return yields what the old order did.
+    if version is not None and pin.introduced is not None and version < pin.introduced:
+        return False
     if pin.floor is None:
         return True
     if version is None:
         return True
-    if version >= pin.floor:
-        return False
-    if pin.introduced is not None and version < pin.introduced:
-        return False
-    return True
+    return version < pin.floor
 
 
 def _candidate_files(project_root: Path) -> list[Path]:
@@ -633,9 +1006,16 @@ def scan(project_root: Path) -> tuple[list[Finding], set[str]]:
         except OSError:
             continue
         rel = str(path.relative_to(project_root))
+        # Every candidate file that was opened and read counts as scanned, not
+        # only the ones that produced a finding. `engine.run_scan` reports
+        # `len(all_scanned_files)` as files_scanned, so gating this on a match
+        # under-reported the denominator and made a clean repo look unscanned.
+        scanned.add(rel)
         is_lockfile = path.name.lower() in _LOCKFILES
-        matched_here = False
+        file_ecosystem = _ecosystem_of(path)
         for pin in _PINS:
+            if not _pin_applies(pin, file_ecosystem):
+                continue
             if is_lockfile:
                 # Resolve the actual locked version; fire ONLY when it is below
                 # the fix floor. Absent / unparseable → no finding, so a correct
@@ -649,7 +1029,6 @@ def scan(project_root: Path) -> tuple[list[Finding], set[str]]:
                         f"{pin.display} resolves to {shown} in {path.name} — fixed "
                         f"in {pin.fix_label}; upgrade and re-lock.",
                     ))
-                    matched_here = True
                 continue
             for rx in pin.compiled():
                 m = rx.search(text)
@@ -665,9 +1044,6 @@ def scan(project_root: Path) -> tuple[list[Finding], set[str]]:
                         f"{pin.display} referenced at {shown} — fixed in "
                         f"{pin.fix_label}; pin the patched release.",
                     ))
-                    matched_here = True
                 break  # one finding per pin per file
-        if matched_here:
-            scanned.add(rel)
 
     return findings, scanned

@@ -39,24 +39,39 @@ RULE_COUNT and the canonical framework count — both read from code, never
 laundered from the README's own claim:
 
 ```bash
-RULES=$(python3 -c "from agent_audit_kit import RULE_COUNT; print(RULE_COUNT)")
-# Two distinct framework surfaces — do not confuse them:
-#   12 = `report --framework` PDF/text evidence packs
-#        (agent_audit_kit.output.pdf_report._FRAMEWORK_TITLES). This is the
-#        "N compliance frameworks" number the description should carry, and it
-#        is fenced against README/CLAUDE/docs prose in test_rule_count_sync.py.
-#    8 = agent_audit_kit.output.compliance.FRAMEWORKS — the smaller,
-#        control-mapped table behind `scan --compliance`. Do NOT use it here.
-FRAMEWORKS=$(python3 -c "from agent_audit_kit.output.pdf_report import _FRAMEWORK_TITLES; print(len(_FRAMEWORK_TITLES))")
+# Use the renderer. Do NOT retype the sentence: `scripts/render_repo_metadata.py`
+# is the single source the `description-liveness` job compares against, and the
+# hand-written command that used to live here drifted from it by one character
+# (an em-dash where the template has a full stop). Following the documented step
+# then produced a description that failed the guard -- observed at v0.4.0.
 gh repo edit sattyamjjain/agent-audit-kit \
-  --description "Static scanner for MCP-connected AI agent pipelines — ${RULES} rules across 14 categories, ${FRAMEWORKS} compliance frameworks, OWASP Agentic 10/10 + MCP 10/10, GitHub Action, SARIF, public CVE-to-rule ledger."
+  --description "$(PYTHONPATH=. python scripts/render_repo_metadata.py)"
+
+# Verify with the same comparison the job runs, rather than by eye:
+PYTHONPATH=. python scripts/render_repo_metadata.py --check-live sattyamjjain/agent-audit-kit
 ```
 
 This drift was observed at v0.3.15 ship time: the description still
-read "77 rules, 13 scanners" when the live RULE_COUNT was 193. Closing
-it requires either this manual step on every release or wiring it
-into `release.yml` as a post-publish job. Manual is acceptable until
-v0.4.0; wire it then.
+read "77 rules, 13 scanners" when the live RULE_COUNT was 193.
+
+**Wired at v0.6.1.** The commands above are now the fallback, not the
+procedure. `release.yml`'s final job renders the line and, when a
+`REPO_ADMIN_TOKEN` secret is present, sets it with `gh repo edit` and verifies
+the result with the same `--check-live` comparison the liveness job runs. With
+no such secret the job prints the line to the step summary and the release still
+succeeds, so a missing secret degrades to the old behaviour rather than breaking
+a tag.
+
+`REPO_ADMIN_TOKEN` is a fine-grained PAT with **Administration: write** on this
+repository. The default `GITHUB_TOKEN` cannot set a repo description, which is
+the whole reason this was manual.
+
+This paragraph previously read "Manual is acceptable until v0.4.0; wire it
+then." It stayed manual through v0.4.0, v0.5.0 and v0.5.1, and on 2026-09-12 the
+description was set by hand three times in one day. A deadline a file sets for
+itself and then passes without comment is the same class of defect as the stale
+counts the sync scripts exist to prevent, so it is recorded here rather than
+quietly deleted.
 
 **v0.3.16 self-bug:** the original `len(FRAMEWORKS)` form shipped here
 on 2026-05-09 returned 6 (dict size), not 12 (README claim). Fixed
@@ -74,12 +89,57 @@ correct number. Future releases use the README-grep form.
 
 ## 5. CVE-gate hygiene
 
-Before tagging, close every open `cve-response` issue (the `sla-48h`
+Before tagging, **disposition** every open `cve-response` issue (the `sla-48h`
 label was retired with the 48h SLA in PR #432). The release workflow's
-**CVE-response gate** blocks the tag-push pipeline until they are all
-closed. Most are class-coverage dups of an earlier batch — close with the
-standard citation template (`CHANGELOG.cves.md` / class-detector path).
-Net-new shapes get a v(N+1) deferral comment with the rule-name pre-allocated.
+**CVE-response gate** blocks the tag-push pipeline on anything untriaged. Each
+issue ends in exactly one of:
 
-The cve-watcher dedup bug (issue #163) re-fires closed CVE IDs across
-daily cycles. Fix queued for v0.3.17.
+| Disposition | Action |
+|---|---|
+| rule shipped | close (`completed`), citing the rule and the `CHANGELOG.cves.md` row |
+| out of scope / unreachable | close (`not planned`) with the one-line reason, label `wontfix-static` |
+| in scope, rule queued | **stays open**, label `cve-deferred`, dated disposition comment |
+
+A disposition comment carries three fields and nothing else, so the queue can be
+read by a person and by a script:
+
+```
+disposition:  NEW-RULE | DEFERRED | OUT-OF-SCOPE
+target date:  YYYY-MM-DD    (required for DEFERRED, omitted otherwise)
+reason:       one sentence
+```
+
+`cve-deferred` does not block the gate. That exemption was added on 2026-09-01
+and it is not a loophole — it is the difference between "has this disclosure
+been looked at?" and "is the queue empty?". Those were the same question while
+every triage ended in a close, and they came apart when the watcher's 6-hour
+cron outran the triage rate: 27 issues open, so `count == 0` was a state the
+repo could not reach on purpose, and v0.3.91 sat declared-but-unpublished for a
+day. Untriaged issues still block exactly as before.
+
+The rule for using it honestly: label `cve-deferred` only when the issue has a
+disposition comment naming what is queued and why. A label without that comment
+turns the gate off rather than satisfying it.
+
+**And it has to say when.** That obligation used to be prose, checked by nobody.
+The 2026-08-31 wave honoured it — all ten of those deferrals carry a
+`**Target: YYYY-MM-DD.**` line — which is precisely why it took until 2026-09-04
+to notice that nothing enforced it. A deferral with no date is not a deferral;
+it is a silent drop wearing the one label that switches the gate off.
+`scripts/check_cve_deferrals.py` now runs inside the CVE-response gate and
+refuses the tag when a `cve-deferred` issue names no `target date:`. It accepts
+the older `**Target: …**` spelling too, because the obligation is *say when*,
+not *say when in the approved punctuation*.
+
+A target date in the **past** is listed on every run and fails nothing. Making it
+fatal was the obvious next step and is a trap: it would turn every scheduling
+note in the tree into a time bomb that detonates on an unrelated release, some
+morning nobody chose. Visibility at the moment somebody is already looking at the
+queue is the useful half; holding a tag hostage to a date typed a month ago is
+not.
+
+The cve-watcher dedup bug (issue #163) re-fired closed CVE IDs across
+daily cycles. **Fixed in v0.3.20** — `scripts/cve_watcher.py` now queries
+`state=all` so a closed issue still suppresses a re-file. This line read
+"Fix queued for v0.3.17" until 2026-09-12, three patch releases after the fix
+had actually shipped.

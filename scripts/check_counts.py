@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
-"""Repo-wide guard: no stale current-state count in any tracked ``*.md``.
+"""Repo-wide guard: no stale current-state count in any tracked ``*.md``,
+plus the non-markdown surfaces listed in ``EXTRA_TRACKED_FILES``.
 
 The `<!-- rule-count:total -->` / `<!-- scanner-count:total -->` markers and the
 `test_no_stale_hardcoded_counts_in_prose` fence only covered README / CLAUDE /
@@ -69,6 +70,13 @@ PATTERNS: tuple[tuple[re.Pattern[str], str], ...] = (
     (re.compile(r"\b(\d+)\s+deterministic rules\b", re.I), "rules"),
     (re.compile(r"\brule\s*\((\d+)\s+total\b", re.I), "rules"),
     (re.compile(r"\b(\d+)\s+rules across (\d+)\s+scanners?\b", re.I), "rules+scanners"),
+    # "N rules across M categories" -- the sibling of the line above, and the
+    # phrasing `funding.json` uses. The categories pattern below already caught
+    # the M; nothing caught the N, so funding.json sat at 332 rules against a
+    # live 348 while every guard reported clean. Two numbers in one sentence,
+    # one of them guarded, is the same blind spot as an unguarded phrasing.
+    (re.compile(r"\b(\d+)\s+rules across (\d+)\s+(?:security\s+)?categor(?:y|ies)\b", re.I),
+     "rules+categories"),
     (re.compile(r"\b(\d+)\s+detection rules\b", re.I), "rules"),
     (re.compile(r"with (\d+) rules\b", re.I), "rules"),
     # "understand the N existing rules" (CLAUDE_PROMPT.md) — the phrasing that
@@ -101,6 +109,17 @@ PATTERNS: tuple[tuple[re.Pattern[str], str], ...] = (
     # "9 of 11 security categories" in a case study -- three statements about
     # different things that a guard would have "fixed" into being false.
     (re.compile(r"rules\*{0,2}\s+across\s+(\d+)\s+(?:security\s+)?categor(?:y|ies)", re.I), "categories"),
+    # "`Category` (12 members)" in CLAUDE.md's Code Conventions block -- the
+    # fourth instance of the phrase blind spot, after "N existing rules",
+    # "N registered scanners" and the category count itself. The pattern above
+    # is anchored on the headline "rules ... across N categories" form, so it
+    # never looked at this one, and the corroboration sweep does not either --
+    # that sweep reads README.md and docs/**, and this claim lives in CLAUDE.md.
+    # The result was one file asserting "330 rules across 14 security
+    # categories" on line 8 and "Category (12 members)" on line 137 while
+    # count-check reported clean. Anchored on the backticked symbol so it only
+    # ever matches a claim about the enum itself, never a prose category count.
+    (re.compile(r"`Category`\s*\((\d+)\s+members?\)", re.I), "categories"),
     # "(97 .py files on disk - the registry is authoritative)" in CLAUDE.md. This
     # phrasing was unguarded and had drifted to 97 while the directory held 96 --
     # a count wrong in the one file that tells the next reader the counts are
@@ -133,6 +152,23 @@ def canonical_counts() -> dict[str, int]:
             if not p.stem.startswith("_")
         ]),
     }
+
+
+# Tracked non-markdown surfaces that state a current-state count in prose.
+#
+# The guard was scoped to `*.md` because that is where prose lives. `funding.json`
+# is the exception that proves the scoping wrong: its `description` is a
+# paragraph of marketing prose inside a JSON string, it is published to
+# FLOSS/fund via `.well-known/funding-manifest-urls`, and on 2026-09-12 it still
+# claimed "332 rules" and "12 compliance frameworks" against a live 348 and 14.
+# It had drifted by 16 rules and two frameworks with every guard reporting clean,
+# because no guard could see it.
+#
+# The fix is the one this repository keeps arriving at: when a surface rots
+# because nothing looked at it, make something look.
+EXTRA_TRACKED_FILES: tuple[str, ...] = (
+    "funding.json",
+)
 
 
 def _tracked_markdown() -> list[str]:
@@ -172,7 +208,7 @@ def find_stale_counts() -> list[str]:
     changelog / historical exclusions."""
     counts = canonical_counts()
     failures: list[str] = []
-    for rel in _tracked_markdown():
+    for rel in [*_tracked_markdown(), *EXTRA_TRACKED_FILES]:
         if is_excluded(rel):
             continue
         path = REPO_ROOT / rel
@@ -388,11 +424,103 @@ def find_manifest_arithmetic_faults() -> list[str]:
     return failures
 
 
+# ---------------------------------------------------------------------------
+# Table-cell scan
+#
+# `find_stale_counts` matches PHRASES and the corroboration sweep reads prose.
+# Neither can see a number that sits ALONE in a markdown table cell, because
+# there is no phrase around it: the row label is in one cell and the number is
+# in another. `docs/comparisons.md` stated `| Compliance frameworks | 12 | ...`
+# against a live 14, and `make count-check` reported clean for as long as it
+# was wrong -- the same blind spot the module docstring describes, arriving
+# through a shape rather than through a phrasing.
+#
+# So this reads the shape instead: for a row whose FIRST cell names a governed
+# count, check the agent-audit-kit column against the registry. The AAK column
+# is located from the table's own header rather than assumed, because the two
+# tables in comparisons.md put it in different positions (column 1 in "At a
+# glance", column 2 in the feature matrix).
+# ---------------------------------------------------------------------------
+
+# Row label -> key in canonical_counts(). Only the labels already governed.
+_ROW_LABEL_KEYS: tuple[tuple[re.Pattern[str], str], ...] = (
+    (re.compile(r"^\**\s*rules?\s*\**$", re.I), "rules"),
+    (re.compile(r"^\**\s*rule count\s*\**$", re.I), "rules"),
+    (re.compile(r"^\**\s*scanners?\s*\**$", re.I), "scanners"),
+    (re.compile(r"^\**\s*scanner modules?\s*\**$", re.I), "scanners"),
+    (re.compile(r"^\**\s*CLI commands?\s*\**$", re.I), "commands"),
+    (re.compile(r"^\**\s*compliance frameworks?\s*\**$", re.I), "frameworks"),
+    (re.compile(r"^\**\s*frameworks?\s*\**$", re.I), "frameworks"),
+    (re.compile(r"^\**\s*agent platforms?\s*\**$", re.I), "platforms"),
+    (re.compile(r"^\**\s*platforms?\s*\**$", re.I), "platforms"),
+    (re.compile(r"^\**\s*categor(?:y|ies)\s*\**$", re.I), "categories"),
+    (re.compile(r"^\**\s*security categor(?:y|ies)\s*\**$", re.I), "categories"),
+)
+
+# Header cells that identify this project's column.
+_SELF_COLUMN_RE = re.compile(r"^\**\s*agent-?audit-?kit\s*\**$", re.I)
+
+_BARE_NUMBER_RE = re.compile(r"^\**\s*(\d[\d,]*)\s*\**$")
+
+
+def _split_row(line: str) -> list[str] | None:
+    """Cells of a markdown table row, or None if the line is not one."""
+    stripped = line.strip()
+    if not stripped.startswith("|"):
+        return None
+    if set(stripped) <= set("|-: "):        # the header separator row
+        return None
+    return [c.strip() for c in stripped.strip("|").split("|")]
+
+
+def find_table_cell_faults() -> list[str]:
+    """Governed counts sitting alone in a table cell, checked against the registry."""
+    counts = canonical_counts()
+    failures: list[str] = []
+    for rel in _tracked_markdown():
+        if is_excluded(rel):
+            continue
+        path = REPO_ROOT / rel
+        if not path.is_file() or has_historical_banner(path):
+            continue
+        self_col: int | None = None
+        for lineno, line in enumerate(path.read_text(encoding="utf-8").splitlines(), start=1):
+            cells = _split_row(line)
+            if cells is None:
+                if line.strip() == "":
+                    self_col = None          # a blank line ends a table
+                continue
+            # Header row: locate this project's column for the rows that follow.
+            found = next((i for i, c in enumerate(cells) if _SELF_COLUMN_RE.match(c)), None)
+            if found is not None:
+                self_col = found
+                continue
+            if self_col is None or self_col >= len(cells):
+                continue
+            key = next((k for pat, k in _ROW_LABEL_KEYS if pat.match(cells[0])), None)
+            if key is None:
+                continue
+            cell = cells[self_col]
+            if _MARKER_RE.search(cell):      # written by the generator; not ours to re-check
+                continue
+            m = _BARE_NUMBER_RE.match(cell)
+            if m is None:                    # prose, a range, "N/A" -- not a bare count
+                continue
+            claimed = int(m.group(1).replace(",", ""))
+            if claimed != counts[key]:
+                failures.append(
+                    f"{rel}:{lineno}: table row {cells[0]!r} claims {claimed} "
+                    f"{key} in the agent-audit-kit column; canonical is {counts[key]}"
+                )
+    return failures
+
+
 def main() -> int:
     failures = (
         find_stale_counts()
         + find_uncorroborated_counts()
         + find_manifest_arithmetic_faults()
+        + find_table_cell_faults()
     )
     if failures:
         sys.stderr.write(

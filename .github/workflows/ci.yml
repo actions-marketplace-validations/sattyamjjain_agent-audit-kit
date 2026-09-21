@@ -38,6 +38,16 @@ jobs:
         run: mypy agent_audit_kit/ --ignore-missing-imports
 
       - name: Run tests
+        # GH_TOKEN so the cve-deferred gate tests in
+        # tests/test_cve_watcher_backpressure.py can actually read the tracker.
+        # Without it they skip, and a check that only runs where somebody
+        # remembered to export a token protects nothing -- which is the same
+        # mistake as writing the rule in prose in RELEASING.md and calling it
+        # enforced. They skip (never fail) when the API is unreachable, so an
+        # outage or a fork with no issue access degrades to "not checked"
+        # rather than to a red build.
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: pytest -v --tb=short
 
       - name: Self-scan (verify CLI works)
@@ -79,6 +89,15 @@ jobs:
       # generated docs but never looks at free prose.
       - name: Counts (prose + generated surfaces)
         run: make count-check
+
+      # The marker test can only see numbers that already carry a marker, so an
+      # unmarked second copy is invisible to it. That is not theoretical: four
+      # published sites stated 421/18.3% while results.json said 424/18.4% and
+      # the marker test was green throughout. This guard is the one that sees
+      # them. Here rather than in the matrix for the same reason as count-check:
+      # a named step says what broke.
+      - name: Report figures are marker-driven, not hand-typed
+        run: make report-figures-check
 
       # The scanner constant must equal the real registry size, not the number of
       # files in scanners/. Cheap, and it is the invariant that decoupled once.

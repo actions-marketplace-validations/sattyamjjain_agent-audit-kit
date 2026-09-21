@@ -608,8 +608,15 @@ def test_langflow_in_affected_range_fires(tmp_path: Path) -> None:
 
 
 def test_langflow_patched_passes(tmp_path: Path) -> None:
+    # Floor moved 1.11.0 -> 1.11.3 on 2026-09-08 for CVE-2026-9186 (affects
+    # 1.0.0-1.11.2), then 1.11.3 -> 1.11.6 on 2026-09-12 for CVE-2026-85025,
+    # CVE-2026-78575 and CVE-2026-81941 (all scoped 1.0.0-1.11.5). The version in
+    # this assertion moves each time rather than the test being deleted, because
+    # "the patched release does not fire" is still the property worth holding.
+    # The versions the old floors called patched are asserted to fire in
+    # tests/test_cve_deferral_queue_2026_09_08.py.
     assert "AAK-MCP-LANGFLOW-CVE-2026-12940-001" not in _ids(
-        tmp_path, "requirements.txt", "langflow==1.11.0\n"
+        tmp_path, "requirements.txt", "langflow==1.11.6\n"
     )
 
 
@@ -734,9 +741,20 @@ def test_metaads_below_floor_fires(tmp_path: Path) -> None:
 
 
 def test_metaads_patched_passes(tmp_path: Path) -> None:
+    # Floor moved 1.0.109 -> 1.0.115 on 2026-09-19 for CVE-2026-54549
+    # (upload_ad_image SSRF). 1.0.109 is no longer patched.
     assert "AAK-METAADS-CVE-2026-48039-001" not in _ids(
-        tmp_path, "requirements.txt", "meta-ads-mcp==1.0.109\n"
+        tmp_path, "requirements.txt", "meta-ads-mcp==1.0.115\n"
     )
+
+
+def test_metaads_gap_between_the_old_and_new_floor_now_fires(tmp_path: Path) -> None:
+    """1.0.109 satisfied the old floor and was still vulnerable to
+    CVE-2026-54549. This is the interval a cve_references line cannot cover."""
+    for version in ("1.0.109", "1.0.114"):
+        assert "AAK-METAADS-CVE-2026-48039-001" in _ids(
+            tmp_path, "requirements.txt", f"meta-ads-mcp=={version}\n"
+        ), version
 
 
 # --- CVE-2026-19337: @adenot/mcp-google-search SSRF (presence-only, no fix yet) ---
@@ -809,13 +827,20 @@ def test_n8n_72768_below_floor_fires(tmp_path: Path) -> None:
 
 
 def test_n8n_72768_patched_passes(tmp_path: Path) -> None:
-    """2.34.1, not 2.32.1.
+    """2.35.4, not 2.34.1, and not 2.32.1.
 
-    CVE-2026-77068 and CVE-2026-77073 moved this floor up. 2.32.1 fixed the SSRF
-    bypass alone and is still exposed to the node-schema loader RCE, so it belongs
-    in the positive case below rather than here.
+    This floor has moved twice. CVE-2026-77068 / CVE-2026-77073 took it to 2.34.1;
+    CVE-2026-85166 took it to 2.35.4. Every earlier "fixed" version is now a
+    positive case, which is the point of keeping them below rather than deleting
+    them: a project that upgraded once and stopped is the population this pin is
+    for.
     """
-    assert _N8N_72768 not in _ids(tmp_path, "package.json", '{"dependencies": {"n8n": "2.34.1"}}')
+    assert _N8N_72768 not in _ids(tmp_path, "package.json", '{"dependencies": {"n8n": "2.35.4"}}')
+
+
+def test_n8n_72768_prior_floor_is_now_exposed(tmp_path: Path) -> None:
+    """2.34.1 cleared this pin until 2026-09-04 and no longer does."""
+    assert _N8N_72768 in _ids(tmp_path, "package.json", '{"dependencies": {"n8n": "2.34.1"}}')
 
 
 def test_n8n_72768_old_fix_version_is_still_exposed(tmp_path: Path) -> None:

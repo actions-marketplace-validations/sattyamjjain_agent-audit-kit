@@ -1,16 +1,16 @@
 # Distribution Checklist — State of MCP Security 2026
 
 Manual launch checklist + **ready-to-post copy** for the data report
-([`research/state-of-mcp-2026/REPORT.md`](../research/state-of-mcp-2026/REPORT.md),
+([`research/state-of-mcp-2026/REPORT.md`](https://sattyamjjain.github.io/agent-audit-kit/docs/research/state-of-mcp-2026/REPORT/),
 with score-calibration detail in
-[`PREVALENCE.md`](../research/state-of-mcp-2026/PREVALENCE.md)).
+[`PREVALENCE.md`](https://sattyamjjain.github.io/agent-audit-kit/docs/research/state-of-mcp-2026/PREVALENCE/)).
 **Nothing here auto-posts.** Copy, sanity-check the links, post one surface at a
 time, reply to comments.
 
 **Canonical numbers (from `results.json` — do not round):**
-2,303 distinct configs · 52.8% (1,215) with a critical finding · median grade B
+2,303 distinct configs · 52.7% (1,213) with a critical finding · median grade B
 (top 10% A) · top misconfig = remote server with **no authentication**
-(`AAK-MCP-001`, critical, 52.2%) · 52.2% (1,203) no-auth remote · 19.5% (450)
+(`AAK-MCP-001`, critical, 52.1%) · 52.1% (1,201) no-auth remote · 19.5% (450)
 `npx`/`uvx` fetch-and-execute · 99.8% trip OWASP MCP07 (authorization).
 Static, offline, deterministic.
 
@@ -28,12 +28,12 @@ Show HN: I scanned 2,303 public MCP server configs — 52% expose a remote serve
 **First comment (post immediately, as author):**
 ```
 I run an open-source static scanner for MCP/agent configs (agent-audit-kit,
-MIT). I took 2,303 distinct public MCP configs — a GitHub crawl plus the official
+Apache-2.0). I took 2,303 distinct public MCP configs — a GitHub crawl plus the official
 MCP Registry's latest-version servers — and scanned each one offline and
 deterministically: no cloud, no LLM, same input gives the same result.
 
-Headline: 52.2% (1,203 of 2,303) declare a remote server with no authentication —
-that's the single most common finding, and it's critical-severity. 52.8% carry at
+Headline: 52.1% (1,201 of 2,303) declare a remote server with no authentication —
+that's the single most common finding, and it's critical-severity. 52.7% carry at
 least one critical finding overall; the median config still grades a B. It lines
 up with Knostic's separate finding that 119 of 119 exposed servers they probed
 allowed unauthenticated tool-listing. The next most common issue is more boring
@@ -71,8 +71,8 @@ distinct public MCP configs — a GitHub crawl plus the official MCP Registry's
 latest-version servers — with an offline, deterministic static analyzer and
 aggregated the results.
 
-Headline: 52.2% (1,203 of 2,303) declare a remote server with no authentication
-(critical severity, the single most common finding); 52.8% carry at least one
+Headline: 52.1% (1,201 of 2,303) declare a remote server with no authentication
+(critical severity, the single most common finding); 52.7% carry at least one
 critical finding; median grade B. Mapped to the OWASP MCP Top 10, 99.8% trip
 MCP07 (authorization / excessive permissions). Other common issues: npx/uvx
 fetch-and-execute at launch (19.5%), secret inlined in the config env block
@@ -80,7 +80,7 @@ fetch-and-execute at launch (19.5%), secret inlined in the config env block
 
 Method and raw aggregate (results.json) are committed; there's an exact
 reproduce command (`make report`, offline + byte-deterministic). The scanner is
-open source (agent-audit-kit, MIT); I've kept the caveats in the report (sample
+open source (agent-audit-kit, Apache-2.0); I've kept the caveats in the report (sample
 skew, static over/under-count, inferred-from-config auth posture, N=2,303 is a
 sample).
 
@@ -103,7 +103,7 @@ Sharing real-world prevalence data that may be useful evidence for the MCP Top
 10. I statically scanned 2,303 distinct public MCP server configs (offline,
 deterministic; method + raw results committed and reproducible). Mapped to the
 current list: 99.8% of configs trip MCP07 (authorization/excessive perms), and
-52.2% declare a remote server with no authentication (critical, the single most
+52.1% declare a remote server with no authentication (critical, the single most
 common finding) — which corroborates Knostic's 119-of-119 unauthenticated-tool-
 listing finding from the deployment side. 19.5% trip the supply-chain/untrusted-
 execution risk (npx/uvx unpinned launch). Happy to contribute the dataset or a

@@ -55,6 +55,17 @@ _README_CATEGORY_ANCHOR_RE = re.compile(
     r"(<!--\s*category-count:([A-Z0-9_]+)\s*-->)(.*?)(<!--\s*/category-count\s*-->)",
     re.DOTALL,
 )
+# Compliance-framework total. Added after docs/comparisons.md was found stating
+# 12 against a live 14: the number sat alone in a markdown table cell, so the
+# phrase pattern `N compliance frameworks` in check_counts.py could not see it
+# and `make count-check` reported clean for as long as it was wrong. Same anchor
+# mechanism as the rule total, for the same reason -- a literal a human retypes
+# is a literal that eventually disagrees with the registry.
+_FRAMEWORK_ANCHOR_RE = re.compile(
+    r"(<!--\s*framework-count:total\s*-->)(.*?)(<!--\s*/framework-count\s*-->)",
+    re.DOTALL,
+)
+
 _INIT_CONSTANT_RE = re.compile(
     r"^(RULE_COUNT\s*[:=]\s*)\d+(.*)$",
     re.MULTILINE,
@@ -99,7 +110,29 @@ def report_headline_numbers() -> dict[str, str]:
         # 1,215 -- the same drift as the no-auth figure, one metric over.
         "critical-pct": f"{data['configs_with_critical_pct']:g}",
         "critical-n": _n(data["configs_with_critical"]),
+        # PREVALENCE.md's top-10 row 3 and REPORT.md's OAuth table state the same
+        # AAK-OAUTH-008 figure in opposite orders, and they disagreed: 421 / 18.3%
+        # against 424 / 18.4%, inside sibling files. Sourced from
+        # top_misconfigurations so the row cannot be typed by hand again.
+        "oauth008-n": _n(_top_misconfig(data, "AAK-OAUTH-008")["configs"]),
+        "oauth008-pct": f"{_top_misconfig(data, 'AAK-OAUTH-008')['config_pct']:g}",
     }
+
+
+def _top_misconfig(data: dict, rule_id: str) -> dict:
+    """One row of results.json's top_misconfigurations, by rule id.
+
+    Raises rather than defaulting: a missing row means the rule dropped out of
+    the top ten, and silently rendering a zero would publish a wrong figure that
+    still passes every marker check.
+    """
+    for row in data["top_misconfigurations"]:
+        if row["rule_id"] == rule_id:
+            return row
+    raise SystemExit(
+        f"sync_rule_count: {rule_id} is not in results.json top_misconfigurations; "
+        f"the surfaces that render its figures need revisiting"
+    )
 
 
 # Every file that carries `report:` markers. The README was the only one for a
@@ -391,6 +424,13 @@ def _update_total_anchor_doc(rel: str, count: int, *, check: bool) -> bool:
         return f"{match.group(1)}{count}{match.group(3)}"
 
     new = _README_ANCHOR_RE.sub(_sub, text)
+
+    def _sub_frameworks(match: re.Match) -> str:
+        from agent_audit_kit.output import pdf_report
+
+        return f"{match.group(1)}{len(pdf_report._FRAMEWORK_TITLES)}{match.group(3)}"
+
+    new = _FRAMEWORK_ANCHOR_RE.sub(_sub_frameworks, new)
     if new == text:
         return False
     if check:

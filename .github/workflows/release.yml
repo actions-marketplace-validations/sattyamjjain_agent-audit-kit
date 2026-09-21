@@ -13,10 +13,12 @@ permissions:
 
 jobs:
   # --------------------------------------------------------------------------
-  # 0. Gate: refuse to release while any cve-response issue is open.
+  # 0. Gate: refuse to release while any cve-response issue is UNTRIAGED.
   #    Implements CLAUDE_PROMPT.md §5(1) — "blocks release until the issue
   #    is closed". (C14). Keys off the `cve-response` label; the old `sla-48h`
-  #    label was retired with the 48h SLA (PR #432).
+  #    label was retired with the 48h SLA (PR #432). Issues carrying
+  #    `cve-deferred` have been read and dispositioned and do not block — see
+  #    the step body for why that distinction had to exist.
   # --------------------------------------------------------------------------
   # --------------------------------------------------------------------------
   # 0b. Gate: the full CI suite, on the tagged commit, before anything publishes.
@@ -37,6 +39,14 @@ jobs:
   test:
     name: Test suite (tagged commit)
     runs-on: ubuntu-latest
+    # Job-scoped, because the top-level block above lists explicit scopes and
+    # anything unlisted is `none` -- so a GH_TOKEN handed to the test step
+    # would read no issues and the cve-deferred gate tests would skip here, at
+    # the one moment they most need to run. Narrowed to this job rather than
+    # widening the workflow's permissions.
+    permissions:
+      contents: read
+      issues: read
     strategy:
       # No fail-fast: when a release is blocked, the maintainer wants every
       # version's result in one run, not the first failure and three cancels.
@@ -70,6 +80,16 @@ jobs:
         run: mypy agent_audit_kit/ --ignore-missing-imports
 
       - name: Run tests
+        # GH_TOKEN so the cve-deferred gate tests in
+        # tests/test_cve_watcher_backpressure.py can actually read the tracker.
+        # Without it they skip, and a check that only runs where somebody
+        # remembered to export a token protects nothing -- which is the same
+        # mistake as writing the rule in prose in RELEASING.md and calling it
+        # enforced. They skip (never fail) when the API is unreachable, so an
+        # outage or a fork with no issue access degrades to "not checked"
+        # rather than to a red build.
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: pytest -v --tb=short
 
       - name: Repo-wide count check
@@ -85,22 +105,60 @@ jobs:
       issues: read
       contents: read
     steps:
-      - name: Block release if open cve-response issues exist
+      - uses: actions/checkout@v7.0.1
+
+      - name: Set up Python
+        uses: actions/setup-python@v7
+        with:
+          python-version: '3.11'
+
+      - name: Block release if UNTRIAGED cve-response issues exist
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           set -euo pipefail
-          open=$(gh issue list --repo "$GITHUB_REPOSITORY" --label cve-response --state open --json number,title)
-          count=$(echo "$open" | jq length)
+          # The gate asks "has every disclosed CVE been looked at?", not "is the
+          # queue empty?". Those were the same question while triage always ended
+          # in a close, and they came apart on 2026-08-31: the watcher opens
+          # issues on a 6-hour cron with no back-pressure, so `count == 0` became
+          # a state the repo could not reach on purpose. v0.3.91 sat declared,
+          # changelogged and unpublished for a day because of it.
+          #
+          # A `cve-deferred` issue has been read, dispositioned in a comment, and
+          # scheduled. That is the opposite of an unexamined disclosure, and
+          # treating the two alike is what made this gate unsatisfiable rather
+          # than strict. Untriaged issues still block, exactly as before.
+          all=$(gh issue list --repo "$GITHUB_REPOSITORY" --label cve-response \
+                  --state open --limit 200 --json number,title,labels)
+          blocking=$(echo "$all" | jq '[.[] | select([.labels[].name] | index("cve-deferred") | not)]')
+          deferred=$(echo "$all" | jq '[.[] | select([.labels[].name] | index("cve-deferred"))] | length')
+          count=$(echo "$blocking" | jq length)
           if [ "$count" != "0" ]; then
-            echo "::error ::cve-response gate: $count open cve-response issue(s) block this tag. Triage + close them (pin or disposition) before tagging:"
+            echo "::error ::cve-response gate: $count untriaged cve-response issue(s) block this tag. Disposition each one (close it, or label it cve-deferred with the reason in a comment) before tagging:"
             # Print the issue number, the CVE id parsed from the title, and the full
             # title for each blocker, so the fix is obvious from the failed run itself
             # instead of requiring a trip to the issue list.
-            echo "$open" | jq -r '.[] | "  #\(.number)  \(([.title | scan("CVE-[0-9]{4}-[0-9]+")] | first) // "no-CVE-id")  \(.title)"'
+            echo "$blocking" | jq -r '.[] | "  #\(.number)  \(([.title | scan("CVE-[0-9]{4}-[0-9]+")] | first) // "no-CVE-id")  \(.title)"'
             exit 1
           fi
-          echo "cve-response gate: clean — 0 open cve-response issues."
+          echo "cve-response gate: clean — 0 untriaged cve-response issues ($deferred deferred)."
+
+      - name: Every cve-deferred issue must name a target date
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          # The step above lets `cve-deferred` switch the gate off. This one is
+          # the price of that exemption. Until 2026-09-04 the label's only
+          # obligation was a prose disposition comment and nothing read it, so
+          # "read, scheduled, will be covered" and "made to go away" were the
+          # same gesture. A deferral that names no date is the second one.
+          #
+          # Deliberately a separate step rather than folded into the jq above:
+          # the two failures want different fixes (triage it vs. date it), and a
+          # gate that says which is the one somebody can act on without opening
+          # the workflow file.
+          python scripts/check_cve_deferrals.py --repo "$GITHUB_REPOSITORY"
 
   # --------------------------------------------------------------------------
   # 0b. Loud, non-gating check: the live github.com description must byte-match
@@ -129,28 +187,25 @@ jobs:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           set -euo pipefail
-          # PYTHONPATH=. so the render script can import agent_audit_kit from the
-          # checkout (the package is not installed in this job). Without it the
-          # step died with ModuleNotFoundError *before* the byte-compare, which is
-          # why a stale description survived three release cycles undetected.
-          expected="$(PYTHONPATH=. python scripts/render_repo_metadata.py)"
-          live="$(gh api "repos/$GITHUB_REPOSITORY" --jq '.description // ""')"
-          if [ "$live" != "$expected" ]; then
-            echo "::error title=Repo description is stale::Paste this into repo Settings > About (a CI token cannot set it): ${expected}"
-            echo "expected: ${expected}"
-            echo "live:     ${live}"
-            {
-              echo "### Repo description is stale — paste this into Settings > About"
-              echo ""
-              echo '```'
-              echo "${expected}"
-              echo '```'
-              echo ""
-              echo "live now: \`${live}\`"
-            } >> "$GITHUB_STEP_SUMMARY"
-            exit 1
-          fi
-          echo "repo description liveness: live == rendered."
+          # One implementation of this comparison, in render_repo_metadata.py, so
+          # this job and the scheduled description-liveness.yml cannot drift apart
+          # -- which is the shape of bug that put a wrong description on the repo
+          # in the first place. PYTHONPATH=. so the script can import
+          # agent_audit_kit from the checkout; without it the step died with
+          # ModuleNotFoundError *before* the byte-compare, which is why a stale
+          # description survived three release cycles undetected.
+          PYTHONPATH=. python scripts/render_repo_metadata.py \
+            --check-live "$GITHUB_REPOSITORY" || {
+              expected="$(PYTHONPATH=. python scripts/render_repo_metadata.py)"
+              {
+                echo "### Repo description is stale — paste this into Settings > About"
+                echo ""
+                echo '```'
+                echo "${expected}"
+                echo '```'
+              } >> "$GITHUB_STEP_SUMMARY"
+              exit 1
+            }
 
   # --------------------------------------------------------------------------
   # Repo-wide count liveness (v0.3.72): the sibling of description-liveness for
@@ -198,16 +253,19 @@ jobs:
         with:
           python-version: '3.11'
 
-      - name: Regenerate docs/cve-latency.md from the ledger
-        run: |
-          set -euo pipefail
-          # Offline and deterministic: reads only CHANGELOG.cves.md and the
-          # committed docs/data/cve-published.json, so an unchanged ledger
-          # regenerates byte-identically. Refreshing published dates from NVD
-          # is a separate, opt-in step (scripts/cve_latency.py --refresh) and is
-          # deliberately not run here.
-          python scripts/cve_latency.py
-
+      # There used to be a "Regenerate docs/cve-latency.md from the ledger" step
+      # here, running `python scripts/cve_latency.py` -- which WRITES the doc --
+      # immediately before the --check below. The check then compared the freshly
+      # written file against the ledger it had just been generated from, so it
+      # passed by construction and could not fail. The job has `contents: read`
+      # and never committed anything, so the regeneration was discarded and the
+      # committed doc was free to drift release after release. It did: on
+      # 2026-09-12 it was excluding 12 CVEs, 7 of them shipped that same day.
+      #
+      # This is the third guard in this repository found reporting clean while
+      # the number it guards rotted, after check_counts.py's phrase list and
+      # declared_since()'s pickaxe. The shape is always the same -- the check
+      # was reading something other than the artifact users see.
       - name: Fail if the committed doc drifted from the ledger
         run: |
           set -euo pipefail
@@ -300,7 +358,7 @@ jobs:
             org.opencontainers.image.description=Security scanner for MCP-connected AI agent pipelines
             org.opencontainers.image.version=${{ steps.version.outputs.version }}
             org.opencontainers.image.source=https://github.com/sattyamjjain/agent-audit-kit
-            org.opencontainers.image.licenses=MIT
+            org.opencontainers.image.licenses=Apache-2.0
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
@@ -450,26 +508,55 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
-      # The repo `description` cannot be written from a CI token (needs repo-admin),
-      # so the paste is a manual step. Print it here, at the very end of the release
-      # run, so it is impossible to forget rather than merely detectable afterwards
-      # by the (non-gating) description-liveness job.
+      # The repo `description` needs repo-admin scope, which the default
+      # GITHUB_TOKEN does not have. docs/RELEASING.md promised to wire this by
+      # v0.4.0; it was still manual at v0.5.1 and was set by hand three times in
+      # one day, which is the argument for automating it rather than for
+      # reminding harder.
+      #
+      # REPO_ADMIN_TOKEN is a fine-grained PAT with Administration: write. When
+      # it is absent the job SKIPS and falls back to printing the line, so a
+      # release never breaks on a missing secret -- the behaviour is exactly
+      # what it was before, minus the automation.
       - name: Set up Python
         uses: actions/setup-python@v7
         with:
           python-version: '3.11'
 
-      - name: Print repo description to paste (rendered from RULE_COUNT)
+      # One step, branching in shell rather than on a step-level `if:`. The
+      # `secrets` context is not dependable in step conditions, and a condition
+      # that silently evaluated false would reintroduce the manual step while
+      # looking automated -- the exact failure mode this repository keeps
+      # finding in its own guards.
+      - name: Set the repo description, or print it if no admin token is configured
+        env:
+          GH_TOKEN: ${{ secrets.REPO_ADMIN_TOKEN }}
         run: |
           set -euo pipefail
+          # One implementation of the rendering, in render_repo_metadata.py, so
+          # this and the description-liveness job cannot disagree. Retyping the
+          # sentence is how docs/RELEASING.md drifted from the template by a
+          # single character and set a description that then failed the guard.
           desc="$(PYTHONPATH=. python scripts/render_repo_metadata.py)"
-          echo "::notice title=Paste repo description into Settings > About::$desc"
-          {
-            echo "### Repo description — paste into Settings > About"
-            echo ""
-            echo "GitHub's \`description\` is not writable from a CI token. Paste this line in by hand so the highest-traffic surface stops drifting from RULE_COUNT:"
-            echo ""
-            echo '```'
-            echo "$desc"
-            echo '```'
-          } >> "$GITHUB_STEP_SUMMARY"
+
+          if [ -n "${GH_TOKEN:-}" ]; then
+            gh repo edit "$GITHUB_REPOSITORY" --description "$desc"
+            # Verify with the same comparison the liveness job runs rather than
+            # trusting the write. A silent no-op would be worse than the manual
+            # step this replaces.
+            PYTHONPATH=. python scripts/render_repo_metadata.py --check-live "$GITHUB_REPOSITORY"
+            echo "Repo description set and verified." >> "$GITHUB_STEP_SUMMARY"
+          else
+            echo "::notice title=Paste repo description into Settings > About::$desc"
+            {
+              echo "### Repo description — paste into Settings > About"
+              echo ""
+              echo "No \`REPO_ADMIN_TOKEN\` secret is configured, so this was not set automatically."
+              echo ""
+              echo '```'
+              echo "$desc"
+              echo '```'
+              echo ""
+              echo "To automate it, create a fine-grained PAT with **Administration: write** on this repository and save it as the \`REPO_ADMIN_TOKEN\` secret."
+            } >> "$GITHUB_STEP_SUMMARY"
+          fi

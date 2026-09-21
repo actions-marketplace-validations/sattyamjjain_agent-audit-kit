@@ -3,9 +3,12 @@ name: Link check
 # Catch a dead docs domain (the reason docs/CNAME -> docs.agentauditkit.io sat
 # broken for months) at build time instead of after the fact. Runs on doc
 # changes, on push to main, and weekly so a link that dies after merge still
-# fails a build. `mailto:` links are excluded on purpose: security@agentauditkit.io
-# is an aspirational contact whose domain is not registered yet, and we do not
-# want the contact address to block docs builds.
+# fails a build. The `mailto:` and `agentauditkit\.io` exclusions are deliberate
+# and permanent: that domain was never registered, and while it is no longer
+# offered as a contact route anywhere (v0.3.97), the string still appears in
+# CHANGELOG.md history and in SECURITY.md's note explaining that it is dead.
+# Those references are kept on purpose, so the exclusion has to stay or every
+# docs build fails on a domain we deliberately never resolve.
 #
 # The MCP Security Index staleness guard lives here too, for the same reason: it
 # is a claim in README.md that only the network can settle, and it decays
@@ -26,7 +29,9 @@ on:
       - '**/*.md'
       - 'docs/**'
   schedule:
-    - cron: '23 6 * * 1'  # Mondays 06:23 UTC
+    - cron: '23 6 * * 1'  # Mondays 06:23 UTC — lychee + index cadence
+    - cron: '31 6 * * *'  # daily 06:31 UTC — nav liveness only (see below)
+  workflow_dispatch: {}
 
 permissions:
   contents: read
@@ -34,6 +39,10 @@ permissions:
 jobs:
   links:
     name: Check README + docs links
+    # Unchanged cadence. The daily cron below exists for nav-liveness only:
+    # lychee walks external hosts, and running it seven times a week multiplies
+    # the flaky-host failures this file already documents fighting.
+    if: github.event_name != 'schedule' || github.event.schedule == '23 6 * * 1'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7.0.1
@@ -43,7 +52,7 @@ jobs:
         with:
           args: >-
             --no-progress
-            --exclude 'mailto:|agentauditkit\.io|globenewswire\.com|asciinema\.org'
+            --exclude 'mailto:|agentauditkit\.io|globenewswire\.com|asciinema\.org|linkedin\.com|github\.com/sattyamjjain/agent-audit-kit/(blob|tree)/main|sattyamjjain\.github\.io/agent-audit-kit/docs/'
             --exclude-path 'docs/changelog/archive'
             --max-retries 3
             --retry-wait-time 5
@@ -52,6 +61,18 @@ jobs:
             'docs/**/*.md'
           fail: true
 
+      # This repo's own docs pages are excluded for the reason already given below
+      # for blob/main URLs, and it is the same reason: a PR that adds a docs page
+      # and links to it 404s until the branch merges AND the site redeploys. That
+      # is structural, not breakage, and a job that is red for a legitimate reason
+      # stops being read.
+      #
+      # They are not left unchecked. The `nav-liveness` job at the bottom of this
+      # file requests every mkdocs nav entry against the deployed site on a daily
+      # cron, which is the right clock for a published page: it asks after the
+      # deploy rather than during it. The Pages root and its /data/ files stay in
+      # lychee's scope — only the /docs/ subtree moves to that job.
+      #
       # globenewswire.com is excluded above because lychee fails its HTTP/2
       # negotiation from the runner ("HTTP/2 protocol error. Server may not
       # support HTTP/2 properly") while the URL itself is alive — verified 200
@@ -64,6 +85,21 @@ jobs:
       # repo — is also covered by tests/test_docs_links.py, which fails fast and
       # locally and does not depend on the network at all.
       #
+      # Links to this repository's own files are written as absolute
+      # blob/main URLs on purpose: README.md is the PyPI long_description, and
+      # PyPI does not resolve repo-relative paths. Checking them over the
+      # network is both weaker and wrong here -- weaker because GitHub answers
+      # 200 for paths that redirect, and wrong because a PR that adds a docs
+      # page and links to it 404s until the branch merges, which is how this
+      # exclusion came to be needed on 2026-09-12.
+      #
+      # They are checked instead against the working tree by
+      # tests/test_readme_contract.py::test_every_docs_site_link_has_a_source_page,
+      # which asserts every one of them resolves to a file that exists.
+      # linkedin.com is excluded because it answers 999 to every non-browser
+      # request -- its anti-bot status, not a dead link. It entered scope on
+      # 2026-09-12 when the grant application moved from the repo root into
+      # docs/, which lychee scans. The link itself resolves fine in a browser.
       # asciinema.org is excluded for the same reason, after the gentler fix was
       # tried and did not work: the README's demo embed times out from the runner
       # while answering 200 in ~0.9s from elsewhere, and raising --timeout from
@@ -76,6 +112,7 @@ jobs:
 
   index-cadence:
     name: MCP Security Index is still publishing
+    if: github.event_name != 'schedule' || github.event.schedule == '23 6 * * 1'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7.0.1
@@ -90,3 +127,36 @@ jobs:
       # two consecutive misses fail the build instead of waiting to be noticed.
       - name: Check index cadence
         run: python scripts/index_cadence.py --check
+
+  # --------------------------------------------------------------------------
+  # Every nav entry in mkdocs.yml, requested against the deployed site.
+  #
+  # Same shape as description-liveness.yml, for the same reason: a claim only the
+  # network can settle decays silently. Building the docs proves the markdown
+  # parses; only a request proves a reader can reach the page. mkdocs.yml carried
+  # a 23-entry nav while nothing compared it to what was actually served, so a
+  # gap there would have been invisible until somebody clicked.
+  #
+  # Deliberately NOT on pull_request or push. This file already documents why:
+  # "a PR that adds a docs page and links to it 404s until the branch merges".
+  # A nav check on a PR would fail on its own unpublished page every time, and a
+  # check that is red for a legitimate reason gets ignored. It runs on the daily
+  # cron instead — a dead entry is caught within a day of opening, not a week —
+  # and on demand, which is what to use straight after a deploy.
+  # --------------------------------------------------------------------------
+  nav-liveness:
+    name: Every mkdocs nav entry is served
+    if: >-
+      github.event_name == 'workflow_dispatch' ||
+      (github.event_name == 'schedule' && github.event.schedule == '31 6 * * *')
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97  # v7.0.0
+        with:
+          python-version: '3.12'
+      # No pip install: the script is standard library only, on purpose. A
+      # liveness check that needs MkDocs installed to run would be one more
+      # thing that can stop the check from happening.
+      - name: Check nav liveness
+        run: python scripts/nav_liveness.py --check-live
