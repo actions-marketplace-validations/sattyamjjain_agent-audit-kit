@@ -4,6 +4,8 @@ import json
 from dataclasses import dataclass, field
 from pathlib import Path
 
+from agent_audit_kit.scanners._helpers import iter_hook_handlers, mcp_server_maps
+
 
 @dataclass
 class DiscoveredAgent:
@@ -59,27 +61,24 @@ _HOOK_CONFIGS: dict[str, set[str]] = {
 
 
 def _count_hooks(data: dict) -> int:
-    """Count hook entries in a parsed JSON config.
+    """Count the hooks in a parsed JSON config.
 
-    Hooks are expected under a top-level ``"hooks"`` key as a dict
-    mapping event names to lists of hook definitions.
+    Hooks are expected under a top-level ``"hooks"`` key as a dict mapping
+    event names to lists of entries. Claude Code documents each entry as a
+    matcher group whose own ``hooks`` array holds the handlers, so the count is
+    of handlers, the same count AAK-HOOK-007 uses; counting entries reported a
+    group of twelve hooks as one.
 
     Args:
         data: Parsed JSON data from a config file.
 
     Returns:
-        Total number of hook entries found.
+        Total number of hooks found.
     """
     hooks = data.get("hooks", {})
     if not isinstance(hooks, dict):
         return 0
-    count = 0
-    for entries in hooks.values():
-        if isinstance(entries, list):
-            count += len(entries)
-        else:
-            count += 1
-    return count
+    return sum(1 for _ in iter_hook_handlers(hooks))
 
 
 def discover_agents(
@@ -125,11 +124,13 @@ def discover_agents(
                     except (json.JSONDecodeError, OSError):
                         continue
 
-                    # Count MCP servers from mcp config files
+                    # Count MCP servers from mcp config files, under either key:
+                    # VS Code's `.vscode/mcp.json` uses `servers`, so reading
+                    # only `mcpServers` reported every VS Code workspace as 0.
                     if "mcp" in fp.name.lower():
-                        servers = data.get("mcpServers", {})
-                        if isinstance(servers, dict):
-                            agent.mcp_server_count += len(servers)
+                        agent.mcp_server_count += sum(
+                            len(servers) for _, servers in mcp_server_maps(data)
+                        )
 
                     # Count hooks from known hook config files
                     rel_path = str(fp.relative_to(project_root))

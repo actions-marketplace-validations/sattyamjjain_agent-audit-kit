@@ -5,6 +5,8 @@ from __future__ import annotations
 import shutil
 from pathlib import Path
 
+import pytest
+
 from agent_audit_kit.scanners import mcp_sampling_capability
 
 FIXTURES = Path(__file__).parent / "fixtures" / "mcp_sampling"
@@ -113,3 +115,92 @@ def test_finding_carries_owasp_mapping(tmp_path: Path) -> None:
     # ASI09's first mitigation. MCP07/ASI03 (authentication) never fit.
     assert match.owasp_mcp_references == ["MCP06:2025"]
     assert match.owasp_agentic_references == ["ASI01", "ASI09"]
+
+
+_SAMPLER = (
+    "async def ask(ctx, text):\n"
+    "    return await ctx.session.create_message(messages=[text], max_tokens=64)\n"
+)
+
+
+def test_the_source_half_runs_for_a_versioned_pyproject_dependency(tmp_path: Path) -> None:
+    """The SDK gate took pyproject.toml only as the bare quoted "mcp", so the way
+    most servers declare it, with extras and a version, kept this half off."""
+    (tmp_path / "pyproject.toml").write_text(
+        '[project]\nname = "d"\ndependencies = ["mcp[cli]>=1.2.0"]\n', encoding="utf-8"
+    )
+    (tmp_path / "sampler.py").write_text(_SAMPLER, encoding="utf-8")
+    findings, _ = mcp_sampling_capability.scan(tmp_path)
+    assert [f.file_path for f in findings if f.rule_id == RULE_ID] == ["sampler.py"]
+
+
+def _vscode_config(root: Path, server: dict) -> None:
+    import json
+
+    (root / ".vscode").mkdir(exist_ok=True)
+    (root / ".vscode" / "mcp.json").write_text(json.dumps({"servers": {"samp": server}}), encoding="utf-8")
+
+
+def test_the_config_half_reads_a_vscode_server(tmp_path: Path) -> None:
+    """.vscode/mcp.json is in the config half's own file list, but VS Code keeps
+    its servers under `servers` and only `mcpServers` was read."""
+    _vscode_config(tmp_path, {"command": "node", "args": ["server.js"], "capabilities": ["sampling"]})
+    findings, scanned = mcp_sampling_capability.scan(tmp_path)
+    assert [f.file_path for f in findings if f.rule_id == RULE_ID] == [".vscode/mcp.json"]
+    assert ".vscode/mcp.json" in scanned
+
+
+def test_the_config_half_honours_a_vscode_consent_flag(tmp_path: Path) -> None:
+    _vscode_config(tmp_path, {"command": "node", "capabilities": {"sampling": {}}, "requires_consent": True})
+    findings, _ = mcp_sampling_capability.scan(tmp_path)
+    assert not any(f.rule_id == RULE_ID for f in findings)
+
+
+def test_the_config_half_ignores_a_vscode_server_without_sampling(tmp_path: Path) -> None:
+    _vscode_config(tmp_path, {"command": "node", "capabilities": ["tools"]})
+    findings, _ = mcp_sampling_capability.scan(tmp_path)
+    assert not any(f.rule_id == RULE_ID for f in findings)
+
+
+def test_the_source_half_stays_off_without_an_sdk(tmp_path: Path) -> None:
+    (tmp_path / "pyproject.toml").write_text(
+        '[project]\nname = "d"\ndependencies = ["httpx>=0.27"]\n', encoding="utf-8"
+    )
+    (tmp_path / "sampler.py").write_text(_SAMPLER, encoding="utf-8")
+    findings, _ = mcp_sampling_capability.scan(tmp_path)
+    assert not any(f.rule_id == RULE_ID for f in findings)
+
+
+def _declare_sdk_and_write(root: Path, name: str, source: str) -> list[str]:
+    (root / "requirements.txt").write_text("mcp\n", encoding="utf-8")
+    (root / name).write_text(source, encoding="utf-8")
+    findings, _ = mcp_sampling_capability.scan(root)
+    return [f.file_path for f in findings if f.rule_id == RULE_ID]
+
+
+@pytest.mark.parametrize(("name", "source", "fires"), [
+    ("caps.ts", "const server = new Server(info, { capabilities: { sampling: {} } });\n", True),
+    ("caps.ts", "const caps = {\n  capabilities: {\n    sampling: {},\n  },\n};\n", True),
+    # Named after the first closing brace or parenthesis: not read (the limitation).
+    ("caps.ts", "const c = { capabilities: { roots: { listChanged: true }, sampling: {} } };\n", False),
+    ("caps.py", "caps = ServerCapabilities(sampling={})\n", True),
+    ("caps.py", "caps = ServerCapabilities(tools=ToolsCapability(), sampling={})\n", False),
+])
+def test_the_capability_markers_read_up_to_the_first_closer(
+    tmp_path: Path, name: str, source: str, fires: bool
+) -> None:
+    assert _declare_sdk_and_write(tmp_path, name, source) == ([name] if fires else [])
+
+
+@pytest.mark.parametrize("unit", ["capabilities: {", "ServerCapabilities("])
+def test_a_crafted_source_file_scans_in_linear_time(tmp_path: Path, unit: str) -> None:
+    """1 MB of a capability opener with no closer. Each opener rescanned to the
+    first closer, so 400,000 characters of `capabilities: {` took 4.4 seconds and
+    the time grew with the square of the file. The bound is loose for slow CI
+    runners; the linear scan takes milliseconds."""
+    import time
+
+    started = time.perf_counter()
+    hits = _declare_sdk_and_write(tmp_path, "caps.ts", unit * (1_000_000 // len(unit)))
+    assert time.perf_counter() - started < 5.0
+    assert hits == []

@@ -411,8 +411,9 @@ _r(
     owasp_agentic_references=["ASI03"],
     adversa_references=["ADV-AUTH-01"],
     limitations=(
-        "Reads the `url` field of each server in `mcpServers` and looks for an "
-        "`Authorization`, `Bearer`, `X-API-Key` or `API-Key` header, or for one of a "
+        "Reads the `url` field of each server in `mcpServers`, or `servers` in VS "
+        "Code's `.vscode/mcp.json`, and looks for an `Authorization`, `Bearer`, "
+        "`X-API-Key` or `API-Key` header, or for one of a "
         "fixed family of custom credential headers (`X-*-Key`, `X-*-Token` but not "
         "`X-CSRF-Token` or `X-XSRF-Token`, `X-*-Secret`, `*-API-Key`, `*-API-Token`, "
         "`*-Access-Key`, `*-Client-Secret`, `ApiKey`, `X-Auth-Token`, "
@@ -424,8 +425,7 @@ _r(
         "`\"X-Foo-Key\": \"\"` and `\"k9f2-example-77a1\"` both count as a declared "
         "scheme. A remote URL given any other way is not examined: as an argument to a "
         "bridge (`npx mcp-remote https://...`) or under another key such as "
-        "`serverUrl`. VS Code's `.vscode/mcp.json` keeps its servers under `servers`, "
-        "which is not read."
+        "`serverUrl`."
     ),
 )
 
@@ -439,17 +439,20 @@ _r(
     "Put only the program in `command` and every argument in `args`. This rule matches "
     "`sh -c`, `bash -c`, `cmd /c` and any of `|`, `;`, `&`, `$`, `(`, `)` or a backtick "
     "in `command`, so a path such as `$HOME/bin/server`, or one containing parentheses, "
-    "fires it too.",
+    "fires it too. A VS Code variable such as `${workspaceFolder}`, which VS Code "
+    "substitutes itself, does not.",
     sarif_name="McpCommandShellInjection",
     owasp_mcp_references=["MCP05:2025"],
     owasp_agentic_references=["ASI05"],
     adversa_references=["ADV-INJECT-01"],
     limitations=(
-        "Looks at the `command` string of servers in `mcpServers` only, for one of the "
-        "characters | ; & ` $ ( ) or a leading `sh -c`, `bash -c`, `cmd /c` or "
-        "`cmd.exe /c`. The same wrapper split into `command: bash` and `args: [\"-c\", "
-        "...]` is not read by this rule, and neither is a server under `servers` in VS "
-        "Code's `.vscode/mcp.json`."
+        "Looks only at the `command` string of each server in `mcpServers`, or "
+        "`servers` in VS Code's `.vscode/mcp.json`, for one of the characters | ; & ` "
+        "$ ( ) or a leading `sh -c`, `bash -c`, `cmd /c` or `cmd.exe /c`, after "
+        "removing any VS Code variable (`${workspaceFolder}`, `${userHome}`, "
+        "`${env:...}` and the others VS Code documents), which VS Code substitutes "
+        "itself. The same wrapper split into `command: bash` and `args: [\"-c\", "
+        "...]` is not read by this rule."
     ),
 )
 
@@ -468,12 +471,12 @@ _r(
     owasp_agentic_references=["ASI03"],
     adversa_references=["ADV-TOKEN-01"],
     limitations=(
-        "Reads the `env` block of each server in `mcpServers` and flags a value that "
-        "is not a bare `${VAR}` when the variable name contains KEY, SECRET, TOKEN, "
-        "PASSWORD, CREDENTIAL, ANTHROPIC, OPENAI or AWS_. A literal secret in "
-        "`headers` (`Authorization: Bearer ...`), inside a connection string under "
-        "another name (`DATABASE_URL=postgres://user:pass@host/db`), or in a server "
-        "under `servers` in VS Code's `.vscode/mcp.json`, is not matched."
+        "Reads the `env` block of each server in `mcpServers`, or `servers` in VS "
+        "Code's `.vscode/mcp.json`, and flags a value that is not a bare `${VAR}` when "
+        "the variable name contains KEY, SECRET, TOKEN, PASSWORD, CREDENTIAL, "
+        "ANTHROPIC, OPENAI or AWS_. A literal secret in `headers` (`Authorization: "
+        "Bearer ...`) or inside a connection string under another name "
+        "(`DATABASE_URL=postgres://user:pass@host/db`) is not matched."
     ),
 )
 
@@ -484,17 +487,19 @@ _r(
     "Large tool surface increases attack surface.",
     Severity.HIGH,
     Category.MCP_CONFIG,
-    "Remove the servers this project does not use until `mcpServers` lists 10 or fewer. "
-    "The rule counts the entries in each config file and fires above 10.",
+    "Remove the servers this project does not use until each server map, `mcpServers` "
+    "or VS Code's `servers`, lists 10 or fewer. The rule counts each map on its own "
+    "and fires above 10.",
     sarif_name="ExcessiveMcpServers",
     cve_references=["CVE-2026-21852"],
     owasp_mcp_references=["MCP02:2025"],
     owasp_agentic_references=["ASI02"],
     adversa_references=["ADV-SCOPE-01"],
     limitations=(
-        "Counts the entries of `mcpServers` in one config file and fires above 10. A "
-        "VS Code `.vscode/mcp.json` keeps its servers under `servers`, which is not "
-        "read, so any number of them passes."
+        "Counts the entries of one server map (`mcpServers`, or `servers` in VS Code's "
+        "`.vscode/mcp.json`) in one config file and fires above 10. Servers split "
+        "across files are not added up: six in `.vscode/mcp.json` and six in the "
+        "`.mcp.json` beside it, which VS Code's agent host loads together, pass."
     ),
 )
 
@@ -517,8 +522,7 @@ _r(
     limitations=(
         "Fires when the first word of `command` is npx, uvx, bunx or pnpx. The same "
         "fetch through another launcher is not matched: `pnpm dlx`, `pipx run`, `cmd "
-        "/c npx`, or an absolute path such as `/usr/local/bin/npx`. VS Code's "
-        "`.vscode/mcp.json` keeps its servers under `servers`, which is not read."
+        "/c npx`, or an absolute path such as `/usr/local/bin/npx`."
     ),
 )
 
@@ -537,8 +541,7 @@ _r(
         "Fires on a `command` that is not an absolute path, except for a fixed list of "
         "common launchers (node, python, python3, npx, uvx, bunx, pnpx, docker, deno, "
         "bun, cargo, go, java, ruby). Those are resolved through PATH in the same way "
-        "and are never reported. VS Code's `.vscode/mcp.json` keeps its servers under "
-        "`servers`, which is not read."
+        "and are never reported."
     ),
 )
 
@@ -558,8 +561,7 @@ _r(
     limitations=(
         "Looks for a package argument after npx, uvx, bunx or pnpx that has no "
         "`@version` suffix. Any suffix counts as a pin, including the floating tag "
-        "`@latest`. The same package fetched through `cmd /c npx`, or declared in VS "
-        "Code's `.vscode/mcp.json` (servers under `servers`), is not checked."
+        "`@latest`. The same package fetched through `cmd /c npx` is not checked."
     ),
 )
 
@@ -576,8 +578,9 @@ _r(
     owasp_agentic_references=["ASI05"],
     adversa_references=["ADV-INJECT-03"],
     limitations=(
-        "Reads the `headersHelper` field of servers under `mcpServers` in `.mcp.json`, "
-        "`.cursor/mcp.json`, `.continue/config.json`, `.gemini/settings.json` and "
+        "Reads the `headersHelper` field of servers under `mcpServers` (or `servers`) "
+        "in `.mcp.json`, `.cursor/mcp.json`, `.continue/config.json`, "
+        "`.gemini/settings.json` and "
         "other `*mcp*.json` files. Servers declared inline in a Claude Code plugin "
         "manifest (`.claude-plugin/plugin.json`) are not read."
     ),
@@ -602,8 +605,7 @@ _r(
         "Looks in the server `url` for localhost, 127.0.0.1, 0.0.0.0, ::1, the 10.x, "
         "172.16-31.x and 192.168.x ranges and a `.local` name. Other internal "
         "addresses are not matched: a name such as `mcp.corp.internal` or the shared "
-        "range 100.64.0.0/10. VS Code's `.vscode/mcp.json` keeps its servers under "
-        "`servers`, which is not read."
+        "range 100.64.0.0/10."
     ),
 )
 
@@ -622,8 +624,7 @@ _r(
     limitations=(
         "Fires when an argument is exactly `/`, `~`, `/home`, `/Users`, `/etc` or "
         "`/var`. A home directory written as a specific path (`/Users/alice`), as `~/` "
-        "or as `${HOME}` is not matched. VS Code's `.vscode/mcp.json` keeps its "
-        "servers under `servers`, which is not read."
+        "or as `${HOME}` is not matched."
     ),
 )
 
@@ -645,7 +646,8 @@ _r(
     owasp_agentic_references=["ASI04"],
     incident_references=["arXiv:2605.24248"],
     limitations=(
-        "Fires on a `mcpServers` entry with a `command` or `url` that has none of 13 "
+        "Fires on an entry of `mcpServers` (or `servers` in VS Code's "
+        "`.vscode/mcp.json`) with a `command` or `url` that has none of 13 "
         "attestation keys (`attestation`, `clearance`, `clearance_url`, "
         "`clearance_uri`, `clearance_document`, `clearancedocument`, `mcp_clearance`, "
         "`wellknown_clearance`, `well_known_clearance`, `trust_root`, `trustroot`, "
@@ -653,9 +655,7 @@ _r(
         "named like `MCP-Clearance` or `MCP-Attestation`. A key only has to exist: "
         "`\"attestation\": \"\"` satisfies it, a top-level `trust_root` key silences "
         "every server in the file, and so does the text `.well-known/mcp-clearance` "
-        "anywhere in the file; no clearance document or trust root is ever checked. VS "
-        "Code's `.vscode/mcp.json` keeps its servers under `servers`, which is not "
-        "read."
+        "anywhere in the file; no clearance document or trust root is ever checked."
     ),
 )
 
@@ -691,13 +691,14 @@ _r(
     limitations=(
         "Fires on `upstream.disable_ip_validation: true`, or an `upstream.allowed_ips` "
         "entry that is `0.0.0.0/0` or `::/0` or has an IPv4 prefix of /7 or shorter or "
-        "an IPv6 prefix of /31 or shorter, in a YAML file that parses as a single "
-        "document with `tunnel_domain` and `routes` at the top (or under "
-        "`gateway.config`). Only a file named config, proxy or values (.yaml or .yml), "
-        "or one under a directory named tunnel, gateway, mcp-tunnel, mcp-tunnels, "
-        "mcp-gateway, mcp_tunnel or mcp_gateway, is read, so the same settings "
-        "embedded as a string in a Kubernetes ConfigMap's `data:`, or in a file with a "
-        "`---` separator and a second document, are not seen."
+        "an IPv6 prefix of /31 or shorter, in a YAML document with `tunnel_domain` and "
+        "`routes` at the top (or under `gateway.config`); every document of a "
+        "multi-document file is read. Only a file named config, proxy or values "
+        "(.yaml or .yml), or one under a directory named tunnel, gateway, mcp-tunnel, "
+        "mcp-tunnels, mcp-gateway, mcp_tunnel or mcp_gateway, is read, so the same "
+        "settings embedded as a string in a Kubernetes ConfigMap's `data:`, or set in "
+        "a document with no `tunnel_domain` and `routes` of its own (an override "
+        "layered onto another document), are not seen."
     ),
 )
 
@@ -858,12 +859,18 @@ _r(
     "argument) rather than the removed session header.",
     sarif_name="McpSessionIdReliance",
     limitations=(
-        "Runs only when a manifest at the project root names an MCP SDK in a form it "
-        "recognises. In `pyproject.toml` that is one of the quoted strings `\"mcp\"`, "
-        "`\"modelcontextprotocol\"` or `\"model-context-protocol\"`, so "
-        "`\"mcp>=1.2.0\"` does not count, and a `package.json` in a subdirectory "
-        "(`svc/package.json`) is not read. When it runs, it looks in source files for "
-        "the header text `Mcp-Session-Id` (any case) or the constant `MCP_SESSION_ID`."
+        "Runs only when a manifest at the project root names an MCP SDK: `mcp`, "
+        "`modelcontextprotocol` or `model-context-protocol` as a dependency in "
+        "`pyproject.toml` (`[project]` and optional dependencies, "
+        "`[dependency-groups]`, Poetry, uv or PDM) or on a `requirements*.txt` line, "
+        "an `@modelcontextprotocol/sdk`, `@anthropic-ai/mcp` or "
+        "`@anthropic-ai/claude-agent-sdk` dependency in `package.json`, "
+        "`io.modelcontextprotocol` in a Maven or Gradle build, or an `mcp` or "
+        "`modelcontextprotocol` line in `Cargo.toml`. A framework that wraps the SDK "
+        "(`fastmcp`), the Rust SDK crate `rmcp`, a dependency declared only in "
+        "`setup.py`, and a manifest in a subdirectory (`svc/package.json`) do not "
+        "count. When it runs, it looks in source files for the header text "
+        "`Mcp-Session-Id` (any case) or the constant `MCP_SESSION_ID`."
     ),
 )
 
@@ -1113,11 +1120,12 @@ _r(
     limitations=(
         "Matches curl, wget, nc, ncat, ssh, scp, rsync and ftp by name, and the "
         "one-liners `python -c ... import requests` (not `python3 -c`) and `node -e "
-        "... fetch(`, in the `command` string of each hook entry in "
-        "`.claude/settings.json` and `.claude/settings.local.json`. A hook nested "
-        "under an entry's own `hooks` array, the shape Claude Code documents, is not "
-        "read. What a script file does is not followed, so `bash "
-        ".claude/hooks/report.sh` passes even when the script runs curl."
+        "... fetch(`, in the command line of each hook (its `command`, followed by "
+        "`args` when set) in `.claude/settings.json` and `.claude/settings.local.json`. "
+        "What a script file does is not followed, so `bash .claude/hooks/report.sh` "
+        "passes even when the script runs curl. An `http` hook, which posts the event "
+        "to its `url` without running a command, is not read, and neither are the "
+        "hooks a plugin ships in `hooks/hooks.json`."
     ),
 )
 
@@ -1129,20 +1137,21 @@ _r(
     Severity.CRITICAL,
     Category.HOOK_INJECTION,
     "Take the variable out of the hook command. The rule matches `$ANTHROPIC_API_KEY`, "
-    "`$OPENAI_API_KEY`, `$AWS_SECRET_ACCESS_KEY`, `$AWS_ACCESS_KEY_ID`, `$HOME` and "
-    "`$PATH`, and the pipelines `env | curl`, `printenv | nc` and `echo $VAR | base64`. "
-    "Let the program the hook runs read its own credentials from its environment, and "
-    "use a project-relative path or a plain program name instead of `$HOME` or `$PATH`.",
+    "`$OPENAI_API_KEY`, `$AWS_SECRET_ACCESS_KEY` and `$AWS_ACCESS_KEY_ID`, and the "
+    "pipelines `env | curl`, `printenv | nc` and `echo $VAR | base64`. Let the program "
+    "the hook runs read its own credentials from its environment.",
     sarif_name="HookCredentialExfiltration",
     owasp_agentic_references=["ASI03"],
     adversa_references=["ADV-TOKEN-02"],
     limitations=(
-        "Matches six names written as a bare `$NAME` (ANTHROPIC_API_KEY, "
-        "OPENAI_API_KEY, AWS_SECRET_ACCESS_KEY, AWS_ACCESS_KEY_ID, HOME, PATH) and "
-        "three exfiltration pipelines. The braced form `${ANTHROPIC_API_KEY}` and any "
-        "other credential variable on its own (`$GITHUB_TOKEN`) are not matched. A "
-        "hook nested under an entry's own `hooks` array, the shape Claude Code "
-        "documents, is not read."
+        "Matches four names written as a bare `$NAME` (ANTHROPIC_API_KEY, "
+        "OPENAI_API_KEY, AWS_SECRET_ACCESS_KEY, AWS_ACCESS_KEY_ID) and three "
+        "exfiltration pipelines; `$HOME` and `$PATH` are not credentials and are not "
+        "reported. The braced form `${ANTHROPIC_API_KEY}` and any "
+        "other credential variable on its own (`$GITHUB_TOKEN`) are not matched. An "
+        "`http` hook that sends `$ANTHROPIC_API_KEY` in a header it lists in "
+        "`allowedEnvVars` is not read, and neither are the hooks a plugin ships in "
+        "`hooks/hooks.json`."
     ),
 )
 
@@ -1153,30 +1162,41 @@ _r(
     "which can modify system configs, plant persistence, or stage exfiltration.",
     Severity.HIGH,
     Category.HOOK_INJECTION,
-    "Keep every path in the hook command inside the project. The rule matches `/tmp/`, "
-    "`~/`, `/etc/`, `/var/`, `/usr/` and `/home/` anywhere in the command, so use "
-    "project-relative paths for anything the hook writes, and call tools by name "
-    "instead of by an absolute path under those directories.",
+    "Write only inside the project: use project-relative paths for anything the hook "
+    "creates or changes. The rule reports a write to a path under `/tmp`, `~`, `/etc`, "
+    "`/var`, `/usr` or `/home`, such as a `>` redirect, `tee`, `cp`, `mv`, `sed -i`, "
+    "`curl -o` or `tar`; calling a tool by its absolute path, or reading such a path, "
+    "does not fire it.",
     sarif_name="HookWriteOutsideProject",
     owasp_agentic_references=["ASI05"],
     adversa_references=["ADV-ESCAPE-01"],
     limitations=(
-        "Looks for the text /tmp/, ~/, /etc/, /var/, /usr/ or /home/ anywhere in a "
-        "hook command. A path reached through `$HOME` or a relative climb "
-        "(`../../shared/out.json`) is not matched. A hook nested under an entry's own "
-        "`hooks` array, the shape Claude Code documents, is not read."
+        "Reads the hook's command line as shell commands and reports one that writes "
+        "a path under /tmp, ~, /etc, /var, /usr or /home: a `>` or `>>` redirect, "
+        "`tee`, `mkdir`, `touch`, `chmod`, `chown` or `truncate` on it, the "
+        "destination of `cp`, `mv`, `install` or `ln`, `sed -i` or `perl -i`, "
+        "`curl -o`, `wget -O` or `-P`, `dd of=`, or `tar` creating or extracting "
+        "there, also inside `sh -c` and after `sudo` or `env`. A command that only "
+        "names such a path (`cd /tmp/build`, reading `~/.config`) is not reported, "
+        "and neither is deleting one. A path reached through `$HOME` or a relative "
+        "climb (`../../shared/out.json`) is not matched, nor is a write made by a "
+        "script the hook runs. Hooks a plugin ships in `hooks/hooks.json` are not "
+        "read."
     ),
 )
 
 _r(
     "AAK-HOOK-004",
-    "Hook on security-sensitive lifecycle event",
-    "A non-formatting hook is attached to a sensitive lifecycle event "
-    "(PreToolUse, PostToolUse, SessionStart, UserPromptSubmit). "
-    "These events fire on every tool call or session start.",
-    Severity.HIGH,
+    "Hook runs a command on tool use, prompt submit or session start",
+    "A hook runs a command on PreToolUse, PostToolUse, SessionStart or "
+    "UserPromptSubmit, so it runs automatically around tool calls, on every prompt "
+    "and at session start. This is an inventory entry, not evidence of harm: the "
+    "rule reads only the event and whether the command names a formatter, not what "
+    "the command or a script it calls does. Review what it runs.",
+    Severity.LOW,
     Category.HOOK_INJECTION,
-    "Audit all hooks on critical lifecycle events. Use deny-lists for non-formatting commands.",
+    "Review what the command runs, including any script it calls. Keep the hooks "
+    "you can account for and remove the rest.",
     sarif_name="HookSensitiveLifecycleEvent",
     owasp_agentic_references=["ASI05"],
     adversa_references=["ADV-HOOK-01"],
@@ -1185,8 +1205,9 @@ _r(
         "UserPromptSubmit whose command names none of a list of formatters. The same "
         "command on any other event, such as Stop, is not reported, and a command that "
         "merely contains a formatter name anywhere, even in a trailing comment (`# "
-        "prettier`), counts as a formatter. A hook nested under an entry's own `hooks` "
-        "array, the shape Claude Code documents, is not read."
+        "prettier`), counts as a formatter. A hook that runs no command (`http`, "
+        "`prompt`, `agent`, `mcp_tool`) is not reported on any event, and the hooks a "
+        "plugin ships in `hooks/hooks.json` are not read."
     ),
 )
 
@@ -1204,8 +1225,8 @@ _r(
     limitations=(
         "Matches the words base64, btoa, atob, b64encode and b64decode in a hook "
         "command. Other encodings that hide a payload the same way, hex through `xxd "
-        "-r -p` or `base32 -d`, are not matched. A hook nested under an entry's own "
-        "`hooks` array, the shape Claude Code documents, is not read."
+        "-r -p` or `base32 -d`, are not matched. Hooks a plugin ships in "
+        "`hooks/hooks.json` are not read."
     ),
 )
 
@@ -1225,8 +1246,8 @@ _r(
     limitations=(
         "Matches sudo, doas, pkexec and `chmod` followed by whitespace and `+x`. "
         "`chmod 755`, `chmod a+x` and `su root -c`, which grant the same execute or "
-        "root rights, are not matched. A hook nested under an entry's own `hooks` "
-        "array, the shape Claude Code documents, is not read."
+        "root rights, are not matched. Hooks a plugin ships in `hooks/hooks.json` are "
+        "not read."
     ),
 )
 
@@ -1238,39 +1259,45 @@ _r(
     Severity.MEDIUM,
     Category.HOOK_INJECTION,
     "Remove hooks that are not essential, or fold related ones into one script, until "
-    "each settings file has 15 or fewer hook entries. The rule counts the entries in "
-    "`.claude/settings.json` and `.claude/settings.local.json` separately and fires "
-    "above 15.",
+    "each settings file has 15 or fewer hooks. The rule counts every hook, each one in "
+    "a matcher group's `hooks` array on its own, in `.claude/settings.json` and "
+    "`.claude/settings.local.json` separately, and fires above 15.",
     sarif_name="ExcessiveHookCount",
     adversa_references=["ADV-SCOPE-03"],
     limitations=(
-        "Adds up the entries of all events in one settings file and fires above 15. "
-        "Hooks split between `.claude/settings.json` and `.claude/settings.local.json` "
-        "are not added up, and a `matcher` entry counts once however many hooks its "
-        "own `hooks` array holds."
+        "Counts the hooks of all events in one settings file, each hook in a "
+        "`matcher` group's `hooks` array separately, and fires above 15. Hooks split "
+        "between `.claude/settings.json` and `.claude/settings.local.json` are not "
+        "added up, and the hooks a plugin ships in `hooks/hooks.json` are not counted."
     ),
 )
 
 _r(
     "AAK-HOOK-008",
     "Hook command contains obfuscated or encoded payload",
-    "A hook command contains hex-encoded strings, unicode escapes, very long commands, "
-    "or nested shell invocations. Obfuscation is a strong indicator of malicious intent.",
+    "A hook command contains hex-encoded strings, unicode escapes, an embedded "
+    "base64 blob or nested shell invocations. Obfuscation is a strong indicator of "
+    "malicious intent.",
     Severity.CRITICAL,
     Category.HOOK_INJECTION,
-    "Rewrite the hook so its command is plain and short: remove `\\xNN` and `\\uNNNN` "
-    "escapes and nested `sh -c ... sh -c` chains, and move anything over 500 characters "
-    "into a script file in the repository that the hook calls by path, where it can be "
-    "reviewed.",
+    "Rewrite the hook so its command is plain: remove `\\xNN` and `\\uNNNN` escapes "
+    "and nested `sh -c ... sh -c` chains, and replace an embedded base64 blob (64 or "
+    "more letters, digits, `+` or `=` in a row, mixing upper case, lower case and "
+    "digits) with the command it encodes, or with a script file in the repository "
+    "that the hook calls by path, where it can be reviewed. Length alone does not fire "
+    "the rule.",
     sarif_name="HookObfuscatedPayload",
     owasp_agentic_references=["ASI05"],
     adversa_references=["ADV-OBFUSC-02"],
     limitations=(
-        "Matches `\\x41` and `\\u0041` escapes, `sh -c` twice in one command (inside "
-        "`bash -c` too), and a command longer than 500 characters. The same text "
-        "written as bash octal escapes (`$'\\143\\165\\162\\154'`) or reassembled from "
-        "shell variables (`$a$b`) is not matched. A hook nested under an entry's own "
-        "`hooks` array, the shape Claude Code documents, is not read."
+        "Matches `\\x41` and `\\u0041` escapes, `sh -c` twice in one command "
+        "(inside `bash -c` too), and an unbroken run of 64 or more letters, digits, "
+        "`+` or `=` that mixes upper case, lower case and digits, as base64 does. A "
+        "hex digest (an image pinned `@sha256:`) and a long readable command are not "
+        "reported, and a base64 blob whose `/` characters split it into runs shorter "
+        "than 64 is missed. The same text written as bash octal escapes (`$'\\143\\165\\162\\154'`) or reassembled from "
+        "shell variables (`$a$b`) is not matched. Hooks a plugin ships in "
+        "`hooks/hooks.json` are not read."
     ),
 )
 
@@ -1290,13 +1317,13 @@ _r(
     owasp_agentic_references=["ASI05"],
     adversa_references=["ADV-EXFIL-02"],
     limitations=(
-        "Matches a reader command (cat, head, tail, less, more, grep, sed, awk) "
-        "followed, anywhere later in the command, by text ending in a lower-case .py, "
-        ".js, .ts, .go, .rs, .java, .rb, .c, .cpp or .h, or a `< file` redirect from "
-        "one. Archiving or copying source (`tar czf out.tgz src/`, `cp src/main.py "
+        "Matches a file a reader command reads: an operand of cat, head, tail, less or "
+        "more, a file operand of grep, sed or awk (never the pattern or program), or a "
+        "`< file` redirect, ending in a lower-case .py, .js, .ts, .go, .rs, .java, "
+        ".rb, .c, .cpp or .h, also inside `sh -c`. A pattern that names an extension "
+        "(`grep '\\.py$'`) is not a read. Archiving or copying source (`tar czf out.tgz src/`, `cp src/main.py "
         "out/`) and reading a file of another type (`cat src/App.tsx`) are not "
-        "matched. A hook nested under an entry's own `hooks` array, the shape Claude "
-        "Code documents, is not read."
+        "matched. Hooks a plugin ships in `hooks/hooks.json` are not read."
     ),
 )
 
@@ -1338,10 +1365,12 @@ _r(
     owasp_agentic_references=["ASI03"],
     adversa_references=["ADV-REDIRECT-01"],
     limitations=(
-        "Tests the `env.ANTHROPIC_BASE_URL` value with a plain substring check for "
-        "`anthropic.com`. A proxy whose URL merely contains that text, such as "
-        "`https://anthropic.com.attacker.example/v1`, is treated as Anthropic's own "
-        "endpoint."
+        "Parses `env.ANTHROPIC_BASE_URL` in `.claude/settings.json` and "
+        "`.claude/settings.local.json` at the root of the scanned directory and accepts "
+        "it when the host is `anthropic.com` or a subdomain of it, whatever the "
+        "scheme, so a cleartext `http://api.anthropic.com/v1` passes. The same "
+        "override in the settings file of a subdirectory "
+        "(`packages/web/.claude/settings.json`) is not read."
     ),
 )
 
@@ -2417,11 +2446,11 @@ _r(
     owasp_agentic_references=["ASI07"],
     adversa_references=["ADV-TRANSPORT-01"],
     limitations=(
-        "Reads the `url` field of each server under `mcpServers` and flags `http://` "
-        "and `ws://` unless the host is localhost, 127.0.0.1, 0.0.0.0 or ::1. A "
-        "cleartext URL passed as an argument to a bridge command (`npx mcp-remote "
-        "http://...`) is not a `url` field and is not read. VS Code's "
-        "`.vscode/mcp.json` keeps its servers under `servers`, which is not read."
+        "Reads the `url` field of each server under `mcpServers`, or `servers` in VS "
+        "Code's `.vscode/mcp.json`, and flags `http://` and `ws://` unless the host is "
+        "localhost, 127.0.0.1, 0.0.0.0 or ::1. A cleartext URL passed as an argument "
+        "to a bridge command (`npx mcp-remote http://...`) is not a `url` field and is "
+        "not read."
     ),
 )
 
@@ -2448,9 +2477,9 @@ _r(
     adversa_references=["ADV-TRANSPORT-02"],
     limitations=(
         "Matches `NODE_TLS_REJECT_UNAUTHORIZED=0` and any `SSL_CERT_FILE` in the `env` "
-        "block of a server under `mcpServers`. Other switches that turn certificate "
-        "checking off, such as `NPM_CONFIG_STRICT_SSL=false`, are not read. VS Code's "
-        "`.vscode/mcp.json` keeps its servers under `servers`, which is not read."
+        "block of a server under `mcpServers`, or `servers` in VS Code's "
+        "`.vscode/mcp.json`. Other switches that turn certificate checking off, such as "
+        "`NPM_CONFIG_STRICT_SSL=false`, are not read."
     ),
 )
 
@@ -2473,9 +2502,8 @@ _r(
     limitations=(
         "Fires on a server whose `url` contains `/sse` as a whole word (`/sse_events` "
         "does not count) or whose `transport` key is `sse`. A server declared with "
-        "`\"type\": \"sse\"`, the key Claude Code configs use, at a URL without a "
-        "whole-word `/sse` is not matched. VS Code's `.vscode/mcp.json` keeps its "
-        "servers under `servers`, which is not read."
+        "`\"type\": \"sse\"`, the key Claude Code and VS Code configs use, at a URL "
+        "without a whole-word `/sse` is not matched."
     ),
 )
 
@@ -2501,8 +2529,7 @@ _r(
         "Looks for `?` or `&` followed by token, key, api_key, apikey, secret, auth, "
         "access_token or session_token and `=` in the server `url`. Other parameter "
         "names (`?api-key=`, `?jwt=`) and a credential carried in the URL path "
-        "(`/s/abc123/mcp`) are not matched. VS Code's `.vscode/mcp.json` keeps its "
-        "servers under `servers`, which is not read."
+        "(`/s/abc123/mcp`) are not matched."
     ),
 )
 
@@ -5328,12 +5355,17 @@ _r(
     incident_references=["OX-MCP-2026-04-15"],
     limitations=(
         "A Python value counts as caller input when it is named stdin, request, req, "
-        "event, params, tool_input, input_data, args or payload; a tool's own "
-        "parameters are added only when the decorator is written without parentheses "
-        "(`@mcp.tool`), so `run(command)` under `@mcp.tool()` is missed. The sinks are "
-        "calls whose last name is run, call, Popen, check_call, check_output, system, "
-        "popen, exec or eval (plus `os.execv` and `os.execvp`), so "
-        "`asyncio.create_subprocess_shell` is not one. In TypeScript a command counts "
+        "event, params, tool_input, input_data, args or payload, or is a parameter of "
+        "a function whose decorator name ends in `tool` (`@mcp.tool`, `@mcp.tool()`, "
+        "`@server.call_tool()`). The sinks are the `subprocess` run, call, Popen, "
+        "check_call and check_output calls, `os.system`, `os.popen`, `os.execv`, "
+        "`os.execvp`, `commands.getoutput`, `eval` and `exec`, also under an imported "
+        "name (`import subprocess as sp`, `from subprocess import run`), and a call "
+        "whose last name is run, call, Popen, check_call, check_output, system, popen, "
+        "exec or eval on a receiver whose name says executor (shell, process, sandbox, "
+        "terminal, command, runner and similar). So `asyncio.create_subprocess_shell` "
+        "is not one, and neither is an executor behind a short name, such as Fabric's "
+        "`c.run(cmd)`. In TypeScript a command counts "
         "as request-derived only when its text contains req, request, body, params, "
         "event, stdin or tool_input, so a destructured tool argument (`exec(`git log "
         "${branch}`)`) is not."
@@ -8090,8 +8122,11 @@ _r(
         "argument is exactly `-c`, `-e`, `-eval` or `--eval`, or when any argument "
         "contains `{{...}}`, `%s` or a `${...}` that is not exactly `${NAME}` (a "
         "letter or underscore, then letters, digits or underscores), such as "
-        "`x-${KEY}`, `${KEY:-x}` or `${input:id}`. Combined short flags (`bash -lc "
-        "\"...\"`) and other shells (`zsh -c`) are not matched."
+        "`x-${KEY}` or `${KEY:-x}`; a VS Code variable (`${workspaceFolder}`, "
+        "`${userHome}`, `${env:...}`, `${input:...}` and the others VS Code "
+        "documents) does not count, since VS Code substitutes it itself. Combined "
+        "short flags (`bash -lc \"...\"`) and other shells (`zsh -c`) are not "
+        "matched."
     ),
 )
 
@@ -12043,9 +12078,10 @@ _r(
     # a scanner cannot substantiate is worse than a blank.
     limitations=(
         "Checks the JSON type of `args`, `command`, `env` and `url` on each entry of "
-        "an `mcpServers` object. A config whose `mcpServers` is an array, a server "
-        "entry that is a bare string, a wrong-typed `headersHelper`, and any server "
-        "under `servers` in VS Code's `.vscode/mcp.json` are skipped without a finding."
+        "an `mcpServers` object, or of the `servers` object in VS Code's "
+        "`.vscode/mcp.json`. A config whose `mcpServers` is an array, a server entry "
+        "that is a bare string, and a wrong-typed `headersHelper` are skipped without a "
+        "finding."
     ),
 )
 

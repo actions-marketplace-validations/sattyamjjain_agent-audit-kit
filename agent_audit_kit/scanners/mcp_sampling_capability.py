@@ -34,29 +34,26 @@ import yaml
 
 from agent_audit_kit.models import Finding
 
-from ._helpers import in_skip_dir, find_line_number, make_finding
-
-_PY_SDK_NAMES = (
-    "mcp",
-    "modelcontextprotocol",
-    "model-context-protocol",
+from ._helpers import (
+    declares_mcp_sdk,
+    find_line_number,
+    in_skip_dir,
+    iter_mcp_servers,
+    make_finding,
 )
-_TS_SDK_NAMES = (
-    "@modelcontextprotocol/sdk",
-    "@anthropic-ai/mcp",
-    "@anthropic-ai/claude-agent-sdk",
-)
-_JAVA_SDK_TOKEN = "io.modelcontextprotocol"
-_RUST_SDK_TOKENS = ("mcp", "modelcontextprotocol")
 
 _LANG_EXTS = (".py", ".ts", ".tsx", ".js", ".mjs", ".cjs", ".java", ".kt", ".rs")
 
 # Markers that prove the repo participates in MCP sampling. Each pattern is
 # scoped tightly enough that bare prose mentioning "sampling" won't fire.
 _SAMPLING_MARKERS = (
-    # Server / client capability declarations.
-    re.compile(r"capabilities\s*[:=]\s*\{[^}]*sampling\s*[:=]"),
-    re.compile(r"ServerCapabilities\s*\([^)]*sampling\s*="),
+    # Server / client capability declarations. The scan to `sampling` also stops
+    # at the next `capabilities` / `ServerCapabilities`, so each opener reads only
+    # up to the next one: with a bare `[^}]*`, every opener in a file of repeated
+    # `capabilities: {` rescanned to the first `}`, and 400,000 characters took
+    # 4.4 seconds, four times the 200,000-character time.
+    re.compile(r"capabilities\s*[:=]\s*\{(?:(?!capabilities)[^}])*sampling\s*[:=]"),
+    re.compile(r"ServerCapabilities\s*\((?:(?!ServerCapabilities)[^)])*sampling\s*="),
     re.compile(r"SamplingCapability\s*\("),
     # Request schemas — server-side handler installation.
     re.compile(r"CreateMessageRequestSchema"),
@@ -95,77 +92,6 @@ _MCP_CONFIG_FILES = (
     ".kiro/mcp.json",
     "mcp.json",
 )
-
-
-def _declares_sdk(project_root: Path) -> tuple[bool, list[str]]:
-    """Returns (any_sdk_declared, list_of_manifest_relpaths). Mirrors the
-    helper in `mcp_sdk_hardening.py`."""
-    manifests: list[str] = []
-    declared = False
-
-    pyproject = project_root / "pyproject.toml"
-    if pyproject.is_file():
-        try:
-            text = pyproject.read_text(encoding="utf-8", errors="replace")
-        except OSError:
-            text = ""
-        if any(f'"{n}"' in text or f"'{n}'" in text for n in _PY_SDK_NAMES):
-            declared = True
-            manifests.append("pyproject.toml")
-
-    for req in project_root.glob("requirements*.txt"):
-        try:
-            text = req.read_text(encoding="utf-8", errors="replace")
-        except OSError:
-            continue
-        for line in text.splitlines():
-            name = (
-                line.split("#", 1)[0].strip().split("[")[0]
-                .split("=")[0].split(">")[0].split("<")[0].strip()
-            )
-            if name in _PY_SDK_NAMES:
-                declared = True
-                manifests.append(str(req.relative_to(project_root)))
-                break
-
-    pkg = project_root / "package.json"
-    if pkg.is_file():
-        try:
-            data = json.loads(pkg.read_text(encoding="utf-8", errors="replace"))
-        except json.JSONDecodeError:
-            data = {}
-        if isinstance(data, dict):
-            for section in ("dependencies", "devDependencies", "peerDependencies"):
-                deps = data.get(section) or {}
-                if isinstance(deps, dict) and any(n in deps for n in _TS_SDK_NAMES):
-                    declared = True
-                    manifests.append("package.json")
-                    break
-
-    for maven in ("pom.xml", "build.gradle", "build.gradle.kts"):
-        p = project_root / maven
-        if p.is_file():
-            try:
-                text = p.read_text(encoding="utf-8", errors="replace")
-            except OSError:
-                continue
-            if _JAVA_SDK_TOKEN in text:
-                declared = True
-                manifests.append(maven)
-
-    cargo = project_root / "Cargo.toml"
-    if cargo.is_file():
-        try:
-            text = cargo.read_text(encoding="utf-8", errors="replace")
-        except OSError:
-            text = ""
-        for tok in _RUST_SDK_TOKENS:
-            if re.search(rf"^\s*{re.escape(tok)}\s*=", text, re.MULTILINE):
-                declared = True
-                manifests.append("Cargo.toml")
-                break
-
-    return declared, manifests
 
 
 def _sampling_hits(project_root: Path) -> list[tuple[Path, int]]:
@@ -243,14 +169,9 @@ def _config_sampling_findings(project_root: Path) -> tuple[list[Finding], set[st
             data = json.loads(raw)
         except json.JSONDecodeError:
             continue
-        if not isinstance(data, dict):
-            continue
-        servers = data.get("mcpServers")
-        if not isinstance(servers, dict):
-            continue
-        for server_name, cfg in servers.items():
-            if not isinstance(cfg, dict):
-                continue
+        # `mcpServers`, and the `servers` map of VS Code's .vscode/mcp.json, a
+        # file this list names but whose servers were never read.
+        for server_name, cfg in iter_mcp_servers(data):
             caps = cfg.get("capabilities")
             declares_sampling = False
             if isinstance(caps, list) and "sampling" in caps:
@@ -289,7 +210,7 @@ def scan(project_root: Path) -> tuple[list[Finding], set[str]]:
     scanned.update(cfg_scanned)
 
     # 2) Source-side participation: only fires when an SDK is declared.
-    declared, manifests = _declares_sdk(project_root)
+    declared, manifests = declares_mcp_sdk(project_root)
     if not declared:
         return findings, scanned
     for m in manifests:
