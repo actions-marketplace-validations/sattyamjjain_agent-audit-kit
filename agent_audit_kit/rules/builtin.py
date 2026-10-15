@@ -398,12 +398,14 @@ _r(
     "Remote MCP server without authentication",
     "An MCP server uses HTTP transport (url field) without a recognized "
     "authentication or access-control header. Recognized schemes are "
-    "Authorization / Bearer, X-API-Key / Api-Key, the custom X-*-Key / *-API-Key "
-    "credential-header family, and the x402 X-PAYMENT gate, declared via an "
-    "env/template reference (e.g. ${API_KEY}). A custom auth header carrying a "
-    "hardcoded literal secret still fires — the credential is exposed in the "
-    "config, so the endpoint is effectively unprotected. Unauthenticated remote "
-    "servers can be MITM'd or spoofed.",
+    "Authorization / Bearer, X-API-Key / Api-Key, the custom credential-header "
+    "family (X-*-Key, *-API-Key, *_API_KEY, *-Subscription-Key and similar), and "
+    "the x402 X-PAYMENT gate, declared via an env/template reference (e.g. "
+    "${API_KEY}). A custom auth header carrying a hardcoded literal secret still "
+    "fires — the credential is exposed in the config, so the endpoint is "
+    "effectively unprotected. A server on a loopback host (localhost, "
+    "127.0.0.0/8, ::1, 0.0.0.0) is not reported. Unauthenticated remote servers "
+    "can be MITM'd or spoofed.",
     Severity.CRITICAL,
     Category.MCP_CONFIG,
     "Add OAuth 2.1 bearer token or API key header authentication (reference the "
@@ -417,8 +419,9 @@ _r(
         "Code's `.vscode/mcp.json`, and looks for an `Authorization`, `Bearer`, "
         "`X-API-Key` or `API-Key` header, or for one of a "
         "fixed family of custom credential headers (`X-*-Key`, `X-*-Token` but not "
-        "`X-CSRF-Token` or `X-XSRF-Token`, `X-*-Secret`, `*-API-Key`, `*-API-Token`, "
-        "`*-Access-Key`, `*-Client-Secret`, `ApiKey`, `X-Auth-Token`, "
+        "`X-CSRF-Token` or `X-XSRF-Token`, `X-*-Secret`, a name ending in `-API-Key`, "
+        "`_API_KEY` or `ApiKey`, `*-API-Token`, `*-Access-Key`, `*-Client-Secret`, "
+        "`*-Subscription-Key`, `X-Auth-Token`, "
         "`X-Access-Token`, `X-Payment`) whose value is empty or blank, or contains a "
         "`${VAR}`, `$VAR`, `{{VAR}}`, `<VAR>` or `%VAR%` reference, your, change-me "
         "(also change_me and change me), changeme, placeholder, redacted, dummy or "
@@ -427,7 +430,9 @@ _r(
         "`\"X-Foo-Key\": \"\"` and `\"k9f2-example-77a1\"` both count as a declared "
         "scheme. A remote URL given any other way is not examined: as an argument to a "
         "bridge (`npx mcp-remote https://...`) or under another key such as "
-        "`serverUrl`."
+        "`serverUrl`. A server on a loopback host (localhost, 127.0.0.0/8, ::1 or "
+        "0.0.0.0) is not reported, though one that checks no `Origin` header can still "
+        "be reached from a web page through DNS rebinding."
     ),
 )
 
@@ -465,9 +470,8 @@ _r(
     "Secrets in project-scoped MCP config are committed to git.",
     Severity.HIGH,
     Category.MCP_CONFIG,
-    "Replace the literal value with a reference of the form `${NAME}`, which is the "
-    "only form this rule accepts, set `NAME` in your shell or secrets manager, and "
-    "rotate the secret if it was ever committed.",
+    "Replace the literal value with a reference of the form `${NAME}`, set `NAME` in "
+    "your shell or secrets manager, and rotate the secret if it was ever committed.",
     sarif_name="McpEnvExposesSecrets",
     owasp_mcp_references=["MCP01:2025"],
     owasp_agentic_references=["ASI03"],
@@ -478,7 +482,15 @@ _r(
         "the variable name contains KEY, SECRET, TOKEN, PASSWORD, CREDENTIAL, "
         "ANTHROPIC, OPENAI or AWS_. A literal secret in `headers` (`Authorization: "
         "Bearer ...`) or inside a connection string under another name "
-        "(`DATABASE_URL=postgres://user:pass@host/db`) is not matched."
+        "(`DATABASE_URL=postgres://user:pass@host/db`) is not matched. A value is "
+        "taken for a setting or a dummy, and not reported, when it is under six "
+        "characters, holds a `${...}`, `{{...}}` or `<...>` reference or a "
+        "placeholder word (your, change-me, placeholder, redacted, dummy, example, "
+        "sample, `_here`, four x's), is under 40 characters and contains test, demo, "
+        "password, 1234 or abcd, or sits under a name ending in `_NAME`, `_ID` or "
+        "`_TOKENS` or containing `TOKENIZER`; so a short real password "
+        "(`DB_PASSWORD=Kq7#v`) and a 32-character hex key that happens to contain "
+        "`abcd` pass."
     ),
 )
 
@@ -590,24 +602,29 @@ _r(
 
 _r(
     "AAK-MCP-009",
-    "MCP server URL points to localhost/internal network",
-    "The MCP server URL points to localhost or internal network addresses, "
-    "which may expose internal services (SSRF pattern).",
+    "MCP server URL contains an internal network address",
+    "The MCP server URL contains a private-range address (10.x, 172.16-31.x, "
+    "192.168.x), a `.local` name, or a loopback address (localhost, 127.0.0.1, "
+    "0.0.0.0, ::1) somewhere other than its own host, such as a proxy target in "
+    "the query, which may expose internal services (SSRF pattern). A server whose "
+    "own host is loopback is not reported.",
     Severity.HIGH,
     Category.MCP_CONFIG,
     "Confirm you run and trust the server at that address. If it should not be there, "
     "remove the entry or point `url` at the intended public HTTPS endpoint. If it is "
-    "deliberate (a local dev server or a sidecar), accept it by listing `AAK-MCP-009` "
-    "under `exclude-rules` in `.agent-audit-kit.yml`, with a comment saying why. The "
-    "rule matches `localhost`, loopback, RFC 1918 private addresses and `.local` hosts.",
+    "deliberate (a dev server on your LAN or a sidecar), accept it by listing "
+    "`AAK-MCP-009` under `exclude-rules` in `.agent-audit-kit.yml`, with a comment "
+    "saying why. The rule matches RFC 1918 private addresses, `.local` hosts, and a "
+    "loopback address anywhere in the URL except its own host.",
     sarif_name="McpLocalhostInternalUrl",
     owasp_mcp_references=["MCP09:2025"],
     adversa_references=["ADV-SSRF-01"],
     limitations=(
-        "Looks in the server `url` for localhost, 127.0.0.1, 0.0.0.0, ::1, the 10.x, "
-        "172.16-31.x and 192.168.x ranges and a `.local` name. Other internal "
-        "addresses are not matched: a name such as `mcp.corp.internal` or the shared "
-        "range 100.64.0.0/10."
+        "Looks in the server `url` for the 10.x, 172.16-31.x and 192.168.x ranges, a "
+        "`.local` name, or the text localhost, 127.0.0.1, 0.0.0.0 or ::1; a URL whose "
+        "own host is loopback (localhost, 127.0.0.0/8, ::1 or 0.0.0.0) is not "
+        "reported. Other internal addresses are not matched: a name such as "
+        "`mcp.corp.internal` or the shared range 100.64.0.0/10."
     ),
 )
 
@@ -2428,7 +2445,7 @@ _r(
     "one -- the handshake headers and every frame after them are on the "
     "wire in clear. **Does not apply to: `https://`, `wss://` (encrypted), "
     "or `stdio` (no URL, no network hop).** Loopback URLs "
-    "(`localhost`, `127.0.0.1`, `0.0.0.0`, `::1`) are excluded on either "
+    "(`localhost`, `127.0.0.0/8`, `::1`, `0.0.0.0`) are excluded on either "
     "scheme, since the traffic does not leave the host.",
     Severity.CRITICAL,
     Category.TRANSPORT_SECURITY,
@@ -2450,7 +2467,7 @@ _r(
     limitations=(
         "Reads the `url` field of each server under `mcpServers`, or `servers` in VS "
         "Code's `.vscode/mcp.json`, and flags `http://` and `ws://` unless the host is "
-        "localhost, 127.0.0.1, 0.0.0.0 or ::1. A cleartext URL passed as an argument "
+        "loopback (localhost, 127.0.0.0/8, ::1) or 0.0.0.0. A cleartext URL passed as an argument "
         "to a bridge command (`npx mcp-remote http://...`) is not a `url` field and is "
         "not read."
     ),
@@ -2490,8 +2507,8 @@ _r(
     "Deprecated SSE transport in use",
     "An MCP server uses deprecated Server-Sent Events (SSE) transport instead of "
     "Streamable HTTP. "
-    "**Applies to: `sse` only** -- matched from an explicit "
-    "`\"transport\": \"sse\"` or a `/sse` path in the URL. "
+    "**Applies to: `sse` only** -- matched from an explicit `\"type\": \"sse\"` "
+    "or `\"transport\": \"sse\"` (any case), or a `/sse` path in the URL. "
     "**Does not apply to: `stdio`, `http`/`streamable-http`, or `ws`/`wss`.** "
     "WebSocket is a different transport, not a deprecated one: it is outside "
     "this rule rather than silently passing it.",
@@ -2502,10 +2519,10 @@ _r(
     owasp_agentic_references=["ASI07"],
     adversa_references=["ADV-TRANSPORT-03"],
     limitations=(
-        "Fires on a server whose `url` contains `/sse` as a whole word (`/sse_events` "
-        "does not count) or whose `transport` key is `sse`. A server declared with "
-        "`\"type\": \"sse\"`, the key Claude Code and VS Code configs use, at a URL "
-        "without a whole-word `/sse` is not matched."
+        "Fires once per server, on a `type` or `transport` key set to `sse` in any "
+        "case, or else on a `url` that contains `/sse` as a whole word (`/sse_events` "
+        "does not count). A server that names SSE only under another key, such as "
+        "`transportType`, at a URL without a whole-word `/sse` is not matched."
     ),
 )
 

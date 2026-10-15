@@ -2,9 +2,9 @@
 """AAK-MCP-001 measurement, Steps 0 and 1: offline, deterministic, no LLM.
 
 ``AAK-MCP-001`` fires CRITICAL on every URL server whose config carries no
-recognized auth header. It is also the State of MCP report's headline: 1,201 of
-2,303 configs, and all of them among the 1,213 (52.7%) that carry a critical
-finding. A hosted server that follows the MCP authorization specification puts
+recognized auth header. It is also the State of MCP report's headline: in report
+v1.0, 1,201 of 2,303 configs, all of them among the 1,213 (52.7%) that carry a
+critical finding. A hosted server that follows the MCP authorization specification puts
 no credential in the config at all, because the client runs OAuth at connect
 time, so its correct config fires too. This module measures how much of the
 headline rests on that. It does not change the rule.
@@ -73,6 +73,7 @@ if str(REPO) not in sys.path:
 
 from agent_audit_kit.redaction import redact_evidence  # noqa: E402
 from agent_audit_kit.scanners import mcp_config  # noqa: E402
+from agent_audit_kit.scanners._helpers import is_loopback_url, iter_mcp_servers  # noqa: E402
 
 RESEARCH = REPO / "research" / "state-of-mcp-2026"
 DEFAULT_MANIFEST = RESEARCH / "corpus" / "registry-manifest.json"
@@ -152,8 +153,12 @@ def hit_id(content_key: str, server_name: str) -> str:
 def hits_for(text: str) -> list[tuple[str, dict[str, Any], str]]:
     """``(server_name, entry, url)`` for every entry AAK-MCP-001 fires on.
 
-    Uses the rule's own helpers (`mcp_config._as_str`, `_server_declares_auth`)
-    on the same parse the scanner makes, so this is the predicate, not a copy.
+    Uses the rule's own helpers (`mcp_config._as_str`, `_server_declares_auth`,
+    `is_loopback_url`) on the server maps the scanner reads
+    (`iter_mcp_servers`: `mcpServers`, then VS Code's `servers`), so this is the
+    predicate, not a copy. The rule has exempted a loopback host since report
+    v1.1; without that exemption here the population held hits the engine no
+    longer emits, and the run stopped on the mismatch below.
     """
     if len(text) > _MAX_CONFIG_BYTES:
         return []
@@ -161,16 +166,12 @@ def hits_for(text: str) -> list[tuple[str, dict[str, Any], str]]:
         data = json.loads(text)
     except ValueError:
         return []
-    servers = data.get("mcpServers", {}) if isinstance(data, dict) else {}
-    if not isinstance(servers, dict):
-        return []
     out: list[tuple[str, dict[str, Any], str]] = []
-    for name, entry in servers.items():
-        if not isinstance(entry, dict):
-            continue
+    for name, entry in iter_mcp_servers(data):
         url = mcp_config._as_str(entry.get("url", ""))
-        if url and not mcp_config._server_declares_auth(entry.get("headers", {})):
-            out.append((str(name), entry, url))
+        if (url and not is_loopback_url(url)
+                and not mcp_config._server_declares_auth(entry.get("headers", {}))):
+            out.append((name, entry, url))
     return out
 
 

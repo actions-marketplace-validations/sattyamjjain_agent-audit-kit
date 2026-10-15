@@ -200,7 +200,7 @@ def _write_vscode(root: Path, servers: Any) -> None:
     ("AAK-MCP-001", {"type": "http", "url": "https://mcp.example.com/mcp"}),
     ("AAK-MCP-002", {"type": "stdio", "command": "bash -c 'node server.js'"}),
     ("AAK-MCP-003", {"type": "stdio", "command": "node", "args": ["s.js"],
-                     "env": {"GITHUB_TOKEN": "example-token-value"}}),
+                     "env": {"GITHUB_TOKEN": "k9f2Lq7XvN3mR8tW1zP5bY6cH0dJ4sA2"}}),
     ("AAK-MCP-005", {"type": "stdio", "command": "npx", "args": ["-y", "@acme/mcp-server@1.0.0"]}),
     ("AAK-MCP-006", {"type": "stdio", "command": "my-mcp-server"}),
     ("AAK-MCP-007", {"type": "stdio", "command": "npx", "args": ["-y", "@acme/mcp-server"]}),
@@ -336,6 +336,41 @@ def test_no_module_reads_both_server_maps_by_hand() -> None:
     assert not offenders, f"read the server maps with _helpers.iter_mcp_servers: {offenders}"
 
 
+# ---------------------------------------------------------------------------
+# A loopback server is the developer's own process. AAK-MCP-001 reported it as a
+# remote server without authentication (CRITICAL) and AAK-MCP-009 again as an
+# internal network address: 51 findings on 190 real `.vscode/mcp.json` files,
+# none a true positive.
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.parametrize("url", [
+    "http://localhost:8001/mcp",
+    "https://localhost/mcp",
+    "http://127.0.0.1:3000/mcp",
+    "http://127.0.0.2/mcp",
+    "http://[::1]:9000/mcp",
+    "http://0.0.0.0:8080/mcp",
+    "http://LOCALHOST.:8001/mcp",
+    "http://localhost\\@evil.example/mcp",  # Node reads `\` as `/`: the host is localhost
+])
+def test_a_loopback_server_is_not_remote_or_internal(tmp_path: Path, url: str) -> None:
+    _write_vscode(tmp_path, {"local": {"type": "http", "url": url}})
+    ids = {f.rule_id for f in scan(tmp_path)[0]}
+    assert not ids & {"AAK-MCP-001", "AAK-MCP-009"}
+
+
+@pytest.mark.parametrize(("url", "rules"), [
+    ("http://localhost.evil.example/mcp", {"AAK-MCP-001", "AAK-MCP-009"}),
+    ("http://evil.example\\@localhost/mcp", {"AAK-MCP-001", "AAK-MCP-009"}),  # the host is evil.example
+    ("http://127.0.0.1.nip.io/mcp", {"AAK-MCP-001", "AAK-MCP-009"}),
+    ("http://192.168.1.20:8080/mcp", {"AAK-MCP-001", "AAK-MCP-009"}),
+])
+def test_a_host_that_only_looks_local_still_fires(tmp_path: Path, url: str, rules: set[str]) -> None:
+    _write_vscode(tmp_path, {"remote": {"type": "http", "url": url}})
+    assert rules <= {f.rule_id for f in scan(tmp_path)[0]}
+
+
 @pytest.mark.parametrize("command", [
     "${workspaceFolder}/run.sh",
     "${userHome}/go/bin/tool",
@@ -420,3 +455,80 @@ def test_mcp_001_reads_a_custom_header_value_as_a_reference_or_a_literal(
     (tmp_path / ".mcp.json").write_text(json.dumps({"mcpServers": {"api": server}}), encoding="utf-8")
     rule_ids = {f.rule_id for f in scan(tmp_path)[0]}
     assert ("AAK-MCP-001" not in rule_ids) is declared
+
+
+# ---------------------------------------------------------------------------
+# AAK-MCP-003 asks whether a literal under a secret-looking name is a secret.
+# On 190 real `.vscode/mcp.json` files it reported settings and demo literals
+# as hardcoded secrets; its three true positives were 44 to 139 characters.
+# ---------------------------------------------------------------------------
+
+_TOKEN_SHAPED = "k9f2Lq7XvN3mR8tW1zP5bY6cH0dJ4sA2nE8uG3iT7oV1"
+
+
+def _mcp_003(root: Path, env: dict[str, str]) -> list[str]:
+    (root / ".mcp.json").write_text(
+        json.dumps({"mcpServers": {"s": {"command": "node", "args": ["s.js"], "env": env}}}),
+        encoding="utf-8",
+    )
+    return [f.evidence for f in scan(root)[0] if f.rule_id == "AAK-MCP-003"]
+
+
+@pytest.mark.parametrize("env", [
+    {"API_KEY": _TOKEN_SHAPED},
+    {"SERVICE_ACCESS_TOKEN": "pat-" + _TOKEN_SHAPED},
+    {"SERVICE_SECRET_KEY": "live-test-" + _TOKEN_SHAPED},  # a marker in a long value does not count
+    {"DB_PASSWORD": "S3cr$tValue!9"},                      # a `$` in a literal is not a reference
+    {"SERVICE_API_KEY": "9b2d6c1e-7f3a-4e0b-9c5d-2a8f1e6b3c4d"},  # a UUID key stays reported
+])
+def test_mcp_003_a_credential_shaped_literal_fires(tmp_path: Path, env: dict[str, str]) -> None:
+    assert _mcp_003(tmp_path, env) == [f"Server 's' env.{next(iter(env))} = (hardcoded value)"]
+
+
+@pytest.mark.parametrize("env", [
+    {"AWS_DOCUMENTATION_PARTITION": "aws"},          # too short to be a credential
+    {"PROXMOX_TOKEN_NAME": "automation"},            # the key names a setting
+    {"ROBOTMCP_MAX_INLINE_TOKENS": "2000"},
+    {"ROBOTMCP_TOKENIZER": "tiktoken"},
+    {"KEY_VAULT_ID": "vault-prod-weu-01"},
+    {"SAP_PASSWORD": "MyPassword12"},                # a demo string
+    {"AZURE_AI_FOUNDRY_KEY": "test-foundry-key-1234"},
+    {"OPENAI_API_KEY": "<your-openai-key>"},          # placeholders and references
+    {"GITHUB_TOKEN": "your_token_here"},
+    {"API_TOKEN": "Bearer ${API_TOKEN}"},
+    {"ANTHROPIC_API_KEY": "sk-ant-xxxxxxxxxxxx"},
+])
+def test_mcp_003_a_setting_dummy_or_placeholder_is_quiet(tmp_path: Path, env: dict[str, str]) -> None:
+    assert _mcp_003(tmp_path, env) == []
+
+
+@pytest.mark.parametrize("opener", ["{{", "${", "<"])
+def test_mcp_003_a_crafted_value_scans_in_linear_time(tmp_path: Path, opener: str) -> None:
+    """Openers with no closer must not make the placeholder search quadratic. With
+    `[^}]*` every opener rescanned to the end of the value: 40,000 `{{` took two
+    seconds, and this size took between half a minute and two minutes per case.
+    The bound is loose for slow CI runners; the linear search takes milliseconds."""
+    import time
+
+    started = time.perf_counter()
+    evidence = _mcp_003(tmp_path, {"API_KEY": opener * 300_000})
+    assert time.perf_counter() - started < 10.0
+    assert evidence == ["Server 's' env.API_KEY = (hardcoded value)"]
+
+
+@pytest.mark.parametrize(("url", "loopback"), [
+    ("http://localhost:8001/mcp", True),
+    ("http://127.10.20.30/", True),
+    ("http://[::1]/", True),
+    ("http://0.0.0.0:80/", True),
+    ("localhost:8080", True),
+    ("http://localhost.evil.example/", False),
+    ("http://10.0.0.5/", False),
+    ("http://[::ffff:10.0.0.5]/", False),
+    ("http://[::1/", False),
+    ("${input:host}", False),
+])
+def test_is_loopback_url(url: str, loopback: bool) -> None:
+    from agent_audit_kit.scanners._helpers import is_loopback_url
+
+    assert is_loopback_url(url) is loopback
