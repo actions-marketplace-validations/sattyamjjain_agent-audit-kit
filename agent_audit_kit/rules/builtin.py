@@ -1312,6 +1312,16 @@ _r(
     owasp_mcp_references=["MCP03:2025"],
     owasp_agentic_references=["ASI04"],
     adversa_references=["ADV-SUPPLY-03"],
+    limitations=(
+        "Reads the `mcpServers` entries of .mcp.json, .cursor/mcp.json, "
+        ".vscode/mcp.json, .amazonq/mcp.json and mcp.json at the project root, for "
+        "the launchers npx, uvx, bunx and pnpx, and counts any text after the "
+        "package's `@` as a version. A floating tag or range "
+        "(`some-mcp-server@latest`, `other-mcp-server@^1.0.0`) is therefore not "
+        "reported, nor is a `docker run` image tagged `latest`, a launcher outside "
+        "those four, or an entry under the `servers` key that VS Code uses in "
+        ".vscode/mcp.json."
+    ),
 )
 
 _r(
@@ -1325,6 +1335,14 @@ _r(
     owasp_mcp_references=["MCP03:2025", "MCP10:2025"],
     owasp_agentic_references=["ASI04"],
     adversa_references=["ADV-SUPPLY-04"],
+    limitations=(
+        "Reads package-lock.json, requirements*.txt and Pipfile.lock at the project "
+        "root against a fixed table of two packages, `axios` 1.7.0 to 1.7.3 and "
+        "`openclaw` below 2.1.0, plus three typosquat name patterns, so a "
+        "vulnerable version of any other package (`lodash` 4.17.15 in a lockfile) "
+        "is not reported. The npm check does not read yarn.lock or pnpm-lock.yaml, "
+        "and a package-lock.json in a sub-directory is not read."
+    ),
 )
 
 _r(
@@ -1339,6 +1357,18 @@ _r(
     owasp_mcp_references=["MCP03:2025"],
     owasp_agentic_references=["ASI04"],
     adversa_references=["ADV-SUPPLY-05"],
+    limitations=(
+        "Reads the `preinstall`, `install`, `postinstall` and `prepare` scripts of "
+        "the root package.json only, and reports one that names the whole word "
+        "curl, wget, fetch, nc, ncat, ssh, http, axios or request, or that does not "
+        "start with a known build tool. A script that starts with `node`, `npx`, "
+        "`tsc`, `webpack`, `rollup`, `esbuild` or `vite` is treated as safe, so "
+        "`npx --yes some-unreviewed-package` passes, and so does `node -e "
+        "\"require('https').get(...)\"`, because `https` is not the word `http`. The "
+        "install scripts of dependencies (a lockfile entry marked "
+        "`hasInstallScript`) and of a workspace package.json in a sub-directory are "
+        "not read."
+    ),
 )
 
 _r(
@@ -1353,6 +1383,15 @@ _r(
     owasp_mcp_references=["MCP03:2025"],
     owasp_agentic_references=["ASI04"],
     adversa_references=["ADV-SUPPLY-06"],
+    limitations=(
+        "Checks the project root only: a package.json needs a package-lock.json, "
+        "yarn.lock, pnpm-lock.yaml or bun.lockb, a pyproject.toml needs a "
+        "poetry.lock, uv.lock, Pipfile.lock or pdm.lock, a Pipfile needs a "
+        "Pipfile.lock and a Cargo.toml needs a Cargo.lock. A lockfile only has to "
+        "exist, so an empty one passes, a Python project that declares its "
+        "dependencies in requirements.txt alone is not checked, and neither is a "
+        "manifest in a sub-directory."
+    ),
 )
 
 _r(
@@ -1367,6 +1406,12 @@ _r(
     owasp_mcp_references=["MCP03:2025"],
     owasp_agentic_references=["ASI04"],
     adversa_references=["ADV-SUPPLY-07"],
+    limitations=(
+        "Counts the entries of the root package-lock.json, the root package itself "
+        "included, and the packages of the root Cargo.lock, and reports more than "
+        "200. A uv.lock or yarn.lock of any size and a package-lock.json in a "
+        "sub-directory are not counted."
+    ),
 )
 
 _r(
@@ -1380,6 +1425,15 @@ _r(
     owasp_mcp_references=["MCP03:2025"],
     owasp_agentic_references=["ASI04"],
     adversa_references=["ADV-SUPPLY-08"],
+    limitations=(
+        "Reads the `args` of the `mcpServers` entries in the root .mcp.json only, "
+        "and looks each `package@version` up in the npm section of the "
+        "vulnerability database, which bundles two packages: `axios` 1.7.0 to 1.7.3 "
+        "and `openclaw` below 2.1.0. The same package in package.json, in an MCP "
+        "config under `.cursor/` or `.vscode/`, or launched with `uvx "
+        "openclaw==2.0.0` is not read, and neither is a package that states no "
+        "version."
+    ),
 )
 
 # ---------------------------------------------------------------------------
@@ -3299,6 +3353,14 @@ _r(
     owasp_mcp_references=["MCP03:2025"],
     owasp_agentic_references=["ASI04"],
     adversa_references=["ADV-SUPPLY-04"],
+    limitations=(
+        "Checks only that each entry in the `plugins` list of a marketplace.json "
+        "has a key named `signature`, `integrity`, `sha256`, `sigstore` or "
+        "`publicKey`, not that the value is a signature or that it verifies, so "
+        "`\"signature\": \"TODO\"` passes. Plugins listed as an object instead of a "
+        "list are not read, and a manifest that is not valid JSON is skipped "
+        "without a finding."
+    ),
 )
 
 _r(
@@ -3315,6 +3377,12 @@ _r(
     owasp_mcp_references=["MCP03:2025"],
     owasp_agentic_references=["ASI04"],
     adversa_references=["ADV-SUPPLY-05"],
+    limitations=(
+        "Compares a plugin's `permissions` list with six exact strings: `fs:*`, "
+        "`shell:exec`, `network:*`, `credentials:*`, `env:*` and `*:*`. The same "
+        "grant spelled another way (`shell:*`, a bare `*`), in another case "
+        "(`SHELL:EXEC`), or given as an object instead of a list is not reported."
+    ),
 )
 
 _r(
@@ -3331,6 +3399,15 @@ _r(
     owasp_mcp_references=["MCP03:2025"],
     owasp_agentic_references=["ASI04"],
     adversa_references=["ADV-SUPPLY-06"],
+    limitations=(
+        "Compares a plugin name with 13 upstream names (anthropic, claude, "
+        "claude-code, claude-agent-sdk, mcp, model-context-protocol, langchain, "
+        "langchain-core, langgraph, openai, openai-agents-sdk, gemini, google-adk) "
+        "and reports one that is a single insertion, deletion, substitution or "
+        "adjacent swap away. A name that extends an upstream (`claude-code-pro`, "
+        "`anthropic-official`) or sits two edits away (`antrhopik`) is not "
+        "reported."
+    ),
 )
 
 _r(
@@ -3348,6 +3425,13 @@ _r(
     owasp_mcp_references=["MCP03:2025"],
     owasp_agentic_references=["ASI04"],
     adversa_references=["ADV-SUPPLY-07"],
+    limitations=(
+        "Judges a plugin's `source` only when it is an object with a `ref`, "
+        "`branch` or `tag` that is not 7 to 40 hex characters. A source with no ref "
+        "at all, which follows the default branch, a source written as a string "
+        "(`github:acme/tool@main`) and an all-digit tag such as `20260101`, which "
+        "reads as a short commit hash, are not reported."
+    ),
 )
 
 # ---------------------------------------------------------------------------
@@ -4569,6 +4653,16 @@ _r(
     owasp_agentic_references=["ASI04"],
     adversa_references=["ADV-SUPPLY-08"],
     auto_fixable=True,
+    limitations=(
+        "The pin reads requirements.txt, requirements-dev.txt, "
+        "requirements-prod.txt and dev-requirements.txt at the project root, on a "
+        "line that starts with `mcp-neo4j-cypher` and a version below 0.6.0. A name "
+        "with extras, an unpinned line, pyproject.toml, uv.lock, "
+        "`requirements/base.txt` and a `uvx mcp-neo4j-cypher==0.5.0 --read-only` "
+        "launcher in .mcp.json are not read. The source arm needs `read_only = "
+        "True` and a `CALL apoc.` or `runWrite` reference in the same Python file, "
+        "so a query kept in another module is not matched."
+    ),
 )
 
 # ---------------------------------------------------------------------------
@@ -4654,6 +4748,14 @@ _r(
     sarif_name="McpServerNoSecurityMd",
     owasp_mcp_references=["MCP03:2025"],
     owasp_agentic_references=["ASI04"],
+    limitations=(
+        "Treats a repository as an MCP server only when `mcp` appears in the name "
+        "or keywords of the root pyproject.toml, package.json or "
+        ".claude-plugin/marketplace.json. A server named without it (an "
+        "`acme-tools` package whose keyword is `model-context-protocol` and which "
+        "depends on the SDK), one declared in Cargo.toml or go.mod, and a "
+        "package.json in a sub-directory are not recognised."
+    ),
 )
 
 
@@ -4756,6 +4858,18 @@ _r(
     owasp_agentic_references=["ASI02"],
     adversa_references=["ADV-RCE-04"],
     auto_fixable=True,
+    limitations=(
+        "The version arm reads `flowise` and `flowise-components` under "
+        "`dependencies`, `devDependencies` and `peerDependencies` of the root "
+        "package.json only, and reports a range whose first version is below 3.1.3. "
+        "package-lock.json, yarn.lock, pnpm-lock.yaml, `optionalDependencies`, "
+        "`overrides`, a sub-directory package.json, an `npx flowise` launcher in "
+        ".mcp.json and a `flowiseai/flowise` image tag in a compose file are not "
+        "read. The flow arm reads `.flowise/*.json`, `flows/*.json` and "
+        "`flows/**/*.json` that mention MCP and carry a `customFunction`, `runCode` "
+        "or `executeCommand` key, so an export saved as `chatflows/export.json` is "
+        "not reported."
+    ),
 )
 
 
@@ -4805,6 +4919,17 @@ _r(
     owasp_mcp_references=["MCP05:2025"],
     owasp_agentic_references=["ASI04"],
     incident_references=["VERCEL-2026-04-19"],
+    limitations=(
+        "Reads the dependency names of the root package.json (`dependencies`, "
+        "`devDependencies`, `peerDependencies`), the `[project].dependencies` of "
+        "the root pyproject.toml and the root requirements*.txt, and matches each "
+        "name exactly against a fixed list (context-ai, langsmith, helicone, "
+        "langfuse, humanloop, `@langchain/langsmith`, `@modelcontextprotocol/sdk` "
+        "and the Python mcp, langsmith-py and helicone-py). A requirement with "
+        "extras (`mcp[cli]>=1.2.0`), another capitalisation (`Langfuse`), "
+        "`[project.optional-dependencies]` or Poetry tables, a lockfile and a "
+        "sub-directory manifest are not reported."
+    ),
 )
 
 
@@ -4866,6 +4991,17 @@ _r(
     owasp_agentic_references=["ASI02"],
     adversa_references=["ADV-INJECT-02"],
     aicm_references=["AIS-07", "DSP-07"],
+    limitations=(
+        "Matches `apache-doris-mcp-server` followed directly by a version "
+        "(`apache-doris-mcp-server==0.5.0`) in requirements*.txt at the project "
+        "root and in a dependency string of the root pyproject.toml. A name with no "
+        "version, a git URL, the table form that Poetry and Pipfile use "
+        "(`apache-doris-mcp-server = \"^0.5.0\"`), a requirements file in a "
+        "sub-directory and an `.mcp.json` launcher are not reported. Pipfile.lock, "
+        "poetry.lock and uv.lock are opened but never match, because the name and "
+        "the version sit on separate lines, so a version that reaches the project "
+        "only through a lockfile is not reported."
+    ),
 )
 
 
@@ -4905,6 +5041,14 @@ _r(
     adversa_references=["ADV-INJECT-01"],
     incident_references=["OX-MCP-2026-04-15"],
     aicm_references=["AIS-07", "STA-08"],
+    limitations=(
+        "Recognises a sanitizer or opt-out by name in any file that uses a STDIO "
+        "transport: a `shlex.quote(` or `shlex.split(` call, an `ALLOWED_*`, "
+        "`WHITELIST_*` or `VALID_TOOLS` constant, or an HTTP-only transport "
+        "setting. One such file clears every STDIO file in the project, whatever "
+        "the name guards: an `ALLOWED_ORIGINS` list in `src/cors.ts` silences an "
+        "unguarded `StdioServerTransport` in `src/server.ts`."
+    ),
 )
 
 
@@ -4989,6 +5133,15 @@ _r(
     owasp_agentic_references=["ASI10"],
     adversa_references=["ADV-SUPPLY-01"],
     incident_references=["MCP-DNS-REBIND-2026-04"],
+    limitations=(
+        "Reads `mcp` below 1.23.0 in the root requirements*.txt (pinned with `==`, "
+        "`<` or `<=`) and pyproject.toml, `@modelcontextprotocol/sdk` below 1.21.1 "
+        "and `@apollo/mcp-server` below 1.7.0 in the root package.json, and "
+        "`io.modelcontextprotocol.sdk:mcp-core` below 0.11.0 in the root pom.xml "
+        "and Gradle files. A name with extras (`mcp[cli]==1.22.0`), the Poetry "
+        "table form (`mcp = \"1.22.0\"`), a lockfile (uv.lock, package-lock.json) and "
+        "a requirements file in a sub-directory are not read."
+    ),
 )
 
 
@@ -5059,6 +5212,15 @@ _r(
     owasp_agentic_references=["ASI10"],
     adversa_references=["ADV-SUPPLY-02"],
     incident_references=["GHA-IMMUTABLE-2026-04"],
+    limitations=(
+        "Reads the `uses:` entries of the files directly inside `.github/workflows` "
+        "and reports an `owner/action@ref` whose ref is not a 40-character commit "
+        "SHA, except for the owners `actions` and `github`, local `./` actions and "
+        "`docker://` images. A third-party action referenced from a local composite "
+        "action (`.github/actions/setup/action.yml`) is not read, and neither is an "
+        "`actions/` or `github/` action pinned to a branch "
+        "(`actions/checkout@main`) or a `docker://` image tag."
+    ),
 )
 
 
@@ -5087,6 +5249,17 @@ _r(
     owasp_mcp_references=["MCP02:2025", "MCP09:2025"],
     owasp_agentic_references=["ASI02", "ASI04"],
     adversa_references=["ADV-INJECT-03"],
+    limitations=(
+        "Matches `excel-mcp-server` followed directly by a version "
+        "(`excel-mcp-server==0.1.7`) in requirements*.txt at the project root and "
+        "in a dependency string of the root pyproject.toml. A name with no version, "
+        "a git URL, the table form that Poetry and Pipfile use (`excel-mcp-server = "
+        "\"^0.1.7\"`), a requirements file in a sub-directory and an `.mcp.json` "
+        "launcher are not reported. Pipfile.lock, poetry.lock and uv.lock are "
+        "opened but never match, because the name and the version sit on separate "
+        "lines, so a version that reaches the project only through a lockfile is "
+        "not reported."
+    ),
 )
 
 
@@ -5327,6 +5500,16 @@ _r(
     owasp_agentic_references=["ASI02", "ASI10"],
     adversa_references=["ADV-INJECT-04"],
     incident_references=["OX-MCP-2026-04-25"],
+    limitations=(
+        "Reads one function at a time. A `StdioServerParameters(command=, args=)` "
+        "call counts as tainted when its command or args come straight from a "
+        "request, HTTP-client, `os.environ`, `json.loads` or `yaml.load` "
+        "expression, from a parameter named body, payload, req, request, event, "
+        "untrusted or user_input, or from a local assigned from such an expression. "
+        "A value that arrives through any other parameter name (`def build(spec)` "
+        "called with `request.json()`), through a helper's return value or through "
+        "an attribute stored on `self` is not followed."
+    ),
 )
 
 _r(
@@ -5349,6 +5532,16 @@ _r(
     owasp_agentic_references=["ASI02", "ASI10"],
     adversa_references=["ADV-INJECT-04"],
     incident_references=["OX-MCP-2026-04-25"],
+    limitations=(
+        "Reads one file at a time. A `new StdioClientTransport(...)` or `new "
+        "StdioServerTransport(...)` counts as tainted when its command or args "
+        "derive, through assignments, destructuring, template strings or one helper "
+        "return, from `req.body`, `req.query`, `req.params`, `req.headers` (or the "
+        "`request` forms), `process.env`, `JSON.parse` or an awaited fetch or axios "
+        "call in that file. A config object passed in from another file "
+        "(`connect(req.body)` in routes.ts, `connect(cfg)` in client.ts) is not "
+        "followed, with or without the optional tree-sitter extra."
+    ),
 )
 
 _r(
@@ -5372,6 +5565,13 @@ _r(
     owasp_agentic_references=["ASI02", "ASI10"],
     adversa_references=["ADV-INJECT-04"],
     incident_references=["OX-MCP-2026-04-25"],
+    limitations=(
+        "Matches the spelling `StdioServerParameters.Builder()` followed by "
+        "`.build()` in .java files, with a request parameter, HTTP client, "
+        "`ObjectMapper` read or `System.getenv` call in the preceding 2 KB or in "
+        "the chain. The MCP Java SDK's own `ServerParameters.builder(command)` is "
+        "not matched, and neither is the same code in a Kotlin file."
+    ),
 )
 
 _r(
@@ -5398,6 +5598,16 @@ _r(
     owasp_agentic_references=["ASI02", "ASI10"],
     adversa_references=["ADV-INJECT-04"],
     incident_references=["OX-MCP-2026-04-25"],
+    limitations=(
+        "Treats a Rust file as MCP code only if it mentions `mcp_sdk`, "
+        "`modelcontextprotocol` or `mcp::client::stdio`, so a file that uses the "
+        "`rmcp` crate and none of those names is not scanned. It also needs one of "
+        "`reqwest::get`, `reqwest::Client`, `serde_json::from_str`, "
+        "`serde_json::from_slice`, `std::env::var`, `hyper::body`, "
+        "`actix_web::web::Json` or `axum::extract::Json` in the 2 KB before "
+        "`Command::new`; a command taken from `std::env::args()` is not one of "
+        "them."
+    ),
 )
 
 
@@ -5433,6 +5643,16 @@ _r(
     owasp_agentic_references=["ASI10"],
     adversa_references=["ADV-SUPPLY-03"],
     incident_references=["OX-MCP-2026-04-25", "CLOUDFLARE-MCP-DEFENDER-2026-04-25"],
+    limitations=(
+        "Python: reports a `get`, `post`, `request` or `urlopen` call on "
+        "`requests`, `httpx` or `urllib` (or a bare `urlopen`) followed, in the "
+        "same function, by a `StdioServerParameters` or `StdioClientTransport` "
+        "call, without checking that the fetched value reaches it. A request made "
+        "through a session object (`session = requests.Session(); "
+        "session.get(url)`) or in a different function is not seen. TypeScript: "
+        "needs `await fetch(` within 2 KB before a `new Stdio*Transport`, so "
+        "`axios.get` and `fetch(...).then(...)` are not matched."
+    ),
 )
 
 
@@ -5765,6 +5985,15 @@ _r(
     owasp_agentic_references=["ASI10"],
     adversa_references=["ADV-SUPPLY-04"],
     incident_references=["MCPJAM-INSPECTOR-2026-04"],
+    limitations=(
+        "Reads files with a .ts, .tsx, .js, .mjs or .cjs extension and reports one "
+        "whose path contains `mcpjam-inspector` or `@mcpjam/inspector`, or whose "
+        "text calls `inspectorServer.handle(`, at any version, a patched one "
+        "included. It never reads package.json, a lockfile or an `npx` launcher, so "
+        "`@mcpjam/inspector` 1.4.2 declared as a dependency, the case the "
+        "remediation tells you to bump, is not reported when the code is not in the "
+        "scanned tree."
+    ),
 )
 
 
@@ -6141,6 +6370,18 @@ _r(
     owasp_agentic_references=["ASI02", "ASI10"],
     owasp_mcp_references=["MCP01:2025"],
     incident_references=["NVD-CVE-2026-7591", "VULDB-360544"],
+    limitations=(
+        "Two arms. The pin reads `astro-mcp-server` in the root package.json, "
+        "yarn.lock and pnpm-lock.yaml, and in package-lock.json only as a listed "
+        "dependency (`\"astro-mcp-server\": \"1.1.1\"`), and reports every version "
+        "because no fix exists. A `node_modules/astro-mcp-server` entry that only a "
+        "transitive dependency adds to package-lock.json, a Yarn 2+ yarn.lock, a "
+        "sub-directory package.json and an `npx` launcher in .mcp.json are not "
+        "read. The source arm needs the SQL string concatenated or interpolated "
+        "inside the call on `db`, `client`, `conn`, `connection`, `pool`, `cursor`, "
+        "`database`, `sqlite` or `knex`, so a query built in a variable first "
+        "(`const sql = \"SELECT ...\" + id; db.query(sql)`) is not reported."
+    ),
 )
 
 _r(
@@ -6245,6 +6486,16 @@ _r(
     "by default in `aak scan` unless `--severity info` is passed.",
     sarif_name="StainlessLineageProvenance",
     incident_references=["ANTHROPIC-STAINLESS-2026-05-18"],
+    limitations=(
+        "Looks for the banner `File generated from our OpenAPI spec by Stainless` "
+        "or `Code generated by Stainless` in the first 8 lines of .py, .ts, .tsx, "
+        ".js, .mjs, .cjs, .go, .java, .kt, .rb, .cs and .php files outside .git, "
+        "node_modules, dist, build, .venv, venv and __pycache__, and for a "
+        "`stainless.yml`-style config file or a `.stainless/` directory at the "
+        "project root. A banner below line 8 (under a long licence header), a "
+        "generated SDK installed as a dependency under node_modules, and a config "
+        "file in a sub-directory are not reported."
+    ),
 )
 
 _r(
@@ -6514,6 +6765,17 @@ _r(
     owasp_mcp_references=["MCP01:2025", "MCP05:2025"],
     owasp_agentic_references=["ASI02", "ASI05"],
     incident_references=["NVD-CVE-2026-44717"],
+    limitations=(
+        "Matches `mcp-calculate-server` followed directly by a version "
+        "(`mcp-calculate-server==0.1.0`) in requirements*.txt at the project root "
+        "and in a dependency string of the root pyproject.toml. A name with no "
+        "version, a git URL, the table form that Poetry and Pipfile use "
+        "(`mcp-calculate-server = \"^0.1.0\"`), a requirements file in a "
+        "sub-directory and an `.mcp.json` launcher are not reported. Pipfile.lock, "
+        "poetry.lock and uv.lock are opened but never match, because the name and "
+        "the version sit on separate lines, so a version that reaches the project "
+        "only through a lockfile is not reported."
+    ),
 )
 
 _r(
@@ -6543,6 +6805,17 @@ _r(
     cve_references=["CVE-2026-26030"],
     owasp_agentic_references=["ASI02", "ASI05", "ASI10"],
     incident_references=["MSRC-2026-05-07"],
+    limitations=(
+        "Matches `semantic-kernel` followed directly by a version "
+        "(`semantic-kernel==1.30.0`) in requirements*.txt at the project root and "
+        "in a dependency string of the root pyproject.toml. A name with no version, "
+        "a name with extras (`semantic-kernel[all]==1.30.0`), a git URL, the table "
+        "form that Poetry and Pipfile use (`semantic-kernel = \"^1.30.0\"`), a "
+        "requirements file in a sub-directory and an `.mcp.json` launcher are not "
+        "reported. Pipfile.lock, poetry.lock and uv.lock are opened but never "
+        "match, because the name and the version sit on separate lines, so a "
+        "version that reaches the project only through a lockfile is not reported."
+    ),
 )
 
 _r(
@@ -6576,6 +6849,16 @@ _r(
     cve_references=["CVE-2026-40068", "CVE-2026-103435"],
     owasp_agentic_references=["ASI03", "ASI10"],
     incident_references=["ANTHROPIC-CLAUDECODE-2026-05-06"],
+    limitations=(
+        "Reads `@anthropic-ai/claude-code` in the root package.json, "
+        "package-lock.json, yarn.lock and pnpm-lock.yaml and reports a version it "
+        "can parse below 2.1.129, so `latest` and other tags state no version and "
+        "are not reported. In package-lock.json it reads only a listed dependency "
+        "(`\"@anthropic-ai/claude-code\": \"<version>\"`): an entry that only a "
+        "transitive dependency adds under `node_modules/@anthropic-ai/claude-code` "
+        "is not read, and neither is a Yarn 2+ yarn.lock, a sub-directory "
+        "package.json or a versioned `npx` reference in .mcp.json."
+    ),
 )
 
 _r(
@@ -6618,6 +6901,22 @@ _r(
     owasp_mcp_references=["MCP01:2025", "MCP05:2025"],
     owasp_agentic_references=["ASI02", "ASI10"],
     incident_references=["OX-MCP-2026-05-01"],
+    limitations=(
+        "Two arms. The pin reads `gpt-researcher` and `gpt-researcher-mcp` followed "
+        "directly by a version in the root requirements*.txt and pyproject.toml, "
+        "and in the root npm manifests, and reports every version because no fix "
+        "exists. A name with no version, a requirements file in a sub-directory, a "
+        "version recorded only in uv.lock (name and version sit on separate lines) "
+        "and a `gptresearcher/gpt-researcher` image tag in a compose file are not "
+        "reported. The config arm reads JSON MCP configs (.mcp.json, mcp.json, "
+        "`.cursor/mcp.json`, `.vscode/mcp.json`), gpt-researcher's own config files "
+        "at the root and in `.gpt-researcher/`, and the .json files of a top-level "
+        "`configs/`, and reports one that names gpt-researcher, declares an sse, "
+        "http, https or streamable-http transport and enables stdio explicitly "
+        "(`stdio_fallback`, `transport_override`, `permit_transport_override` or a "
+        "`transports` list that includes stdio); the same settings in "
+        "`deploy/gpt-researcher.config.json` are not reported."
+    ),
 )
 
 _r(
@@ -6658,6 +6957,24 @@ _r(
     owasp_mcp_references=["MCP01:2025", "MCP05:2025"],
     owasp_agentic_references=["ASI02", "ASI10"],
     incident_references=["OX-MCP-2026-05-01"],
+    limitations=(
+        "Two arms. The pin reads npm `docsgpt` and `docsgpt-mcp` in the root "
+        "package.json, package-lock.json, yarn.lock and pnpm-lock.yaml, and the "
+        "name followed directly by a version in the root requirements*.txt and "
+        "pyproject.toml, and reports a version below 0.6.4 or any `arc53/DocsGPT` "
+        "git reference. A `node_modules/docsgpt` entry that only a transitive "
+        "dependency adds to package-lock.json, a version recorded only in uv.lock "
+        "(name and version sit on separate lines), a sub-directory package.json and "
+        "an `arc53/docsgpt` image tag in a compose file are not read. The config "
+        "arm reads JSON MCP configs (.mcp.json, mcp.json, `.cursor/mcp.json`, "
+        "`.vscode/mcp.json`), DocsGPT's own config files at the root and in "
+        "`.docsgpt/`, and the .json files of a top-level `configs/`, and reports "
+        "one that names DocsGPT, declares an sse, http, https or streamable-http "
+        "transport and enables stdio explicitly (`stdio_fallback`, "
+        "`transport_override`, `permit_transport_override` or a `transports` list "
+        "that includes stdio); the same settings in `deploy/docsgpt.config.json` "
+        "are not reported."
+    ),
 )
 
 _r(
@@ -6685,6 +7002,15 @@ _r(
     owasp_mcp_references=["MCP01:2025"],
     owasp_agentic_references=["ASI02", "ASI10"],
     incident_references=["NVD-CVE-2026-7061"],
+    limitations=(
+        "Reads the root package.json, package-lock.json, yarn.lock and "
+        "pnpm-lock.yaml for a key `\"chatgpt-mcp-server\"` with any value, or for the "
+        "`Toowiredd/chatgpt-mcp-server` repository path, and reports every version "
+        "because no fix exists. A reference in a sub-directory package.json, a fork "
+        "or mirror under another GitHub organisation (`\"gpt\": "
+        "\"github:acme/chatgpt-mcp-server\"`) and an `npx` launcher that fetches the "
+        "repository from GitHub in .mcp.json are not read."
+    ),
 )
 
 _r(
@@ -6717,6 +7043,15 @@ _r(
     owasp_agentic_references=["ASI02", "ASI10"],
     adversa_references=["ADV-RCE-04"],
     incident_references=["NVD-CVE-2026-30624", "OX-MCP-2026-05-01"],
+    limitations=(
+        "Reads a git reference to `frdel/agent-zero` or `agent0ai/agent-zero` (a "
+        "`git+https` URL or `github:` shorthand) in the root requirements*.txt, "
+        "pyproject.toml, Pipfile, package.json, .mcp.json, mcp.json, "
+        "claude_desktop_config.json and lockfiles, and reports one with no tag or a "
+        "tag below 1.0. An `agent0ai/agent-zero` image tag in a compose file or "
+        "Dockerfile, a `git clone` in a script and a reference in a sub-directory "
+        "manifest are not read."
+    ),
 )
 
 _r(
@@ -6750,6 +7085,18 @@ _r(
     owasp_agentic_references=["ASI02", "ASI10"],
     incident_references=["BERRIAI-LITELLM-2026-04-30"],
     auto_fixable=True,
+    limitations=(
+        "Matches `litellm` followed directly by a version (`litellm==1.83.0`) in "
+        "requirements*.txt at the project root and in a dependency string of the "
+        "root pyproject.toml. A name with no version, a name with extras "
+        "(`litellm[all]==1.83.0`), a git URL, the table form that Poetry and "
+        "Pipfile use (`litellm = \"^1.83.0\"`), a requirements file in a "
+        "sub-directory and an `.mcp.json` launcher are not reported. Pipfile.lock, "
+        "poetry.lock and uv.lock are opened but never match, because the name and "
+        "the version sit on separate lines, so a version that reaches the project "
+        "only through a lockfile is not reported. A compose file's "
+        "`ghcr.io/berriai/litellm` image tag is not read."
+    ),
 )
 
 _r(
@@ -7137,6 +7484,16 @@ _r(
     owasp_mcp_references=["MCP05:2025"],
     owasp_agentic_references=["ASI06"],
     adversa_references=["ADV-PATH-01"],
+    limitations=(
+        "Reads .py, .sh and .bash files whose name or content looks like install or "
+        "skill-setup code. In Python the sinks are `subprocess.run`, `call`, "
+        "`check_call`, `check_output`, `getoutput`, `getstatusoutput`, a lowercase "
+        "`popen` and the `os.system`, `os.popen`, `os.exec*` and `os.spawn*` calls, "
+        "so `subprocess.Popen([brew, ...])` and `asyncio.create_subprocess_exec` "
+        "are not reported. A mention of `os.path.isabs`, an allowlist or "
+        "`ALLOWED_BINARIES` anywhere in the file clears it, whatever it guards, and "
+        "an install script written in JavaScript is not read."
+    ),
 )
 
 _r(
@@ -7417,6 +7774,15 @@ _r(
     owasp_mcp_references=["MCP04:2025"],
     owasp_agentic_references=["ASI02"],
     adversa_references=["ADV-SUPPLY-01"],
+    limitations=(
+        "Reads `mcp-gateway-registry` as text in the project root's "
+        "requirements*.txt, pyproject.toml, Pipfile, Pipfile.lock, poetry.lock, "
+        "uv.lock, package.json, package-lock.json, .mcp.json, mcp.json, "
+        "claude_desktop_config.json and *.mcp.yaml/.yml files, and reports a file "
+        "whose first mention has a version below 1.0.13 or none. It does not read a "
+        "sub-directory, including a requirements file there, `.cursor/mcp.json` or "
+        "`.vscode/mcp.json`, or a `pdm.lock`, `yarn.lock` or `pnpm-lock.yaml`."
+    ),
 )
 
 
@@ -7530,6 +7896,17 @@ _r(
     owasp_mcp_references=["MCP01:2025"],
     owasp_agentic_references=["ASI04"],
     adversa_references=["ADV-AUTH-01"],
+    limitations=(
+        "Reads `litellm` in requirements*.txt at any depth and, at the project root "
+        "only, in pyproject.toml, Pipfile, package.json, .mcp.json, mcp.json, "
+        "claude_desktop_config.json and the Pipfile.lock, poetry.lock, uv.lock, "
+        "package-lock.json, pnpm-lock.yaml and yarn.lock lockfiles, taking the "
+        "lowest version a range allows and reporting a reference that states no "
+        "version. The dependency is not read when it is declared in a sub-directory "
+        "manifest (`services/api/pyproject.toml`) or in a lockfile format the "
+        "reader does not parse (`pdm.lock`). A compose file's "
+        "`ghcr.io/berriai/litellm` image tag is not read."
+    ),
 )
 
 _r(
@@ -7552,6 +7929,16 @@ _r(
     owasp_mcp_references=["MCP01:2025"],
     owasp_agentic_references=["ASI04"],
     adversa_references=["ADV-AUTH-01"],
+    limitations=(
+        "Reads `cline` in requirements*.txt at any depth and, at the project root "
+        "only, in pyproject.toml, Pipfile, package.json, .mcp.json, mcp.json, "
+        "claude_desktop_config.json and the Pipfile.lock, poetry.lock, uv.lock, "
+        "package-lock.json, pnpm-lock.yaml and yarn.lock lockfiles, taking the "
+        "lowest version a range allows and reporting a reference that states no "
+        "version. The dependency is not read when it is declared in a sub-directory "
+        "manifest (`packages/app/package.json`) or in a lockfile format the reader "
+        "does not parse (a Yarn 2+ `yarn.lock`)."
+    ),
 )
 
 _r(
@@ -7572,6 +7959,17 @@ _r(
     owasp_mcp_references=["MCP04:2025"],
     owasp_agentic_references=["ASI09"],
     adversa_references=["ADV-SUPPLY-01"],
+    limitations=(
+        "Reads `mcp-text-editor` in requirements*.txt at any depth and, at the "
+        "project root only, in pyproject.toml, Pipfile, package.json, .mcp.json, "
+        "mcp.json, claude_desktop_config.json and the Pipfile.lock, poetry.lock, "
+        "uv.lock, package-lock.json, pnpm-lock.yaml and yarn.lock lockfiles, taking "
+        "the lowest version a range allows and reporting a reference that states no "
+        "version. The dependency is not read when it is declared in a sub-directory "
+        "manifest (`services/api/pyproject.toml`), in `.cursor/mcp.json` or "
+        "`.vscode/mcp.json`, or in a lockfile format the reader does not parse "
+        "(`pdm.lock`)."
+    ),
 )
 
 _r(
@@ -7593,6 +7991,17 @@ _r(
     owasp_mcp_references=["MCP09:2025"],
     owasp_agentic_references=["ASI06"],
     adversa_references=["ADV-SSRF-01"],
+    limitations=(
+        "Reads `n8n` in requirements*.txt at any depth and, at the project root "
+        "only, in pyproject.toml, Pipfile, package.json, .mcp.json, mcp.json, "
+        "claude_desktop_config.json and the Pipfile.lock, poetry.lock, uv.lock, "
+        "package-lock.json, pnpm-lock.yaml and yarn.lock lockfiles, taking the "
+        "lowest version a range allows and reporting a reference that states no "
+        "version. The dependency is not read when it is declared in a sub-directory "
+        "manifest (`packages/app/package.json`) or in a lockfile format the reader "
+        "does not parse (a Yarn 2+ `yarn.lock`). A compose file's `n8nio/n8n` image "
+        "tag is not read."
+    ),
 )
 
 _r(
@@ -7613,6 +8022,17 @@ _r(
     owasp_mcp_references=["MCP01:2025"],
     owasp_agentic_references=["ASI04"],
     adversa_references=["ADV-AUTH-01"],
+    limitations=(
+        "Reads `ruflo` in requirements*.txt at any depth and, at the project root "
+        "only, in pyproject.toml, Pipfile, package.json, .mcp.json, mcp.json, "
+        "claude_desktop_config.json and the Pipfile.lock, poetry.lock, uv.lock, "
+        "package-lock.json, pnpm-lock.yaml and yarn.lock lockfiles, taking the "
+        "lowest version a range allows and reporting a reference that states no "
+        "version. The dependency is not read when it is declared in a sub-directory "
+        "manifest (`packages/app/package.json`), in `.cursor/mcp.json` or "
+        "`.vscode/mcp.json`, or in a lockfile format the reader does not parse (a "
+        "Yarn 2+ `yarn.lock`)."
+    ),
 )
 
 _r(
@@ -7636,6 +8056,17 @@ _r(
     owasp_mcp_references=["MCP01:2025"],
     owasp_agentic_references=["ASI04"],
     adversa_references=["ADV-AUTH-01"],
+    limitations=(
+        "Reads `@arikusi/deepseek-mcp-server` in requirements*.txt at any depth "
+        "and, at the project root only, in pyproject.toml, Pipfile, package.json, "
+        ".mcp.json, mcp.json, claude_desktop_config.json and the Pipfile.lock, "
+        "poetry.lock, uv.lock, package-lock.json, pnpm-lock.yaml and yarn.lock "
+        "lockfiles, taking the lowest version a range allows and reporting a "
+        "reference that states no version. The dependency is not read when it is "
+        "declared in a sub-directory manifest (`packages/app/package.json`), in "
+        "`.cursor/mcp.json` or `.vscode/mcp.json`, or in a lockfile format the "
+        "reader does not parse (a Yarn 2+ `yarn.lock`)."
+    ),
 )
 
 _r(
@@ -7658,6 +8089,18 @@ _r(
     owasp_mcp_references=["MCP05:2025"],
     owasp_agentic_references=["ASI01"],
     adversa_references=["ADV-INJECT-01"],
+    limitations=(
+        "Reads `mcp-server-kubernetes` in requirements*.txt at any depth and, at "
+        "the project root only, in pyproject.toml, Pipfile, package.json, "
+        ".mcp.json, mcp.json, claude_desktop_config.json and the Pipfile.lock, "
+        "poetry.lock, uv.lock, package-lock.json, pnpm-lock.yaml and yarn.lock "
+        "lockfiles, taking the lowest version a range allows and reporting a "
+        "reference that states no version. The dependency is not read when it is "
+        "declared in a sub-directory manifest (`packages/app/package.json`), in "
+        "`.cursor/mcp.json` or `.vscode/mcp.json`, or in a lockfile format the "
+        "reader does not parse (a Yarn 2+ `yarn.lock`). A compose file's "
+        "`flux159/mcp-server-kubernetes` image tag is not read."
+    ),
 )
 
 _r(
@@ -7679,6 +8122,17 @@ _r(
     owasp_mcp_references=["MCP09:2025"],
     owasp_agentic_references=["ASI06"],
     adversa_references=["ADV-SSRF-01"],
+    limitations=(
+        "Reads `astrbot` in requirements*.txt at any depth and, at the project root "
+        "only, in pyproject.toml, Pipfile, package.json, .mcp.json, mcp.json, "
+        "claude_desktop_config.json and the Pipfile.lock, poetry.lock, uv.lock, "
+        "package-lock.json, pnpm-lock.yaml and yarn.lock lockfiles, taking the "
+        "lowest version a range allows and reporting a reference that states no "
+        "version. The dependency is not read when it is declared in a sub-directory "
+        "manifest (`services/api/pyproject.toml`) or in a lockfile format the "
+        "reader does not parse (`pdm.lock`). A compose file's `soulter/astrbot` "
+        "image tag is not read."
+    ),
 )
 
 # --- 2026-07-13..15 MCP/agent CVE disclosure wave (pinnable artifacts) -------
@@ -7706,6 +8160,19 @@ _r(
     owasp_mcp_references=["MCP09:2025"],
     owasp_agentic_references=["ASI06"],
     adversa_references=["ADV-SSRF-01"],
+    limitations=(
+        "Reads `awslabs.healthlake-mcp-server` in requirements*.txt at any depth "
+        "and, at the project root only, in pyproject.toml, Pipfile, package.json, "
+        ".mcp.json, mcp.json, claude_desktop_config.json and the Pipfile.lock, "
+        "poetry.lock, uv.lock, package-lock.json, pnpm-lock.yaml and yarn.lock "
+        "lockfiles, taking the lowest version a range allows and reporting a "
+        "reference that states no version. The dependency is not read when it is "
+        "declared in a sub-directory manifest (`services/api/pyproject.toml`), in "
+        "`.cursor/mcp.json` or `.vscode/mcp.json`, or in a lockfile format the "
+        "reader does not parse (`pdm.lock`). The normalised spelling "
+        "`awslabs-healthlake-mcp-server`, which uv.lock records, is not matched in "
+        "a requirements file or in uv.lock."
+    ),
 )
 
 _r(
@@ -7750,6 +8217,15 @@ _r(
     owasp_mcp_references=["MCP01:2025"],
     owasp_agentic_references=["ASI04"],
     adversa_references=["ADV-AUTH-01"],
+    limitations=(
+        "Reads `praisonai` in requirements*.txt at any depth and, at the project "
+        "root only, in pyproject.toml, Pipfile, .mcp.json, mcp.json, "
+        "claude_desktop_config.json and the Pipfile.lock, poetry.lock and uv.lock "
+        "lockfiles, taking the lowest version a range allows and reporting a "
+        "reference that states no version. The dependency is not read when it is "
+        "declared in a sub-directory manifest (`services/api/pyproject.toml`) or in "
+        "a lockfile format the reader does not parse (`pdm.lock`)."
+    ),
 )
 
 _r(
@@ -7772,6 +8248,17 @@ _r(
     owasp_mcp_references=["MCP05:2025"],
     owasp_agentic_references=["ASI04"],
     adversa_references=["ADV-INJECT-01"],
+    limitations=(
+        "Reads `appium-mcp` in requirements*.txt at any depth and, at the project "
+        "root only, in pyproject.toml, Pipfile, package.json, .mcp.json, mcp.json, "
+        "claude_desktop_config.json and the Pipfile.lock, poetry.lock, uv.lock, "
+        "package-lock.json, pnpm-lock.yaml and yarn.lock lockfiles, taking the "
+        "lowest version a range allows and reporting a reference that states no "
+        "version. The dependency is not read when it is declared in a sub-directory "
+        "manifest (`packages/app/package.json`), in `.cursor/mcp.json` or "
+        "`.vscode/mcp.json`, or in a lockfile format the reader does not parse (a "
+        "Yarn 2+ `yarn.lock`)."
+    ),
 )
 
 _r(
@@ -7791,6 +8278,17 @@ _r(
     owasp_mcp_references=["MCP01:2025"],
     owasp_agentic_references=["ASI04"],
     adversa_references=["ADV-AUTH-01"],
+    limitations=(
+        "Reads `@penpot/mcp` in requirements*.txt at any depth and, at the project "
+        "root only, in pyproject.toml, Pipfile, package.json, .mcp.json, mcp.json, "
+        "claude_desktop_config.json and the Pipfile.lock, poetry.lock, uv.lock, "
+        "package-lock.json, pnpm-lock.yaml and yarn.lock lockfiles, taking the "
+        "lowest version a range allows and reporting a reference that states no "
+        "version. The dependency is not read when it is declared in a sub-directory "
+        "manifest (`packages/app/package.json`), in `.cursor/mcp.json` or "
+        "`.vscode/mcp.json`, or in a lockfile format the reader does not parse (a "
+        "Yarn 2+ `yarn.lock`)."
+    ),
 )
 
 _r(
@@ -7828,6 +8326,16 @@ _r(
     owasp_mcp_references=["MCP01:2025"],
     owasp_agentic_references=["ASI03"],
     adversa_references=["ADV-AUTH-01"],
+    limitations=(
+        "Reads `openclaw` in requirements*.txt at any depth and, at the project "
+        "root only, in pyproject.toml, Pipfile, package.json, .mcp.json, mcp.json, "
+        "claude_desktop_config.json and the Pipfile.lock, poetry.lock, uv.lock, "
+        "package-lock.json, pnpm-lock.yaml and yarn.lock lockfiles, taking the "
+        "lowest version a range allows and reporting a reference that states no "
+        "version. The dependency is not read when it is declared in a sub-directory "
+        "manifest (`packages/app/package.json`) or in a lockfile format the reader "
+        "does not parse (a Yarn 2+ `yarn.lock`)."
+    ),
 )
 
 _r(
@@ -7848,6 +8356,17 @@ _r(
     owasp_mcp_references=["MCP01:2025"],
     owasp_agentic_references=["ASI04"],
     adversa_references=["ADV-DATA-01"],
+    limitations=(
+        "Reads `repomix` in requirements*.txt at any depth and, at the project root "
+        "only, in pyproject.toml, Pipfile, package.json, .mcp.json, mcp.json, "
+        "claude_desktop_config.json and the Pipfile.lock, poetry.lock, uv.lock, "
+        "package-lock.json, pnpm-lock.yaml and yarn.lock lockfiles, taking the "
+        "lowest version a range allows and reporting a reference that states no "
+        "version. The dependency is not read when it is declared in a sub-directory "
+        "manifest (`packages/app/package.json`), in `.cursor/mcp.json` or "
+        "`.vscode/mcp.json`, or in a lockfile format the reader does not parse (a "
+        "Yarn 2+ `yarn.lock`)."
+    ),
 )
 
 _r(
@@ -7878,6 +8397,17 @@ _r(
     owasp_mcp_references=["MCP01:2025"],
     owasp_agentic_references=["ASI03"],
     adversa_references=["ADV-AUTH-01"],
+    limitations=(
+        "Reads `better-auth` and `@better-auth/oauth-provider` in requirements*.txt "
+        "at any depth and, at the project root only, in pyproject.toml, Pipfile, "
+        "package.json, .mcp.json, mcp.json, claude_desktop_config.json and the "
+        "Pipfile.lock, poetry.lock, uv.lock, package-lock.json, pnpm-lock.yaml and "
+        "yarn.lock lockfiles, taking the lowest version a range allows and "
+        "reporting a reference that states no version. The dependency is not read "
+        "when it is declared in a sub-directory manifest "
+        "(`packages/app/package.json`) or in a lockfile format the reader does not "
+        "parse (a Yarn 2+ `yarn.lock`)."
+    ),
 )
 
 # --- 2026-07-15..17 MCP/agent CVE disclosure wave (pinnable artifacts) -------
@@ -7907,6 +8437,16 @@ _r(
     owasp_mcp_references=["MCP01:2025"],
     owasp_agentic_references=["ASI03"],
     adversa_references=["ADV-AUTH-11"],
+    limitations=(
+        "Reads `mcp` in requirements*.txt at any depth and, at the project root "
+        "only, in pyproject.toml, Pipfile, package.json, .mcp.json, mcp.json, "
+        "claude_desktop_config.json and the Pipfile.lock, poetry.lock, uv.lock, "
+        "package-lock.json, pnpm-lock.yaml and yarn.lock lockfiles, taking the "
+        "lowest version a range allows. A reference must state a version to be "
+        "reported, so a bare `mcp` is not. The dependency is not read when it is "
+        "declared in a sub-directory manifest (`services/api/pyproject.toml`) or in "
+        "a lockfile format the reader does not parse (`pdm.lock`)."
+    ),
 )
 
 _r(
@@ -7933,6 +8473,17 @@ _r(
     owasp_mcp_references=["MCP04:2025"],
     owasp_agentic_references=["ASI04"],
     adversa_references=["ADV-AUTH-01"],
+    limitations=(
+        "Reads `9router` in requirements*.txt at any depth and, at the project root "
+        "only, in pyproject.toml, Pipfile, package.json, .mcp.json, mcp.json, "
+        "claude_desktop_config.json and the Pipfile.lock, poetry.lock, uv.lock, "
+        "package-lock.json, pnpm-lock.yaml and yarn.lock lockfiles, taking the "
+        "lowest version a range allows and reporting a reference that states no "
+        "version. The dependency is not read when it is declared in a sub-directory "
+        "manifest (`packages/app/package.json`), in `.cursor/mcp.json` or "
+        "`.vscode/mcp.json`, or in a lockfile format the reader does not parse (a "
+        "Yarn 2+ `yarn.lock`)."
+    ),
 )
 
 _r(
@@ -7954,6 +8505,17 @@ _r(
     owasp_mcp_references=["MCP01:2025"],
     owasp_agentic_references=["ASI04"],
     adversa_references=["ADV-AUTH-01"],
+    limitations=(
+        "Reads `n8n-mcp` in requirements*.txt at any depth and, at the project root "
+        "only, in pyproject.toml, Pipfile, package.json, .mcp.json, mcp.json, "
+        "claude_desktop_config.json and the Pipfile.lock, poetry.lock, uv.lock, "
+        "package-lock.json, pnpm-lock.yaml and yarn.lock lockfiles, taking the "
+        "lowest version a range allows and reporting a reference that states no "
+        "version. The dependency is not read when it is declared in a sub-directory "
+        "manifest (`packages/app/package.json`), in `.cursor/mcp.json` or "
+        "`.vscode/mcp.json`, or in a lockfile format the reader does not parse (a "
+        "Yarn 2+ `yarn.lock`)."
+    ),
 )
 
 _r(
@@ -7986,6 +8548,17 @@ _r(
     owasp_mcp_references=["MCP04:2025"],
     owasp_agentic_references=["ASI09"],
     adversa_references=["ADV-INJECT-01"],
+    limitations=(
+        "Reads `dbt-mcp` in requirements*.txt at any depth and, at the project root "
+        "only, in pyproject.toml, Pipfile, package.json, .mcp.json, mcp.json, "
+        "claude_desktop_config.json and the Pipfile.lock, poetry.lock, uv.lock, "
+        "package-lock.json, pnpm-lock.yaml and yarn.lock lockfiles, taking the "
+        "lowest version a range allows and reporting a reference that states no "
+        "version. The dependency is not read when it is declared in a sub-directory "
+        "manifest (`services/api/pyproject.toml`), in `.cursor/mcp.json` or "
+        "`.vscode/mcp.json`, or in a lockfile format the reader does not parse "
+        "(`pdm.lock`)."
+    ),
 )
 
 _r(
@@ -8021,6 +8594,17 @@ _r(
     owasp_mcp_references=["MCP09:2025"],
     owasp_agentic_references=["ASI06"],
     adversa_references=["ADV-SSRF-01"],
+    limitations=(
+        "Reads `@apify/actors-mcp-server` in requirements*.txt at any depth and, at "
+        "the project root only, in pyproject.toml, Pipfile, package.json, "
+        ".mcp.json, mcp.json, claude_desktop_config.json and the Pipfile.lock, "
+        "poetry.lock, uv.lock, package-lock.json, pnpm-lock.yaml and yarn.lock "
+        "lockfiles, taking the lowest version a range allows and reporting a "
+        "reference that states no version. The dependency is not read when it is "
+        "declared in a sub-directory manifest (`packages/app/package.json`), in "
+        "`.cursor/mcp.json` or `.vscode/mcp.json`, or in a lockfile format the "
+        "reader does not parse (a Yarn 2+ `yarn.lock`)."
+    ),
 )
 
 _r(
@@ -8041,6 +8625,17 @@ _r(
     owasp_mcp_references=["MCP04:2025"],
     owasp_agentic_references=["ASI04"],
     adversa_references=["ADV-INJECT-01"],
+    limitations=(
+        "Reads `agentic-flow` in requirements*.txt at any depth and, at the project "
+        "root only, in pyproject.toml, Pipfile, package.json, .mcp.json, mcp.json, "
+        "claude_desktop_config.json and the Pipfile.lock, poetry.lock, uv.lock, "
+        "package-lock.json, pnpm-lock.yaml and yarn.lock lockfiles, taking the "
+        "lowest version a range allows and reporting a reference that states no "
+        "version. The dependency is not read when it is declared in a sub-directory "
+        "manifest (`packages/app/package.json`), in `.cursor/mcp.json` or "
+        "`.vscode/mcp.json`, or in a lockfile format the reader does not parse (a "
+        "Yarn 2+ `yarn.lock`)."
+    ),
 )
 
 _r(
@@ -8061,6 +8656,20 @@ _r(
     owasp_mcp_references=["MCP04:2025"],
     owasp_agentic_references=["ASI09"],
     adversa_references=["ADV-PATH-01"],
+    limitations=(
+        "Reads `awslabs.aws-healthomics-mcp-server` in requirements*.txt at any "
+        "depth and, at the project root only, in pyproject.toml, Pipfile, "
+        "package.json, .mcp.json, mcp.json, claude_desktop_config.json and the "
+        "Pipfile.lock, poetry.lock, uv.lock, package-lock.json, pnpm-lock.yaml and "
+        "yarn.lock lockfiles, taking the lowest version a range allows and "
+        "reporting a reference that states no version. The dependency is not read "
+        "when it is declared in a sub-directory manifest "
+        "(`services/api/pyproject.toml`), in `.cursor/mcp.json` or "
+        "`.vscode/mcp.json`, or in a lockfile format the reader does not parse "
+        "(`pdm.lock`). The normalised spelling "
+        "`awslabs-aws-healthomics-mcp-server`, which uv.lock records, is not "
+        "matched in a requirements file or in uv.lock."
+    ),
 )
 
 # ---------------------------------------------------------------------------
@@ -8098,6 +8707,17 @@ _r(
     owasp_mcp_references=["MCP01:2025"],
     owasp_agentic_references=["ASI04"],
     adversa_references=["ADV-AUTH-01"],
+    limitations=(
+        "Reads `whatsapp-mcp` in requirements*.txt at any depth and, at the project "
+        "root only, in pyproject.toml, Pipfile, package.json, .mcp.json, mcp.json, "
+        "claude_desktop_config.json and the Pipfile.lock, poetry.lock, uv.lock, "
+        "package-lock.json, pnpm-lock.yaml and yarn.lock lockfiles, taking the "
+        "lowest version a range allows and reporting a reference that states no "
+        "version. The dependency is not read when it is declared in a sub-directory "
+        "manifest (`services/api/pyproject.toml`), in `.cursor/mcp.json` or "
+        "`.vscode/mcp.json`, or in a lockfile format the reader does not parse "
+        "(`pdm.lock`)."
+    ),
 )
 
 _r(
@@ -8128,6 +8748,18 @@ _r(
     owasp_mcp_references=["MCP01:2025"],
     owasp_agentic_references=["ASI03"],
     adversa_references=["ADV-AUTH-01"],
+    limitations=(
+        "Reads `@agenticmail/claudecode`, `@agenticmail/codex`, `@agenticmail/core` "
+        "and `@agenticmail/openclaw`, each against its own fix floor, in "
+        "requirements*.txt at any depth and, at the project root only, in "
+        "pyproject.toml, Pipfile, package.json, .mcp.json, mcp.json, "
+        "claude_desktop_config.json and the Pipfile.lock, poetry.lock, uv.lock, "
+        "package-lock.json, pnpm-lock.yaml and yarn.lock lockfiles, taking the "
+        "lowest version a range allows and reporting a reference that states no "
+        "version. The dependency is not read when it is declared in a sub-directory "
+        "manifest (`packages/app/package.json`) or in a lockfile format the reader "
+        "does not parse (a Yarn 2+ `yarn.lock`)."
+    ),
 )
 
 # ---------------------------------------------------------------------------
@@ -8167,6 +8799,17 @@ _r(
     owasp_mcp_references=["MCP01:2025"],
     owasp_agentic_references=["ASI04"],
     adversa_references=["ADV-AUTH-01"],
+    limitations=(
+        "Reads `stata-mcp` in requirements*.txt at any depth and, at the project "
+        "root only, in pyproject.toml, Pipfile, package.json, .mcp.json, mcp.json, "
+        "claude_desktop_config.json and the Pipfile.lock, poetry.lock, uv.lock, "
+        "package-lock.json, pnpm-lock.yaml and yarn.lock lockfiles, taking the "
+        "lowest version a range allows and reporting a reference that states no "
+        "version. The dependency is not read when it is declared in a sub-directory "
+        "manifest (`services/api/pyproject.toml`), in `.cursor/mcp.json` or "
+        "`.vscode/mcp.json`, or in a lockfile format the reader does not parse "
+        "(`pdm.lock`)."
+    ),
 )
 
 # ---------------------------------------------------------------------------
@@ -8199,6 +8842,17 @@ _r(
     owasp_mcp_references=["MCP07:2025"],
     owasp_agentic_references=["ASI03"],
     adversa_references=["ADV-AUTH-01"],
+    limitations=(
+        "Reads `n8n` in requirements*.txt at any depth and, at the project root "
+        "only, in pyproject.toml, Pipfile, package.json, .mcp.json, mcp.json, "
+        "claude_desktop_config.json and the Pipfile.lock, poetry.lock, uv.lock, "
+        "package-lock.json, pnpm-lock.yaml and yarn.lock lockfiles, taking the "
+        "lowest version a range allows and reporting a reference that states no "
+        "version. The dependency is not read when it is declared in a sub-directory "
+        "manifest (`packages/app/package.json`) or in a lockfile format the reader "
+        "does not parse (a Yarn 2+ `yarn.lock`). A compose file's `n8nio/n8n` image "
+        "tag is not read."
+    ),
 )
 
 # ---------------------------------------------------------------------------
@@ -8227,6 +8881,19 @@ _r(
     owasp_mcp_references=["MCP01:2025"],
     owasp_agentic_references=["ASI04"],
     adversa_references=["ADV-AUTH-01"],
+    limitations=(
+        "Reads `awslabs.aws-api-mcp-server` in requirements*.txt at any depth and, "
+        "at the project root only, in pyproject.toml, Pipfile, package.json, "
+        ".mcp.json, mcp.json, claude_desktop_config.json and the Pipfile.lock, "
+        "poetry.lock, uv.lock, package-lock.json, pnpm-lock.yaml and yarn.lock "
+        "lockfiles, taking the lowest version a range allows and reporting a "
+        "reference that states no version. The dependency is not read when it is "
+        "declared in a sub-directory manifest (`services/api/pyproject.toml`), in "
+        "`.cursor/mcp.json` or `.vscode/mcp.json`, or in a lockfile format the "
+        "reader does not parse (`pdm.lock`). The normalised spelling "
+        "`awslabs-aws-api-mcp-server`, which uv.lock records, is not matched in a "
+        "requirements file or in uv.lock."
+    ),
 )
 
 
@@ -8250,6 +8917,19 @@ _r(
     owasp_mcp_references=["MCP01:2025"],
     owasp_agentic_references=["ASI04"],
     adversa_references=["ADV-AUTH-01"],
+    limitations=(
+        "Reads `awslabs.amazon-mq-mcp-server` in requirements*.txt at any depth "
+        "and, at the project root only, in pyproject.toml, Pipfile, package.json, "
+        ".mcp.json, mcp.json, claude_desktop_config.json and the Pipfile.lock, "
+        "poetry.lock, uv.lock, package-lock.json, pnpm-lock.yaml and yarn.lock "
+        "lockfiles, taking the lowest version a range allows and reporting a "
+        "reference that states no version. The dependency is not read when it is "
+        "declared in a sub-directory manifest (`services/api/pyproject.toml`), in "
+        "`.cursor/mcp.json` or `.vscode/mcp.json`, or in a lockfile format the "
+        "reader does not parse (`pdm.lock`). The normalised spelling "
+        "`awslabs-amazon-mq-mcp-server`, which uv.lock records, is not matched in a "
+        "requirements file or in uv.lock."
+    ),
 )
 
 
@@ -8285,6 +8965,18 @@ _r(
     owasp_mcp_references=["MCP03:2025"],
     owasp_agentic_references=["ASI04"],
     adversa_references=["ADV-SUPPLY-01"],
+    limitations=(
+        "Reads `@langchain/langgraph-checkpoint-mongodb`, "
+        "`langgraph-checkpoint-mongodb` and `langgraph-store-mongodb`, each against "
+        "its own fix floor, in requirements*.txt at any depth and, at the project "
+        "root only, in pyproject.toml, Pipfile, package.json, .mcp.json, mcp.json, "
+        "claude_desktop_config.json and the Pipfile.lock, poetry.lock, uv.lock, "
+        "package-lock.json, pnpm-lock.yaml and yarn.lock lockfiles, taking the "
+        "lowest version a range allows and reporting a reference that states no "
+        "version. The dependency is not read when it is declared in a sub-directory "
+        "manifest (`services/api/pyproject.toml`) or in a lockfile format the "
+        "reader does not parse (`pdm.lock`)."
+    ),
 )
 
 
@@ -8308,6 +9000,19 @@ _r(
     owasp_mcp_references=["MCP03:2025"],
     owasp_agentic_references=["ASI04"],
     adversa_references=["ADV-SUPPLY-01"],
+    limitations=(
+        "Reads `awslabs.documentdb-mcp-server` in requirements*.txt at any depth "
+        "and, at the project root only, in pyproject.toml, Pipfile, package.json, "
+        ".mcp.json, mcp.json, claude_desktop_config.json and the Pipfile.lock, "
+        "poetry.lock, uv.lock, package-lock.json, pnpm-lock.yaml and yarn.lock "
+        "lockfiles, taking the lowest version a range allows and reporting a "
+        "reference that states no version. The dependency is not read when it is "
+        "declared in a sub-directory manifest (`services/api/pyproject.toml`), in "
+        "`.cursor/mcp.json` or `.vscode/mcp.json`, or in a lockfile format the "
+        "reader does not parse (`pdm.lock`). The normalised spelling "
+        "`awslabs-documentdb-mcp-server`, which uv.lock records, is not matched in "
+        "a requirements file or in uv.lock."
+    ),
 )
 
 
@@ -8344,6 +9049,15 @@ _r(
     owasp_mcp_references=["MCP03:2025"],
     owasp_agentic_references=["ASI05", "ASI04"],
     adversa_references=["ADV-RCE-01"],
+    limitations=(
+        "Reads `frontmcp` and `@frontmcp/adapters` in package.json, .mcp.json, "
+        "mcp.json, claude_desktop_config.json and the package-lock.json, "
+        "pnpm-lock.yaml and yarn.lock lockfiles at the project root only, taking "
+        "the lowest version a range allows and reporting a reference that states no "
+        "version. The dependency is not read when it is declared in a sub-directory "
+        "manifest (`packages/app/package.json`) or in a lockfile format the reader "
+        "does not parse (a Yarn 2+ `yarn.lock`)."
+    ),
 )
 
 
@@ -8371,6 +9085,17 @@ _r(
     owasp_mcp_references=["MCP03:2025"],
     owasp_agentic_references=["ASI04"],
     adversa_references=["ADV-SUPPLY-01"],
+    limitations=(
+        "Reads `langgraph-checkpoint-postgres` and `langgraph-checkpoint-sqlite` in "
+        "requirements*.txt at any depth and, at the project root only, in "
+        "pyproject.toml, Pipfile, package.json, .mcp.json, mcp.json, "
+        "claude_desktop_config.json and the Pipfile.lock, poetry.lock, uv.lock, "
+        "package-lock.json, pnpm-lock.yaml and yarn.lock lockfiles, taking the "
+        "lowest version a range allows and reporting a reference that states no "
+        "version. The dependency is not read when it is declared in a sub-directory "
+        "manifest (`services/api/pyproject.toml`) or in a lockfile format the "
+        "reader does not parse (`pdm.lock`)."
+    ),
 )
 
 
@@ -8408,6 +9133,16 @@ _r(
     owasp_mcp_references=["MCP01:2025"],
     owasp_agentic_references=["ASI04"],
     adversa_references=["ADV-AUTH-01"],
+    limitations=(
+        "Reads `meta-ads-mcp` in requirements*.txt at any depth and, at the project "
+        "root only, in pyproject.toml, Pipfile, .mcp.json, mcp.json, "
+        "claude_desktop_config.json and the Pipfile.lock, poetry.lock and uv.lock "
+        "lockfiles, taking the lowest version a range allows and reporting a "
+        "reference that states no version. The dependency is not read when it is "
+        "declared in a sub-directory manifest (`services/api/pyproject.toml`), in "
+        "`.cursor/mcp.json` or `.vscode/mcp.json`, or in a lockfile format the "
+        "reader does not parse (`pdm.lock`)."
+    ),
 )
 
 
@@ -8437,6 +9172,17 @@ _r(
     owasp_mcp_references=["MCP09:2025"],
     owasp_agentic_references=["ASI06"],
     adversa_references=["ADV-SSRF-01"],
+    limitations=(
+        "Reads `@adenot/mcp-google-search` in requirements*.txt at any depth and, "
+        "at the project root only, in pyproject.toml, Pipfile, package.json, "
+        ".mcp.json, mcp.json, claude_desktop_config.json and the Pipfile.lock, "
+        "poetry.lock, uv.lock, package-lock.json, pnpm-lock.yaml and yarn.lock "
+        "lockfiles, and reports every version, a future fixed one included, until "
+        "the pin gets a floor. The dependency is not read when it is declared in a "
+        "sub-directory manifest (`packages/app/package.json`), in "
+        "`.cursor/mcp.json` or `.vscode/mcp.json`, or in a lockfile format the "
+        "reader does not parse (a Yarn 2+ `yarn.lock`)."
+    ),
 )
 
 
@@ -8469,6 +9215,18 @@ _r(
     owasp_mcp_references=["MCP09:2025"],
     owasp_agentic_references=["ASI06"],
     adversa_references=["ADV-SSRF-01"],
+    limitations=(
+        "Reads `mcp-grafana` in requirements*.txt at any depth and, at the project "
+        "root only, in pyproject.toml, Pipfile, package.json, .mcp.json, mcp.json, "
+        "claude_desktop_config.json and the Pipfile.lock, poetry.lock, uv.lock, "
+        "package-lock.json, pnpm-lock.yaml and yarn.lock lockfiles, taking the "
+        "lowest version a range allows and reporting a reference that states no "
+        "version. The dependency is not read when it is declared in a sub-directory "
+        "manifest (`services/api/pyproject.toml`), in `.cursor/mcp.json` or "
+        "`.vscode/mcp.json`, or in a lockfile format the reader does not parse "
+        "(`pdm.lock`). A compose file's `grafana/mcp-grafana` image tag is not "
+        "read."
+    ),
 )
 
 
@@ -8520,6 +9278,17 @@ _r(
     owasp_mcp_references=["MCP09:2025", "MCP04:2025"],
     owasp_agentic_references=["ASI06", "ASI05"],
     adversa_references=["ADV-SSRF-01"],
+    limitations=(
+        "Reads `n8n` in requirements*.txt at any depth and, at the project root "
+        "only, in pyproject.toml, Pipfile, package.json, .mcp.json, mcp.json, "
+        "claude_desktop_config.json and the Pipfile.lock, poetry.lock, uv.lock, "
+        "package-lock.json, pnpm-lock.yaml and yarn.lock lockfiles, taking the "
+        "lowest version a range allows and reporting a reference that states no "
+        "version. The dependency is not read when it is declared in a sub-directory "
+        "manifest (`packages/app/package.json`) or in a lockfile format the reader "
+        "does not parse (a Yarn 2+ `yarn.lock`). A compose file's `n8nio/n8n` image "
+        "tag is not read."
+    ),
 )
 
 
@@ -8571,6 +9340,17 @@ _r(
     owasp_mcp_references=["MCP01:2025", "MCP09:2025"],
     owasp_agentic_references=["ASI04", "ASI06"],
     adversa_references=["ADV-AUTH-01", "ADV-SSRF-01"],
+    limitations=(
+        "Reads `@samanhappy/mcphub` in requirements*.txt at any depth and, at the "
+        "project root only, in pyproject.toml, Pipfile, package.json, .mcp.json, "
+        "mcp.json, claude_desktop_config.json and the Pipfile.lock, poetry.lock, "
+        "uv.lock, package-lock.json, pnpm-lock.yaml and yarn.lock lockfiles, taking "
+        "the lowest version a range allows and reporting a reference that states no "
+        "version. The dependency is not read when it is declared in a sub-directory "
+        "manifest (`packages/app/package.json`), in `.cursor/mcp.json` or "
+        "`.vscode/mcp.json`, or in a lockfile format the reader does not parse (a "
+        "Yarn 2+ `yarn.lock`)."
+    ),
 )
 
 
@@ -8597,6 +9377,17 @@ _r(
     owasp_mcp_references=["MCP01:2025"],
     owasp_agentic_references=["ASI04"],
     adversa_references=["ADV-AUTH-01"],
+    limitations=(
+        "Reads `mcp-sequential-thinking` in requirements*.txt at any depth and, at "
+        "the project root only, in pyproject.toml, Pipfile, package.json, "
+        ".mcp.json, mcp.json, claude_desktop_config.json and the Pipfile.lock, "
+        "poetry.lock, uv.lock, package-lock.json, pnpm-lock.yaml and yarn.lock "
+        "lockfiles, taking the lowest version a range allows and reporting a "
+        "reference that states no version. The dependency is not read when it is "
+        "declared in a sub-directory manifest (`services/api/pyproject.toml`), in "
+        "`.cursor/mcp.json` or `.vscode/mcp.json`, or in a lockfile format the "
+        "reader does not parse (`pdm.lock`)."
+    ),
 )
 
 
@@ -8628,6 +9419,17 @@ _r(
     owasp_mcp_references=["MCP01:2025"],
     owasp_agentic_references=["ASI04"],
     adversa_references=["ADV-AUTH-01"],
+    limitations=(
+        "Reads `claude-code-templates` in requirements*.txt at any depth and, at "
+        "the project root only, in pyproject.toml, Pipfile, package.json, "
+        ".mcp.json, mcp.json, claude_desktop_config.json and the Pipfile.lock, "
+        "poetry.lock, uv.lock, package-lock.json, pnpm-lock.yaml and yarn.lock "
+        "lockfiles, taking the lowest version a range allows and reporting a "
+        "reference that states no version. The dependency is not read when it is "
+        "declared in a sub-directory manifest (`packages/app/package.json`), in "
+        "`.cursor/mcp.json` or `.vscode/mcp.json`, or in a lockfile format the "
+        "reader does not parse (a Yarn 2+ `yarn.lock`)."
+    ),
 )
 
 
@@ -8792,6 +9594,21 @@ _r(
     owasp_mcp_references=["MCP04:2025"],
     owasp_agentic_references=["ASI05"],
     adversa_references=["ADV-DATA-01"],
+    limitations=(
+        "Two arms. The pin reads `mcp-atlassian` in requirements*.txt at any depth "
+        "and, at the project root only, in pyproject.toml, Pipfile, package.json, "
+        ".mcp.json, mcp.json, claude_desktop_config.json and the Pipfile.lock, "
+        "poetry.lock, uv.lock, package-lock.json, pnpm-lock.yaml and yarn.lock "
+        "lockfiles, taking the lowest version a range allows and reporting a "
+        "reference that states no version; it is not read when declared in a "
+        "sub-directory manifest (`services/api/pyproject.toml`), in "
+        "`.cursor/mcp.json` or `.vscode/mcp.json`, or in `pdm.lock`. The source arm "
+        "reads Python files that define a `confluence_upload_attachment` or "
+        "`_upload_attachment_direct` handler and open `file_path`, `filepath`, "
+        "`attachment_path` or `path` in `rb` mode with no path-validation call, so "
+        "a copy that opens the path under another name (`abs_path = "
+        "os.path.abspath(file_path)`, then `open(abs_path, \"rb\")`) is not reported."
+    ),
 )
 
 
@@ -8820,6 +9637,17 @@ _r(
     owasp_mcp_references=["MCP09:2025"],
     owasp_agentic_references=["ASI06"],
     adversa_references=["ADV-SSRF-01"],
+    limitations=(
+        "Reads `@jshookmcp/jshook` in requirements*.txt at any depth and, at the "
+        "project root only, in pyproject.toml, Pipfile, package.json, .mcp.json, "
+        "mcp.json, claude_desktop_config.json and the Pipfile.lock, poetry.lock, "
+        "uv.lock, package-lock.json, pnpm-lock.yaml and yarn.lock lockfiles, taking "
+        "the lowest version a range allows and reporting a reference that states no "
+        "version. The dependency is not read when it is declared in a sub-directory "
+        "manifest (`packages/app/package.json`), in `.cursor/mcp.json` or "
+        "`.vscode/mcp.json`, or in a lockfile format the reader does not parse (a "
+        "Yarn 2+ `yarn.lock`)."
+    ),
 )
 
 
@@ -8851,6 +9679,17 @@ _r(
     owasp_mcp_references=["MCP09:2025"],
     owasp_agentic_references=["ASI06"],
     adversa_references=["ADV-SSRF-01"],
+    limitations=(
+        "Reads `auth-fetch-mcp` in requirements*.txt at any depth and, at the "
+        "project root only, in pyproject.toml, Pipfile, package.json, .mcp.json, "
+        "mcp.json, claude_desktop_config.json and the Pipfile.lock, poetry.lock, "
+        "uv.lock, package-lock.json, pnpm-lock.yaml and yarn.lock lockfiles, taking "
+        "the lowest version a range allows and reporting a reference that states no "
+        "version. The dependency is not read when it is declared in a sub-directory "
+        "manifest (`packages/app/package.json`), in `.cursor/mcp.json` or "
+        "`.vscode/mcp.json`, or in a lockfile format the reader does not parse (a "
+        "Yarn 2+ `yarn.lock`)."
+    ),
 )
 
 
@@ -8881,6 +9720,18 @@ _r(
     owasp_mcp_references=["MCP07:2025"],
     owasp_agentic_references=["ASI04"],
     adversa_references=["ADV-AUTH-01"],
+    limitations=(
+        "Reads `mcp-memory-service` in requirements*.txt at any depth and, at the "
+        "project root only, in pyproject.toml, Pipfile, package.json, .mcp.json, "
+        "mcp.json, claude_desktop_config.json and the Pipfile.lock, poetry.lock, "
+        "uv.lock, package-lock.json, pnpm-lock.yaml and yarn.lock lockfiles, taking "
+        "the lowest version a range allows and reporting a reference that states no "
+        "version. The dependency is not read when it is declared in a sub-directory "
+        "manifest (`services/api/pyproject.toml`), in `.cursor/mcp.json` or "
+        "`.vscode/mcp.json`, or in a lockfile format the reader does not parse "
+        "(`pdm.lock`). A compose file's `doobidoo/mcp-memory-service` image tag is "
+        "not read."
+    ),
 )
 
 
@@ -8914,6 +9765,17 @@ _r(
     owasp_mcp_references=["MCP01:2025"],
     owasp_agentic_references=["ASI02"],
     adversa_references=["ADV-RCE-04"],
+    limitations=(
+        "Reads `neuro-cortex-memory` in requirements*.txt at any depth and, at the "
+        "project root only, in pyproject.toml, Pipfile, package.json, .mcp.json, "
+        "mcp.json, claude_desktop_config.json and the Pipfile.lock, poetry.lock, "
+        "uv.lock, package-lock.json, pnpm-lock.yaml and yarn.lock lockfiles, taking "
+        "the lowest version a range allows and reporting a reference that states no "
+        "version. The dependency is not read when it is declared in a sub-directory "
+        "manifest (`services/api/pyproject.toml`), in `.cursor/mcp.json` or "
+        "`.vscode/mcp.json`, or in a lockfile format the reader does not parse "
+        "(`pdm.lock`)."
+    ),
 )
 
 
@@ -8955,6 +9817,17 @@ _r(
     owasp_mcp_references=["MCP09:2025"],
     owasp_agentic_references=["ASI06"],
     adversa_references=["ADV-SSRF-01"],
+    limitations=(
+        "Reads `@aborruso/ckan-mcp-server` in requirements*.txt at any depth and, "
+        "at the project root only, in pyproject.toml, Pipfile, package.json, "
+        ".mcp.json, mcp.json, claude_desktop_config.json and the Pipfile.lock, "
+        "poetry.lock, uv.lock, package-lock.json, pnpm-lock.yaml and yarn.lock "
+        "lockfiles, taking the lowest version a range allows and reporting a "
+        "reference that states no version. The dependency is not read when it is "
+        "declared in a sub-directory manifest (`packages/app/package.json`), in "
+        "`.cursor/mcp.json` or `.vscode/mcp.json`, or in a lockfile format the "
+        "reader does not parse (a Yarn 2+ `yarn.lock`)."
+    ),
 )
 
 
@@ -9004,6 +9877,17 @@ _r(
     owasp_agentic_references=["ASI02"],
     adversa_references=["ADV-RCE-04"],
     incident_references=["OX-MCP-2026-05-01"],
+    limitations=(
+        "Reads `letta` in requirements*.txt at any depth and, at the project root "
+        "only, in pyproject.toml, Pipfile, package.json, .mcp.json, mcp.json, "
+        "claude_desktop_config.json and the Pipfile.lock, poetry.lock, uv.lock, "
+        "package-lock.json, pnpm-lock.yaml and yarn.lock lockfiles, taking the "
+        "lowest version a range allows and reporting a reference that states no "
+        "version. The dependency is not read when it is declared in a sub-directory "
+        "manifest (`services/api/pyproject.toml`) or in a lockfile format the "
+        "reader does not parse (`pdm.lock`). A compose file's `letta/letta` image "
+        "tag is not read."
+    ),
 )
 
 
@@ -9029,6 +9913,16 @@ _r(
     owasp_mcp_references=["MCP01:2025"],
     owasp_agentic_references=["ASI04"],
     adversa_references=["ADV-AUTH-01"],
+    limitations=(
+        "Reads `flyto-core` in requirements*.txt at any depth and, at the project "
+        "root only, in pyproject.toml, Pipfile, package.json, .mcp.json, mcp.json, "
+        "claude_desktop_config.json and the Pipfile.lock, poetry.lock, uv.lock, "
+        "package-lock.json, pnpm-lock.yaml and yarn.lock lockfiles, taking the "
+        "lowest version a range allows and reporting a reference that states no "
+        "version. The dependency is not read when it is declared in a sub-directory "
+        "manifest (`services/api/pyproject.toml`) or in a lockfile format the "
+        "reader does not parse (`pdm.lock`)."
+    ),
 )
 
 
@@ -9100,6 +9994,17 @@ _r(
     owasp_mcp_references=["MCP10:2025"],
     owasp_agentic_references=["ASI04"],
     adversa_references=["ADV-AUTH-01"],
+    limitations=(
+        "Reads `langflow`, `langflow-base` and `lfx` in requirements*.txt at any "
+        "depth and, at the project root only, in pyproject.toml, Pipfile, "
+        ".mcp.json, mcp.json, claude_desktop_config.json and the Pipfile.lock, "
+        "poetry.lock and uv.lock lockfiles, taking the lowest version a range "
+        "allows and reporting a reference that states no version. The dependency is "
+        "not read when it is declared in a sub-directory manifest "
+        "(`services/api/pyproject.toml`) or in a lockfile format the reader does "
+        "not parse (`pdm.lock`). A compose file's `langflowai/langflow` image tag "
+        "is not read."
+    ),
 )
 
 
@@ -9123,6 +10028,17 @@ _r(
     owasp_mcp_references=["MCP04:2025"],
     owasp_agentic_references=["ASI09"],
     adversa_references=["ADV-SUPPLY-01"],
+    limitations=(
+        "Reads `gemini-bridge` in requirements*.txt at any depth and, at the "
+        "project root only, in pyproject.toml, Pipfile, package.json, .mcp.json, "
+        "mcp.json, claude_desktop_config.json and the Pipfile.lock, poetry.lock, "
+        "uv.lock, package-lock.json, pnpm-lock.yaml and yarn.lock lockfiles, taking "
+        "the lowest version a range allows and reporting a reference that states no "
+        "version. The dependency is not read when it is declared in a sub-directory "
+        "manifest (`services/api/pyproject.toml`), in `.cursor/mcp.json` or "
+        "`.vscode/mcp.json`, or in a lockfile format the reader does not parse "
+        "(`pdm.lock`)."
+    ),
 )
 
 
@@ -9317,6 +10233,17 @@ _r(
     owasp_mcp_references=["MCP09:2025"],
     owasp_agentic_references=["ASI06"],
     adversa_references=["ADV-SSRF-01"],
+    limitations=(
+        "Reads `mcp-florence2` in requirements*.txt at any depth and, at the "
+        "project root only, in pyproject.toml, Pipfile, package.json, .mcp.json, "
+        "mcp.json, claude_desktop_config.json and the Pipfile.lock, poetry.lock, "
+        "uv.lock, package-lock.json, pnpm-lock.yaml and yarn.lock lockfiles, and "
+        "reports every version, a future fixed one included, until the pin gets a "
+        "floor. The dependency is not read when it is declared in a sub-directory "
+        "manifest (`services/api/pyproject.toml`), in `.cursor/mcp.json` or "
+        "`.vscode/mcp.json`, or in a lockfile format the reader does not parse "
+        "(`pdm.lock`)."
+    ),
 )
 
 
@@ -9352,6 +10279,19 @@ _r(
     owasp_mcp_references=["MCP01:2025"],
     owasp_agentic_references=["ASI01"],
     adversa_references=["ADV-INJECT-01"],
+    limitations=(
+        "Reads `codewhale` and `deepseek-tui`, each against its own fix floor, in "
+        "requirements*.txt at any depth and, at the project root only, in "
+        "pyproject.toml, Pipfile, package.json, .mcp.json, mcp.json, "
+        "claude_desktop_config.json and the Pipfile.lock, poetry.lock, uv.lock, "
+        "package-lock.json, pnpm-lock.yaml and yarn.lock lockfiles, taking the "
+        "lowest version a range allows and reporting a reference that states no "
+        "version. The dependency is not read when it is declared in a sub-directory "
+        "manifest (`packages/app/package.json`) or in a lockfile format the reader "
+        "does not parse (a Yarn 2+ `yarn.lock`). Cargo manifests are not read, so "
+        "the crates.io crate `codewhale-tui`, which has the same defect, is not "
+        "reported."
+    ),
 )
 
 
@@ -9381,6 +10321,15 @@ _r(
     owasp_mcp_references=["MCP04:2025"],
     owasp_agentic_references=["ASI05"],
     adversa_references=["ADV-INJECT-01"],
+    limitations=(
+        "Reads `marimo` in requirements*.txt at any depth and, at the project root "
+        "only, in pyproject.toml, Pipfile, .mcp.json, mcp.json, "
+        "claude_desktop_config.json and the Pipfile.lock, poetry.lock and uv.lock "
+        "lockfiles, taking the lowest version a range allows and reporting a "
+        "reference that states no version. The dependency is not read when it is "
+        "declared in a sub-directory manifest (`services/api/pyproject.toml`) or in "
+        "a lockfile format the reader does not parse (`pdm.lock`)."
+    ),
 )
 
 
@@ -9409,6 +10358,15 @@ _r(
     owasp_mcp_references=["MCP06:2025"],
     owasp_agentic_references=["ASI03"],
     adversa_references=["ADV-INJECT-01"],
+    limitations=(
+        "Reads `omnigent` in requirements*.txt at any depth and, at the project "
+        "root only, in pyproject.toml, Pipfile, .mcp.json, mcp.json, "
+        "claude_desktop_config.json and the Pipfile.lock, poetry.lock and uv.lock "
+        "lockfiles, taking the lowest version a range allows and reporting a "
+        "reference that states no version. The dependency is not read when it is "
+        "declared in a sub-directory manifest (`services/api/pyproject.toml`) or in "
+        "a lockfile format the reader does not parse (`pdm.lock`)."
+    ),
 )
 
 
@@ -9440,6 +10398,16 @@ _r(
     owasp_mcp_references=["MCP04:2025"],
     owasp_agentic_references=["ASI05"],
     adversa_references=["ADV-INJECT-01"],
+    limitations=(
+        "Reads `neo.mjs` in requirements*.txt at any depth and, at the project root "
+        "only, in pyproject.toml, Pipfile, package.json, .mcp.json, mcp.json, "
+        "claude_desktop_config.json and the Pipfile.lock, poetry.lock, uv.lock, "
+        "package-lock.json, pnpm-lock.yaml and yarn.lock lockfiles, and reports "
+        "every version, a future fixed one included, until the pin gets a floor. "
+        "The dependency is not read when it is declared in a sub-directory manifest "
+        "(`packages/app/package.json`) or in a lockfile format the reader does not "
+        "parse (a Yarn 2+ `yarn.lock`)."
+    ),
 )
 
 _r(
@@ -9470,6 +10438,17 @@ _r(
     owasp_mcp_references=["MCP06:2025"],
     owasp_agentic_references=["ASI03"],
     adversa_references=["ADV-INJECT-01"],
+    limitations=(
+        "Reads `langbot` in requirements*.txt at any depth and, at the project root "
+        "only, in pyproject.toml, Pipfile, package.json, .mcp.json, mcp.json, "
+        "claude_desktop_config.json and the Pipfile.lock, poetry.lock, uv.lock, "
+        "package-lock.json, pnpm-lock.yaml and yarn.lock lockfiles, and reports "
+        "every version, a future fixed one included, until the pin gets a floor. "
+        "The dependency is not read when it is declared in a sub-directory manifest "
+        "(`services/api/pyproject.toml`) or in a lockfile format the reader does "
+        "not parse (`pdm.lock`). A compose file's `rockchin/langbot` image tag is "
+        "not read."
+    ),
 )
 
 
@@ -9506,6 +10485,17 @@ _r(
     owasp_mcp_references=["MCP01:2025", "MCP05:2025"],
     owasp_agentic_references=["ASI05"],
     adversa_references=["ADV-RCE-04"],
+    limitations=(
+        "Reads `qwed-mcp` in requirements*.txt at any depth and, at the project "
+        "root only, in pyproject.toml, Pipfile, package.json, .mcp.json, mcp.json, "
+        "claude_desktop_config.json and the Pipfile.lock, poetry.lock, uv.lock, "
+        "package-lock.json, pnpm-lock.yaml and yarn.lock lockfiles, taking the "
+        "lowest version a range allows and reporting a reference that states no "
+        "version. The dependency is not read when it is declared in a sub-directory "
+        "manifest (`services/api/pyproject.toml`), in `.cursor/mcp.json` or "
+        "`.vscode/mcp.json`, or in a lockfile format the reader does not parse "
+        "(`pdm.lock`)."
+    ),
 )
 
 _r(
@@ -9530,6 +10520,17 @@ _r(
     owasp_mcp_references=["MCP01:2025"],
     owasp_agentic_references=["ASI03"],
     adversa_references=["ADV-AUTH-01"],
+    limitations=(
+        "Reads `nextcloud-mcp-server` in requirements*.txt at any depth and, at the "
+        "project root only, in pyproject.toml, Pipfile, package.json, .mcp.json, "
+        "mcp.json, claude_desktop_config.json and the Pipfile.lock, poetry.lock, "
+        "uv.lock, package-lock.json, pnpm-lock.yaml and yarn.lock lockfiles, taking "
+        "the lowest version a range allows and reporting a reference that states no "
+        "version. The dependency is not read when it is declared in a sub-directory "
+        "manifest (`services/api/pyproject.toml`), in `.cursor/mcp.json` or "
+        "`.vscode/mcp.json`, or in a lockfile format the reader does not parse "
+        "(`pdm.lock`)."
+    ),
 )
 
 _r(
@@ -9555,6 +10556,17 @@ _r(
     owasp_mcp_references=["MCP04:2025"],
     owasp_agentic_references=["ASI05"],
     adversa_references=["ADV-INJECT-04"],
+    limitations=(
+        "Reads `browse-mcp` in requirements*.txt at any depth and, at the project "
+        "root only, in pyproject.toml, Pipfile, package.json, .mcp.json, mcp.json, "
+        "claude_desktop_config.json and the Pipfile.lock, poetry.lock, uv.lock, "
+        "package-lock.json, pnpm-lock.yaml and yarn.lock lockfiles, taking the "
+        "lowest version a range allows and reporting a reference that states no "
+        "version. The dependency is not read when it is declared in a sub-directory "
+        "manifest (`packages/app/package.json`), in `.cursor/mcp.json` or "
+        "`.vscode/mcp.json`, or in a lockfile format the reader does not parse (a "
+        "Yarn 2+ `yarn.lock`)."
+    ),
 )
 
 _r(
@@ -9578,6 +10590,17 @@ _r(
     owasp_mcp_references=["MCP01:2025"],
     owasp_agentic_references=["ASI03"],
     adversa_references=["ADV-AUTH-01"],
+    limitations=(
+        "Reads `genieacs-mcp` in requirements*.txt at any depth and, at the project "
+        "root only, in pyproject.toml, Pipfile, package.json, .mcp.json, mcp.json, "
+        "claude_desktop_config.json and the Pipfile.lock, poetry.lock, uv.lock, "
+        "package-lock.json, pnpm-lock.yaml and yarn.lock lockfiles, taking the "
+        "lowest version a range allows and reporting a reference that states no "
+        "version. The dependency is not read when it is declared in a sub-directory "
+        "manifest (`packages/app/package.json`), in `.cursor/mcp.json` or "
+        "`.vscode/mcp.json`, or in a lockfile format the reader does not parse (a "
+        "Yarn 2+ `yarn.lock`)."
+    ),
 )
 
 _r(
@@ -9603,6 +10626,18 @@ _r(
     owasp_mcp_references=["MCP04:2025"],
     owasp_agentic_references=["ASI05"],
     adversa_references=["ADV-INJECT-04"],
+    limitations=(
+        "Reads `sublinear-time-solver` and `consciousness-explorer`, each against "
+        "its own fix floor, in requirements*.txt at any depth and, at the project "
+        "root only, in pyproject.toml, Pipfile, package.json, .mcp.json, mcp.json, "
+        "claude_desktop_config.json and the Pipfile.lock, poetry.lock, uv.lock, "
+        "package-lock.json, pnpm-lock.yaml and yarn.lock lockfiles, taking the "
+        "lowest version a range allows and reporting a reference that states no "
+        "version. The dependency is not read when it is declared in a sub-directory "
+        "manifest (`packages/app/package.json`), in `.cursor/mcp.json` or "
+        "`.vscode/mcp.json`, or in a lockfile format the reader does not parse (a "
+        "Yarn 2+ `yarn.lock`)."
+    ),
 )
 
 
@@ -9886,6 +10921,16 @@ _r(
     cve_references=["CVE-2026-55235"],
     owasp_mcp_references=["MCP06:2025"],
     owasp_agentic_references=["ASI03"],
+    limitations=(
+        "Reads `langgraph-api` in requirements*.txt at any depth and, at the "
+        "project root only, in pyproject.toml, Pipfile, package.json, .mcp.json, "
+        "mcp.json, claude_desktop_config.json and the Pipfile.lock, poetry.lock, "
+        "uv.lock, package-lock.json, pnpm-lock.yaml and yarn.lock lockfiles, taking "
+        "the lowest version a range allows and reporting a reference that states no "
+        "version. The dependency is not read when it is declared in a sub-directory "
+        "manifest (`services/api/pyproject.toml`) or in a lockfile format the "
+        "reader does not parse (`pdm.lock`)."
+    ),
 )
 
 _r(
@@ -9917,6 +10962,14 @@ _r(
     cve_references=["CVE-2026-90898"],
     owasp_mcp_references=["MCP01:2025", "MCP05:2025"],
     owasp_agentic_references=["ASI02", "ASI10"],
+    limitations=(
+        "Matches an `exec.Command` or `exec.CommandContext` call in an MCP-shaped "
+        "Go file with a request-decoding marker (`json.NewDecoder(r.Body)`, an "
+        "`*http.Request` handler, `ShouldBindJSON`, `mux.Vars`) in the preceding 2 "
+        "KB, unless its first argument is a string literal. A literal program with "
+        "the request in the arguments, such as `exec.Command(\"sh\", \"-c\", "
+        "req.Command)`, is therefore not reported."
+    ),
 )
 
 _r(
@@ -10224,6 +11277,17 @@ _r(
     owasp_mcp_references=["MCP06:2025"],
     owasp_agentic_references=["ASI05"],
     adversa_references=["ADV-NET-01"],
+    limitations=(
+        "Reads `mcp-contextforge-gateway` in requirements*.txt at any depth and, at "
+        "the project root only, in pyproject.toml, Pipfile, package.json, "
+        ".mcp.json, mcp.json, claude_desktop_config.json and the Pipfile.lock, "
+        "poetry.lock, uv.lock, package-lock.json, pnpm-lock.yaml and yarn.lock "
+        "lockfiles, taking the lowest version a range allows and reporting a "
+        "reference that states no version. The dependency is not read when it is "
+        "declared in a sub-directory manifest (`services/api/pyproject.toml`), in "
+        "`.cursor/mcp.json` or `.vscode/mcp.json`, or in a lockfile format the "
+        "reader does not parse (`pdm.lock`)."
+    ),
 )
 
 
@@ -10254,6 +11318,18 @@ _r(
     owasp_mcp_references=["MCP03:2025"],
     owasp_agentic_references=["ASI04"],
     adversa_references=["ADV-DATA-01"],
+    limitations=(
+        "Reads `postgres-mcp` in requirements*.txt at any depth and, at the project "
+        "root only, in pyproject.toml, Pipfile, package.json, .mcp.json, mcp.json, "
+        "claude_desktop_config.json and the Pipfile.lock, poetry.lock, uv.lock, "
+        "package-lock.json, pnpm-lock.yaml and yarn.lock lockfiles, taking the "
+        "lowest version a range allows and reporting a reference that states no "
+        "version. The dependency is not read when it is declared in a sub-directory "
+        "manifest (`services/api/pyproject.toml`), in `.cursor/mcp.json` or "
+        "`.vscode/mcp.json`, or in a lockfile format the reader does not parse "
+        "(`pdm.lock`). A compose file's `crystaldba/postgres-mcp` image tag is not "
+        "read."
+    ),
 )
 
 
@@ -10283,6 +11359,19 @@ _r(
     owasp_mcp_references=["MCP03:2025"],
     owasp_agentic_references=["ASI04"],
     adversa_references=["ADV-DATA-01"],
+    limitations=(
+        "Reads `awslabs.postgres-mcp-server` in requirements*.txt at any depth and, "
+        "at the project root only, in pyproject.toml, Pipfile, package.json, "
+        ".mcp.json, mcp.json, claude_desktop_config.json and the Pipfile.lock, "
+        "poetry.lock, uv.lock, package-lock.json, pnpm-lock.yaml and yarn.lock "
+        "lockfiles, taking the lowest version a range allows and reporting a "
+        "reference that states no version. The dependency is not read when it is "
+        "declared in a sub-directory manifest (`services/api/pyproject.toml`), in "
+        "`.cursor/mcp.json` or `.vscode/mcp.json`, or in a lockfile format the "
+        "reader does not parse (`pdm.lock`). The normalised spelling "
+        "`awslabs-postgres-mcp-server`, which uv.lock records, is not matched in a "
+        "requirements file or in uv.lock."
+    ),
 )
 
 
@@ -10307,6 +11396,20 @@ _r(
     owasp_mcp_references=["MCP03:2025"],
     owasp_agentic_references=["ASI04"],
     adversa_references=["ADV-DATA-01"],
+    limitations=(
+        "Reads `awslabs.security-agent-mcp-server` in requirements*.txt at any "
+        "depth and, at the project root only, in pyproject.toml, Pipfile, "
+        "package.json, .mcp.json, mcp.json, claude_desktop_config.json and the "
+        "Pipfile.lock, poetry.lock, uv.lock, package-lock.json, pnpm-lock.yaml and "
+        "yarn.lock lockfiles, taking the lowest version a range allows and "
+        "reporting a reference that states no version. The dependency is not read "
+        "when it is declared in a sub-directory manifest "
+        "(`services/api/pyproject.toml`), in `.cursor/mcp.json` or "
+        "`.vscode/mcp.json`, or in a lockfile format the reader does not parse "
+        "(`pdm.lock`). The normalised spelling `awslabs-security-agent-mcp-server`, "
+        "which uv.lock records, is not matched in a requirements file or in "
+        "uv.lock."
+    ),
 )
 
 
@@ -10339,6 +11442,17 @@ _r(
     owasp_mcp_references=["MCP07:2025"],
     owasp_agentic_references=["ASI04"],
     adversa_references=["ADV-AGENT-02"],
+    limitations=(
+        "Reads `mysql-mcp-server` and `mysql_mcp_server` in requirements*.txt at "
+        "any depth and, at the project root only, in pyproject.toml, Pipfile, "
+        ".mcp.json, mcp.json, claude_desktop_config.json and the Pipfile.lock, "
+        "poetry.lock and uv.lock lockfiles, taking the lowest version a range "
+        "allows and reporting a reference that states no version. The dependency is "
+        "not read when it is declared in a sub-directory manifest "
+        "(`services/api/pyproject.toml`), in `.cursor/mcp.json` or "
+        "`.vscode/mcp.json`, or in a lockfile format the reader does not parse "
+        "(`pdm.lock`)."
+    ),
 )
 
 
@@ -10377,6 +11491,15 @@ _r(
     owasp_mcp_references=["MCP07:2025"],
     owasp_agentic_references=["ASI04"],
     adversa_references=["ADV-AGENT-02"],
+    limitations=(
+        "Reads `praisonai` in package.json, .mcp.json, mcp.json, "
+        "claude_desktop_config.json and the package-lock.json, pnpm-lock.yaml and "
+        "yarn.lock lockfiles at the project root only, taking the lowest version a "
+        "range allows and reporting a reference that states no version. The "
+        "dependency is not read when it is declared in a sub-directory manifest "
+        "(`packages/app/package.json`) or in a lockfile format the reader does not "
+        "parse (a Yarn 2+ `yarn.lock`)."
+    ),
 )
 
 
@@ -10419,6 +11542,16 @@ _r(
     owasp_mcp_references=["MCP07:2025"],
     owasp_agentic_references=["ASI04"],
     adversa_references=["ADV-AGENT-02"],
+    limitations=(
+        "Reads `@zereight/mcp-gitlab` in package.json, .mcp.json, mcp.json, "
+        "claude_desktop_config.json and the package-lock.json, pnpm-lock.yaml and "
+        "yarn.lock lockfiles at the project root only, taking the lowest version a "
+        "range allows and reporting a reference that states no version. The "
+        "dependency is not read when it is declared in a sub-directory manifest "
+        "(`packages/app/package.json`), in `.cursor/mcp.json` or "
+        "`.vscode/mcp.json`, or in a lockfile format the reader does not parse (a "
+        "Yarn 2+ `yarn.lock`)."
+    ),
 )
 
 
@@ -10448,6 +11581,16 @@ _r(
     owasp_mcp_references=["MCP01:2025"],
     owasp_agentic_references=["ASI02"],
     adversa_references=["ADV-AGENT-01"],
+    limitations=(
+        "Reads `flowise` in package.json, .mcp.json, mcp.json, "
+        "claude_desktop_config.json and the package-lock.json, pnpm-lock.yaml and "
+        "yarn.lock lockfiles at the project root only, taking the lowest version a "
+        "range allows and reporting a reference that states no version. The "
+        "dependency is not read when it is declared in a sub-directory manifest "
+        "(`packages/app/package.json`) or in a lockfile format the reader does not "
+        "parse (a Yarn 2+ `yarn.lock`). A compose file's `flowiseai/flowise` image "
+        "tag is not read."
+    ),
 )
 
 
@@ -10486,6 +11629,15 @@ _r(
     owasp_mcp_references=["MCP08:2025"],
     owasp_agentic_references=["ASI04"],
     adversa_references=["ADV-AGENT-04"],
+    limitations=(
+        "Reads `mcp-from-openapi` in package.json, .mcp.json, mcp.json, "
+        "claude_desktop_config.json and the package-lock.json, pnpm-lock.yaml and "
+        "yarn.lock lockfiles at the project root only, taking the lowest version a "
+        "range allows and reporting a reference that states no version. The "
+        "dependency is not read when it is declared in a sub-directory manifest "
+        "(`packages/app/package.json`) or in a lockfile format the reader does not "
+        "parse (a Yarn 2+ `yarn.lock`)."
+    ),
 )
 
 
@@ -10522,6 +11674,17 @@ _r(
     owasp_mcp_references=["MCP08:2025"],
     owasp_agentic_references=["ASI04"],
     adversa_references=["ADV-AGENT-04"],
+    limitations=(
+        "Reads `@contentful/mcp-server` and `@contentful/mcp-tools`, each against "
+        "its own fix floor, in package.json, .mcp.json, mcp.json, "
+        "claude_desktop_config.json and the package-lock.json, pnpm-lock.yaml and "
+        "yarn.lock lockfiles at the project root only, taking the lowest version a "
+        "range allows and reporting a reference that states no version. The "
+        "dependency is not read when it is declared in a sub-directory manifest "
+        "(`packages/app/package.json`), in `.cursor/mcp.json` or "
+        "`.vscode/mcp.json`, or in a lockfile format the reader does not parse (a "
+        "Yarn 2+ `yarn.lock`)."
+    ),
 )
 
 
@@ -10549,6 +11712,16 @@ _r(
     owasp_mcp_references=["MCP08:2025"],
     owasp_agentic_references=["ASI04"],
     adversa_references=["ADV-AGENT-04"],
+    limitations=(
+        "Reads `mcp-searxng` in package.json, .mcp.json, mcp.json, "
+        "claude_desktop_config.json and the package-lock.json, pnpm-lock.yaml and "
+        "yarn.lock lockfiles at the project root only, taking the lowest version a "
+        "range allows and reporting a reference that states no version. The "
+        "dependency is not read when it is declared in a sub-directory manifest "
+        "(`packages/app/package.json`), in `.cursor/mcp.json` or "
+        "`.vscode/mcp.json`, or in a lockfile format the reader does not parse (a "
+        "Yarn 2+ `yarn.lock`)."
+    ),
 )
 
 
@@ -10575,6 +11748,15 @@ _r(
     owasp_mcp_references=["MCP01:2025"],
     owasp_agentic_references=["ASI02"],
     adversa_references=["ADV-AGENT-01"],
+    limitations=(
+        "Reads `atomic-agents-stack` in requirements*.txt at any depth and, at the "
+        "project root only, in pyproject.toml, Pipfile, .mcp.json, mcp.json, "
+        "claude_desktop_config.json and the Pipfile.lock, poetry.lock and uv.lock "
+        "lockfiles, taking the lowest version a range allows and reporting a "
+        "reference that states no version. The dependency is not read when it is "
+        "declared in a sub-directory manifest (`services/api/pyproject.toml`) or in "
+        "a lockfile format the reader does not parse (`pdm.lock`)."
+    ),
 )
 
 
@@ -10606,6 +11788,16 @@ _r(
     owasp_mcp_references=["MCP07:2025"],
     owasp_agentic_references=["ASI04"],
     adversa_references=["ADV-AGENT-02"],
+    limitations=(
+        "Reads `netlicensing-mcp` in requirements*.txt at any depth and, at the "
+        "project root only, in pyproject.toml, Pipfile, .mcp.json, mcp.json, "
+        "claude_desktop_config.json and the Pipfile.lock, poetry.lock and uv.lock "
+        "lockfiles, taking the lowest version a range allows and reporting a "
+        "reference that states no version. The dependency is not read when it is "
+        "declared in a sub-directory manifest (`services/api/pyproject.toml`), in "
+        "`.cursor/mcp.json` or `.vscode/mcp.json`, or in a lockfile format the "
+        "reader does not parse (`pdm.lock`)."
+    ),
 )
 
 
@@ -10641,6 +11833,19 @@ _r(
     owasp_mcp_references=["MCP03:2025"],
     owasp_agentic_references=["ASI04"],
     adversa_references=["ADV-DATA-01"],
+    limitations=(
+        "Reads `knowns` in requirements*.txt at any depth and, at the project root "
+        "only, in pyproject.toml, Pipfile, package.json, .mcp.json, mcp.json, "
+        "claude_desktop_config.json and the Pipfile.lock, poetry.lock, uv.lock, "
+        "package-lock.json, pnpm-lock.yaml and yarn.lock lockfiles, and reports "
+        "every version from 0.1.1 on, a future fixed one included, until the pin "
+        "gets a floor. The dependency is not read when it is declared in a "
+        "sub-directory manifest (`packages/app/package.json`), in "
+        "`.cursor/mcp.json` or `.vscode/mcp.json`, or in a lockfile format the "
+        "reader does not parse (a Yarn 2+ `yarn.lock`). The npm release 0.1.0 is "
+        "affected too but is not reported, because the same number belongs to an "
+        "unrelated PyPI package of that name."
+    ),
 )
 
 
