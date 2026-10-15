@@ -5,8 +5,9 @@ import re
 from pathlib import Path
 
 from agent_audit_kit.models import Finding
-from agent_audit_kit.redaction import shown_arg
 from agent_audit_kit.scanners._helpers import find_line_number, make_finding, in_skip_dir
+from agent_audit_kit.scanners._launchers import invocation_packages, launch_evidence, pin_problem
+from agent_audit_kit.scanners._manifest_deps import MAX_LOCKFILE_BYTES, MAX_MANIFEST_BYTES
 
 # Known vulnerable packages: ecosystem -> name -> affected version range
 # Covers npm, Python (PyPI), and Rust (crates.io)
@@ -21,12 +22,11 @@ KNOWN_VULNERABLE_PACKAGES: dict[str, dict[str, dict[str, str]]] = {
             "description": "104 CVEs catalogued by Adversa AI",
         },
     },
-    "python": {
-        "openclaw": {
-            "affected": "<2.1.0",
-            "description": "104 CVEs catalogued by Adversa AI",
-        },
-    },
+    # No PyPI entry. The table listed `openclaw` here too, but OpenClaw ships on
+    # npm only, and the PyPI project of that name (2.0.1 and 2.0.2) is an
+    # unrelated installer for the cmdop CLI, so `openclaw==2.0.2` was reported as
+    # 104 OpenClaw CVEs. The reader below stays for entries a PyPI package earns.
+    "python": {},
     "rust": {},
 }
 
@@ -84,6 +84,32 @@ def _version_in_range(version: str, affected: str) -> bool:
         return False
 
 
+# Same semantics as _helpers.iter_mcp_servers (fix/config-hook-trust-detection); unify after both merge.
+def _mcp_server_entries(data: object) -> list[tuple[str, dict]]:
+    """(name, entry) for each server in a config's top-level server maps.
+
+    VS Code keeps its servers under `servers` in .vscode/mcp.json, and this
+    rule read `mcpServers` alone, so a VS Code config was never judged. The
+    keys are read in the order `mcpServers`, `servers`. A map counts only when
+    it is a JSON object at the top level of the config: a `servers` array (a
+    registry listing) is not one, and neither is a map nested deeper. When a
+    file has both keys, each map is read on its own. An entry whose value is
+    not an object is skipped, and a config whose top level is not an object
+    yields nothing rather than raising.
+    """
+    entries: list[tuple[str, dict]] = []
+    if not isinstance(data, dict):
+        return entries
+    for key in ("mcpServers", "servers"):
+        servers = data.get(key)
+        if not isinstance(servers, dict):
+            continue
+        for name, entry in servers.items():
+            if isinstance(entry, dict):
+                entries.append((str(name), entry))
+    return entries
+
+
 def _scan_mcp_configs_for_supply_chain(project_root: Path) -> list[Finding]:
     """Check MCP configs for unpinned packages (AAK-SUPPLY-001)."""
     findings: list[Finding] = []
@@ -101,17 +127,11 @@ def _scan_mcp_configs_for_supply_chain(project_root: Path) -> list[Finding]:
         try:
             raw = mcp_path.read_text(encoding="utf-8")
             data = json.loads(raw)
-        except (json.JSONDecodeError, OSError):
+        except (json.JSONDecodeError, UnicodeDecodeError, OSError):
             continue
 
         rel_path = str(mcp_path.relative_to(project_root))
-        servers = data.get("mcpServers", {})
-        if not isinstance(servers, dict):
-            continue
-
-        for server_name, server_cfg in servers.items():
-            if not isinstance(server_cfg, dict):
-                continue
+        for server_name, server_cfg in _mcp_server_entries(data):
             command = server_cfg.get("command", "")
             args = server_cfg.get("args", [])
 
@@ -121,28 +141,27 @@ def _scan_mcp_configs_for_supply_chain(project_root: Path) -> list[Finding]:
             # no package fetcher to identify here, so skip it.
             if not isinstance(command, str):
                 continue
-            if not command or command.strip().split()[0] not in PACKAGE_FETCHERS:
+            # A blank command has no first word; indexing one raised.
+            argv = command.split()
+            if not argv or argv[0] not in PACKAGE_FETCHERS:
                 continue
 
+            # Only the package specs are judged: the first positional argument
+            # (or the `--from` / `-p` value that names the package, plus any
+            # `--with` / extra `-p`), read with the launcher's option values
+            # skipped. Every other argument belongs to the server. The inline
+            # form (`"command": "npx -y pkg"`) carries its spec in `command`.
             if isinstance(args, list):
-                for index, arg in enumerate(args):
-                    if isinstance(arg, str) and not arg.startswith("-"):
-                        # Skip path-like arguments (filesystem paths, not package names)
-                        if arg.startswith("/") or arg.startswith("./") or arg.startswith("../"):
-                            continue
-                        has_version = False
-                        if arg.startswith("@"):
-                            # Scoped package: @org/pkg@version
-                            parts = arg.split("@")
-                            has_version = len(parts) >= 3 and bool(parts[2])
-                        elif "@" in arg:
-                            has_version = True
-                        if not has_version:
-                            findings.append(_make_finding(
-                                "AAK-SUPPLY-001", rel_path,
-                                f"Server '{server_name}' arg: {shown_arg(args, index)} (no version pin)",
-                                _find_line_number(raw, arg),
-                            ))
+                argv += [str(a) for a in args
+                         if isinstance(a, (str, int, float)) and not isinstance(a, bool)]
+            for launched in invocation_packages(argv):
+                problem = pin_problem(launched)
+                if problem is not None:
+                    findings.append(_make_finding(
+                        "AAK-SUPPLY-001", rel_path,
+                        launch_evidence(server_name, launched.spec, problem),
+                        _find_line_number(raw, launched.spec),
+                    ))
     return findings
 
 
@@ -154,9 +173,9 @@ def _scan_npm_lockfile(project_root: Path) -> list[Finding]:
         return findings
 
     try:
-        raw = lockfile.read_text(encoding="utf-8")
-        if len(raw) > 1_000_000:
+        if lockfile.stat().st_size > MAX_LOCKFILE_BYTES:
             return findings
+        raw = lockfile.read_text(encoding="utf-8")
         data = json.loads(raw)
     except (json.JSONDecodeError, OSError):
         return findings
@@ -324,9 +343,9 @@ def _scan_python_deps(project_root: Path) -> list[Finding]:
         if not req_file.is_file():
             continue
         try:
-            raw = req_file.read_text(encoding="utf-8")
-            if len(raw) > 1_000_000:
+            if req_file.stat().st_size > MAX_MANIFEST_BYTES:
                 continue
+            raw = req_file.read_text(encoding="utf-8")
         except OSError:
             continue
         rel_path = str(req_file.relative_to(project_root))
@@ -345,8 +364,8 @@ def _scan_python_deps(project_root: Path) -> list[Finding]:
     pipfile_lock = project_root / "Pipfile.lock"
     if pipfile_lock.is_file():
         try:
-            raw = pipfile_lock.read_text(encoding="utf-8")
-            if len(raw) <= 1_000_000:
+            if pipfile_lock.stat().st_size <= MAX_LOCKFILE_BYTES:
+                raw = pipfile_lock.read_text(encoding="utf-8")
                 data = json.loads(raw)
                 rel_path = str(pipfile_lock.relative_to(project_root))
                 for section in ["default", "develop"]:
@@ -382,9 +401,9 @@ def _scan_rust_deps(project_root: Path) -> list[Finding]:
         return findings
 
     try:
-        raw = cargo_lock.read_text(encoding="utf-8")
-        if len(raw) > 1_000_000:
+        if cargo_lock.stat().st_size > MAX_LOCKFILE_BYTES:
             return findings
+        raw = cargo_lock.read_text(encoding="utf-8")
     except OSError:
         return findings
 
@@ -527,66 +546,145 @@ def _resolve_lockfile_version(
     """Lowest resolved version of any of ``names`` in a lockfile, or None if the
     package is absent / unparseable (conservative — a `None` result means the
     pin does not fire on this lockfile)."""
-    lower = {n.lower() for n in names}
-    found: list[str] = []
+    resolved = _resolve_lockfile_versions(text, filename, names)
+    return min(resolved) if resolved else None
+
+
+def _resolve_lockfile_versions(
+    text: str, filename: str, names: tuple[str, ...]
+) -> list[tuple[int, int, int]]:
+    """Every resolved version of any of ``names`` in a lockfile, lowest first.
+
+    A lockfile can resolve one package to several versions: pnpm and Yarn keep
+    one entry per distinct range that resolved differently, and uv one per
+    marker fork. Judging only the lowest misses an affected version above it
+    whenever the lowest sits below a pin's `introduced` bound, which is the
+    "first match decides" mistake the manifest reader stopped making.
+    """
+    return _lockfile_lookup(_lockfile_index(text, filename), filename, names)
+
+
+def _lockfile_canon(name: str, filename: str) -> str:
+    """A name as the lockfile's registry compares it.
+
+    PyPI lockfiles compare names as PEP 503 normalises them: uv.lock records
+    `awslabs-healthlake-mcp-server` for the package published as
+    `awslabs.healthlake-mcp-server`, and the dotted name never matched it.
+    """
+    lowered = name.lower()
+    if filename in ("uv.lock", "poetry.lock", "pipfile.lock"):
+        return re.sub(r"[-_.]+", "-", lowered)
+    return lowered
+
+
+def _lockfile_lookup(
+    index: dict[str, list[tuple[int, int, int]]], filename: str, names: tuple[str, ...]
+) -> list[tuple[int, int, int]]:
+    """The versions `index` holds for any of `names`, lowest first."""
+    return sorted({v for n in names for v in index.get(_lockfile_canon(n, filename), ())})
+
+
+# One resolved entry in a pnpm lockfile, any package: `/next@16.2.0:`,
+# `next@16.2.0(react@18.0.0)`, `'@scope/name@1.2.3'`. Bounded on the left,
+# because a name must not be read out of a longer one: unbounded,
+# `eslint-config-next@16.2.0` and `@next/eslint-plugin-next@16.2.0` read as
+# `next@16.2.0`, so a plugin left behind reported an upgraded `next` as
+# unpatched, and `@vercel/next@4.4.0` (from the `vercel` CLI) hid a vulnerable
+# one below the pin's `introduced`. A `/` still opens the v6 key form
+# (`/next@16.2.0:`), but not after a scope name. A name is at most 214
+# characters, npm's own limit, and no character a name can hold may precede
+# one, so a match starts only where a run of name characters starts and the
+# scan stays linear on a crafted lockfile of any size.
+_PNPM_ENTRY_RE = re.compile(
+    r"(?<![\w.\-~@])(?<!\w/)(@[\w.\-~]{1,214}/[\w.\-~]{1,214}|[\w.\-~]{1,214})@([0-9][\w.\-]*)"
+)
+# A Yarn 1 `version "1.2.3"` line. Yarn 2+ writes `version: 1.2.3`, which this
+# does not read.
+_YARN_VERSION_RE = re.compile(r'\s+version\s+"([0-9][\w.\-]*)"')
+
+
+def _yarn_entries(text: str) -> list[tuple[str, str]]:
+    """(name, version) for each Yarn 1 block: a header line, then its version line."""
+    entries: list[tuple[str, str]] = []
+    current: str | None = None
+    for line in text.splitlines():
+        if not line.strip() or line.lstrip().startswith("#"):
+            continue
+        if not line[0].isspace():
+            first = line.split(",", 1)[0].strip().rstrip(":").strip('"')
+            at = first.find("@", 1)
+            current = first[:at] if at > 0 else None
+            continue
+        if current is not None:
+            m = _YARN_VERSION_RE.match(line)
+            if m:
+                entries.append((current, m.group(1)))
+                current = None
+    return entries
+
+
+def _lockfile_index(text: str, filename: str) -> dict[str, list[tuple[int, int, int]]]:
+    """Every package a lockfile resolves, by canonical name, to its versions.
+
+    One pass over the file, so a pin table of a hundred rows reads a large
+    lockfile once instead of once per row. Absent or unparseable content yields
+    an empty index, so a correct upgrade and re-lock clears a pin instead of
+    forcing a suppression.
+    """
+    found: dict[str, list[str]] = {}
+
+    def add(name: object, version: object) -> None:
+        if isinstance(name, str) and version:
+            found.setdefault(_lockfile_canon(name, filename), []).append(str(version))
 
     if filename in ("uv.lock", "poetry.lock"):
+        # TOML keeps a key and its value on one line, so only spaces and tabs
+        # are skipped. `^\s*` also crossed newlines, and on a run of blank lines
+        # every line start rescanned the rest of the run: quadratic in a file
+        # that is now read up to MAX_LOCKFILE_BYTES.
         for block in re.split(r"(?=^\[\[package\]\])", text, flags=re.MULTILINE):
-            nm = re.search(r'^\s*name\s*=\s*["\']([^"\']+)["\']', block, re.MULTILINE)
-            if nm and nm.group(1).lower() in lower:
-                vm = re.search(r'^\s*version\s*=\s*["\']([0-9][\w.\-]*)', block, re.MULTILINE)
-                if vm:
-                    found.append(vm.group(1))
-    elif filename == "pipfile.lock":
+            nm = re.search(r'^[ \t]*name[ \t]*=[ \t]*["\']([^"\'\n]+)["\']', block, re.MULTILINE)
+            vm = re.search(r'^[ \t]*version[ \t]*=[ \t]*["\']([0-9][\w.\-]*)', block, re.MULTILINE)
+            if nm and vm:
+                add(nm.group(1), vm.group(1))
+    elif filename in ("pipfile.lock", "package-lock.json"):
         try:
             data = json.loads(text)
         except ValueError:
             data = {}
-        for section in ("default", "develop"):
-            for pkg, meta in (data.get(section) or {}).items():
-                if pkg.lower() in lower and isinstance(meta, dict):
-                    v = str(meta.get("version", "")).lstrip("=")
-                    if v:
-                        found.append(v)
-    elif filename == "package-lock.json":
-        try:
-            data = json.loads(text)
-        except ValueError:
+        if not isinstance(data, dict):
             data = {}
-        for key, meta in (data.get("packages") or {}).items():
-            pkg = key.rsplit("node_modules/", 1)[-1]
-            if pkg.lower() in lower and isinstance(meta, dict) and meta.get("version"):
-                found.append(str(meta["version"]))
-
-        def _walk(deps: object) -> None:
-            if not isinstance(deps, dict):
-                return
-            for pkg, meta in deps.items():
-                if pkg.lower() in lower and isinstance(meta, dict) and meta.get("version"):
-                    found.append(str(meta["version"]))
+        if filename == "pipfile.lock":
+            for section in ("default", "develop"):
+                packages = data.get(section)
+                for pkg, meta in (packages.items() if isinstance(packages, dict) else ()):
+                    if isinstance(meta, dict):
+                        add(pkg, str(meta.get("version", "")).lstrip("="))
+        else:
+            packages = data.get("packages")
+            for key, meta in (packages.items() if isinstance(packages, dict) else ()):
                 if isinstance(meta, dict):
-                    _walk(meta.get("dependencies"))
-
-        _walk(data.get("dependencies"))
+                    add(str(key).rsplit("node_modules/", 1)[-1], meta.get("version"))
+            stack = [data.get("dependencies")]
+            while stack:
+                deps = stack.pop()
+                if not isinstance(deps, dict):
+                    continue
+                for pkg, meta in deps.items():
+                    if isinstance(meta, dict):
+                        add(pkg, meta.get("version"))
+                        stack.append(meta.get("dependencies"))
     elif filename == "pnpm-lock.yaml":
-        # Bounded on the left, because the lowest match wins: unbounded,
-        # `eslint-config-next@16.2.0` and `@next/eslint-plugin-next@16.2.0` read as
-        # `next@16.2.0`, so a plugin left behind reported an upgraded `next` as
-        # unpatched, and `@vercel/next@4.4.0` (from the `vercel` CLI) hid a
-        # vulnerable one below the pin's `introduced`. A `/` still opens the v6 key
-        # form (`/next@16.2.0:`), but not after a scope name.
-        for token in lower:
-            pat = r"(?<![\w.\-])(?<!\w/)" + re.escape(token) + r"@([0-9][\w.\-]*)"
-            for m in re.finditer(pat, text, re.IGNORECASE):
-                found.append(m.group(1))
+        for m in _PNPM_ENTRY_RE.finditer(text):
+            add(m.group(1), m.group(2))
     elif filename == "yarn.lock":
-        for token in lower:
-            pat = r'^"?' + re.escape(token) + r'@[^\n]*\n(?:\s+[^\n]*\n)*?\s+version\s+"([0-9][\w.\-]*)"'
-            for m in re.finditer(pat, text, re.IGNORECASE | re.MULTILINE):
-                found.append(m.group(1))
+        for name, version in _yarn_entries(text):
+            add(name, version)
 
-    parsed = [v for v in (_semver3(x) for x in found) if v]
-    return min(parsed) if parsed else None
+    return {
+        name: sorted({v for v in (_semver3(x) for x in versions) if v})
+        for name, versions in found.items()
+    }
 
 
 def _check_doris_mcp_pin(project_root: Path, scanned_files: set[str]) -> list[Finding]:
@@ -969,6 +1067,15 @@ def _check_mcp_specific_vulns(project_root: Path) -> list[Finding]:
             continue
         args = cfg.get("args", [])
         if not isinstance(args, list):
+            continue
+        # The table is npm's, so a PyPI launch is not looked up in it: uvx reads
+        # `openclaw@2.0.2` as the PyPI `openclaw`, an unrelated installer for the
+        # cmdop CLI, not as OpenClaw.
+        command = cfg.get("command")
+        argv = command.split() if isinstance(command, str) else []
+        argv += [a for a in args if isinstance(a, str)]
+        launches = invocation_packages(argv)
+        if launches and all(launched.ecosystem == "py" for launched in launches):
             continue
         for arg in args:
             if not isinstance(arg, str) or arg.startswith("-"):
