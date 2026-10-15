@@ -132,6 +132,87 @@ def test_hook_rce_reads_the_documented_matcher_group_shape(tmp_path: Path) -> No
     assert "AAK-HOOK-RCE-001" in {f.rule_id for f in findings}
 
 
+_CRAFTED_INTERPOLATIONS = {
+    # The `"+` and `{{` openers ended in a `\s*` of their own, beside the shared
+    # one, so a blank run after either was split between the two every way.
+    "braces-blanks": "{{" + " " * 990_000 + "x",
+    "concat-blanks": '"' + " " * 495_000 + "+" + " " * 495_000 + "x",
+}
+
+
+@pytest.mark.parametrize("shape", sorted(_CRAFTED_INTERPOLATIONS))
+@pytest.mark.parametrize("where", ["settings", "script"])
+def test_hook_rce_a_crafted_interpolation_scans_in_linear_time(tmp_path: Path, shape: str, where: str) -> None:
+    """A hook command or hook script of about 1 MB. Before, 40,000 blanks after
+    `{{` took 30 seconds and the time grew with the square of the run. The bound
+    is loose for slow CI runners; each takes a fraction of a second."""
+    import json
+    import time
+
+    text = _CRAFTED_INTERPOLATIONS[shape]
+    claude_dir = tmp_path / ".claude"
+    (claude_dir / "hooks").mkdir(parents=True)
+    if where == "settings":
+        settings = {"hooks": {"Stop": [{"command": text}]}}
+        (claude_dir / "settings.json").write_text(json.dumps(settings), encoding="utf-8")
+    else:
+        (claude_dir / "hooks" / "stop.sh").write_text(text, encoding="utf-8")
+    started = time.perf_counter()
+    findings, _ = hook_rce.scan(tmp_path)
+    assert time.perf_counter() - started < 5.0
+    assert not any(f.rule_id == "AAK-HOOK-RCE-001" for f in findings)
+
+
+@pytest.mark.parametrize(("source", "fires"), [
+    ("import subprocess\nsubprocess.run(cmd, shell=True)\n", True),
+    ("const cp = require('child_process');\ncp.spawn(cmd, args, { shell: true });\n", True),
+    ("os.system(cmd)\n", False),
+    ("subprocess.run(cmd, check=True)\nlog(shell=True)\n", False),  # after the call's `)`
+])
+def test_hook_rce_shell_true_shapes_keep_their_result(tmp_path: Path, source: str, fires: bool) -> None:
+    hooks_dir = tmp_path / ".claude" / "hooks"
+    hooks_dir.mkdir(parents=True)
+    (hooks_dir / "stop.py").write_text(source, encoding="utf-8")
+    findings, _ = hook_rce.scan(tmp_path)
+    assert any(f.rule_id == "AAK-HOOK-RCE-002" for f in findings) is fires
+
+
+@pytest.mark.parametrize("unit", ["spawn(", "os.system(", "subprocess.run("])
+def test_hook_rce_a_crafted_script_of_calls_scans_in_linear_time(tmp_path: Path, unit: str) -> None:
+    """A 1 MB hook script of one call opener repeated with no `)`. Every opener
+    read on to the first `)`, so 40,000 characters of `spawn(` took 1.9 seconds
+    and the time grew with the square; hook scripts are read whatever their size.
+    The bound is loose for slow CI runners."""
+    import time
+
+    hooks_dir = tmp_path / ".claude" / "hooks"
+    hooks_dir.mkdir(parents=True)
+    (hooks_dir / "stop.py").write_text(unit * (1_000_000 // len(unit)), encoding="utf-8")
+    started = time.perf_counter()
+    findings, _ = hook_rce.scan(tmp_path)
+    assert time.perf_counter() - started < 5.0
+    assert not any(f.rule_id == "AAK-HOOK-RCE-002" for f in findings)
+
+
+@pytest.mark.parametrize(("command", "fires"), [
+    ('echo "$X" + input', True),
+    ("echo {{ input }}", True),
+    ("echo {{   argv }}", True),
+    ('echo "x"   +   args', True),
+    ("echo $(input)", True),
+    ("echo {{ name }}", False),
+])
+def test_hook_rce_interpolation_shapes_keep_their_result(tmp_path: Path, command: str, fires: bool) -> None:
+    import json
+
+    claude_dir = tmp_path / ".claude"
+    claude_dir.mkdir()
+    settings = {"hooks": {"Stop": [{"command": command}]}}
+    (claude_dir / "settings.json").write_text(json.dumps(settings), encoding="utf-8")
+    findings, _ = hook_rce.scan(tmp_path)
+    assert any(f.rule_id == "AAK-HOOK-RCE-001" for f in findings) is fires
+
+
 # ---------------------------------------------------------------------------
 # AAK-LANGCHAIN-001..003
 # ---------------------------------------------------------------------------
@@ -148,6 +229,28 @@ def test_langchain_vulnerable_requirements_fires(tmp_path: Path) -> None:
     assert "AAK-LANGCHAIN-001" in ids
     assert "AAK-LANGCHAIN-002" in ids
     assert "AAK-LANGCHAIN-003" in ids
+
+
+def test_langchain_core_pin_after_blank_lines_names_its_line(tmp_path: Path) -> None:
+    """The match opened at the first blank line above the pin, so its text held a
+    newline and `find_line_number` found no line for the finding."""
+    (tmp_path / "requirements.txt").write_text("flask\n\n\nlangchain-core==0.3.0\n", encoding="utf-8")
+    findings, _ = langchain_vuln.scan(tmp_path)
+    assert {f.line_number for f in findings if f.rule_id in ("AAK-LANGCHAIN-001", "AAK-LANGCHAIN-003")} == {4}
+
+
+@pytest.mark.parametrize("requirements", ["\n" * 1_999_000 + "x", "langchain-core" + " " * 1_999_000 + "x"])
+def test_langchain_core_pin_reads_a_crafted_requirements_file_in_linear_time(tmp_path: Path, requirements: str) -> None:
+    """`^\\s*` read across a run of blank lines from every line start in it, and
+    three `\\s*` around the optional extras and operator split a blank run every
+    way, so the second shape grew with the cube of the run. The bound is loose
+    for slow CI runners."""
+    import time
+
+    (tmp_path / "requirements.txt").write_text(requirements, encoding="utf-8")
+    started = time.perf_counter()
+    langchain_vuln.scan(tmp_path)
+    assert time.perf_counter() - started < 5.0
 
 
 def test_langchain_safe_requirements_is_quiet(tmp_path: Path) -> None:
