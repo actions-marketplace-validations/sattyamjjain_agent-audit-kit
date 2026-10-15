@@ -142,17 +142,30 @@ def pin_cmd(path: str) -> None:
 @click.version_option(version=__version__)
 @click.argument("path", default=".", type=click.Path(exists=True, file_okay=False, resolve_path=True))
 def verify_cmd(path: str) -> None:
-    """Verify MCP tool definitions against pinned hashes."""
-    from agent_audit_kit.pinning import verify_pins
+    """Verify MCP tool definitions against pinned hashes.
+
+    Exits 1 when a tool changed, was added or was removed, 2 when the pin file
+    cannot be read, and 0 when every tool matches its pin.
+    """
+    from agent_audit_kit.pinning import PinFileError, verify_pins
 
     project_root = Path(path)
-    findings = verify_pins(project_root)
+    try:
+        findings = verify_pins(project_root)
+    except PinFileError as exc:
+        # This printed "All tool definitions match their pins." and exited 0:
+        # nothing had been compared, because the pin file did not parse.
+        click.echo(f"Cannot verify: {exc}. No tool definition was compared with its pin.", err=True)
+        sys.exit(EXIT_ERROR)
     if not findings:
         click.echo("All tool definitions match their pins.")
     else:
         click.echo(f"{len(findings)} tool definition change(s) detected:")
         for f in findings:
             click.echo(f"  {f.severity.value.upper()}: {f.title} -- {f.evidence}")
+        # This exited 0 after listing the changes, so the "in CI, verify nothing
+        # changed" step in docs/cli.md could never fail a job.
+        sys.exit(EXIT_FINDINGS)
 
 
 @cli.command("fix")
@@ -557,7 +570,8 @@ def watch_cmd(path: str, interval_seconds: int, webhook_url: str | None, once: b
         max_iterations=1 if once else None,
     )
     click.echo(
-        f"watch: exited after {result.iterations} iteration(s), {result.drift_events} drift event(s).",
+        f"watch: exited after {result.iterations} iteration(s), {result.drift_events} drift event(s), "
+        f"{result.unverified} not verified.",
         err=True,
     )
 
