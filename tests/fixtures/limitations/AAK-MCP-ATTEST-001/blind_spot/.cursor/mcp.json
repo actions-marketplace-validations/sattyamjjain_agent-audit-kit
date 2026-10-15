@@ -1,0 +1,17 @@
+{
+  "trust_root": "",
+  "mcpServers": {
+    "docs": {
+      "command": "node",
+      "args": [
+        "docs-server.js"
+      ]
+    },
+    "tools": {
+      "command": "node",
+      "args": [
+        "tools-server.js"
+      ]
+    }
+  }
+}

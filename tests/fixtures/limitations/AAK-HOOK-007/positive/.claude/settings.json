@@ -1,0 +1,56 @@
+{
+  "hooks": {
+    "PostToolUse": [
+      {
+        "command": "echo post0"
+      },
+      {
+        "command": "echo post1"
+      },
+      {
+        "command": "echo post2"
+      },
+      {
+        "command": "echo post3"
+      },
+      {
+        "command": "echo post4"
+      },
+      {
+        "command": "echo post5"
+      },
+      {
+        "command": "echo post6"
+      },
+      {
+        "command": "echo post7"
+      }
+    ],
+    "PreToolUse": [
+      {
+        "command": "echo pre0"
+      },
+      {
+        "command": "echo pre1"
+      },
+      {
+        "command": "echo pre2"
+      },
+      {
+        "command": "echo pre3"
+      },
+      {
+        "command": "echo pre4"
+      },
+      {
+        "command": "echo pre5"
+      },
+      {
+        "command": "echo pre6"
+      },
+      {
+        "command": "echo pre7"
+      }
+    ]
+  }
+}
