@@ -338,6 +338,23 @@ _LANGCHAIN_REDIS_RE = re.compile(
 _LANGCHAIN_MONGODB_RE = re.compile(
     r"(?<![\w./-])@langchain/mongodb(?![\w-])" + _VER_REQ, re.IGNORECASE
 )
+# `argocd-mcp` (npm, argoproj-labs/mcp-for-argocd). An MCP server, so an unpinned
+# `npx argocd-mcp@latest` counts. The bounds keep it off `argocd-mcp-server` and
+# `mcp-argocd`, other projects on npm, and off any `@scope/argocd-mcp`.
+_ARGOCD_MCP_RE = re.compile(
+    r"(?<![\w./@-])argocd-mcp(?![\w/-])" + _VER_OPT, re.IGNORECASE
+)
+# `@1mcp/agent` (npm, 1mcp-app/agent). The scope is the point: the unscoped npm
+# `1mcp` is buremba/1mcp, a different aggregator on its own 0.1.x line.
+_ONEMCP_AGENT_RE = re.compile(
+    r"(?<![\w./-])@1mcp/agent(?![\w-])" + _VER_OPT, re.IGNORECASE
+)
+# `@elvix.is/sdk` (npm, 021is/elvix-sdk): a sign-in SDK that also ships the
+# `elvix mcp` / `elvix-mcp` server. The scope and the dot are the name; `elvix`,
+# `elvix-sdk` and `@021is/elvix-sdk` are not on npm.
+_ELVIX_SDK_RE = re.compile(
+    r"(?<![\w./-])@elvix\.is/sdk(?![\w-])" + _VER_OPT, re.IGNORECASE
+)
 # `letta` (the agent server, formerly MemGPT). The right boundary excludes the
 # hyphen so this stays off `letta-client`, a separate client SDK on its own
 # version line; the lookbehind keeps it off `pyletta`.
@@ -1362,6 +1379,39 @@ _PINS: tuple[_Pin, ...] = (
          ("@langchain/mongodb",), (1, 3, 1),
          fix_label="1.3.1",
          regexes=(_LANGCHAIN_MONGODB_RE,), ecosystem="js"),
+    # --- 2026-10-11 batch (#953-#959) ---
+    # argocd-mcp puts `applicationName` into Argo CD API paths unencoded and resolves
+    # them with `new URL`, so `../repositories/<repo>` turns delete_application into a
+    # DELETE on another resource (CVE-2026-108585, CVSS 5.4, CWE-22). Checked in the
+    # npm tarballs: 0.0.1 (the first release) and 0.9.0 (the newest, 2026-08-11)
+    # both build `/api/v1/applications/${applicationName}`; 0.4.0 was published
+    # without its dist/. No commit since 0.9.0, so floor=None (presence-only).
+    _Pin("AAK-MCP-ARGOCD-CVE-2026-108585-001", "argocd-mcp", ("argocd-mcp",), None,
+         fix_label="no fixed release (0.9.0 is the newest); set MCP_READ_ONLY=true "
+                   "or use an Argo CD token that cannot delete",
+         regexes=(_ARGOCD_MCP_RE,), ecosystem="js"),
+    # 1MCP Agent's scope check validates only the tags an advanced `tag-filter`
+    # expression names, so `not <granted-tag>` passes and selects every other
+    # backend (CVE-2026-108586, CVSS 5.4, CWE-863). Checked in the npm tarballs:
+    # 0.19.0 has no `tag-filter`, 0.20.0 adds it with `extractTagsFromExpression`
+    # as the check, and 0.39.0 (the newest, 2026-10-09) still has it. No fixed
+    # release, so presence-only from 0.20.0.
+    _Pin("AAK-MCP-1MCP-CVE-2026-108586-001", "@1mcp/agent", ("@1mcp/agent",), None,
+         introduced=(0, 20, 0),
+         fix_label="no fixed release (0.39.0 is the newest; affected from 0.20.0); "
+                   "do not rely on tag scopes to keep backends apart",
+         regexes=(_ONEMCP_AGENT_RE,), ecosystem="js"),
+    # --- 2026-10-13 batch (#963, #973-#977) ---
+    # The elvix MCP server built every tool's request URL as
+    # `new URL(args.path ?? tool._meta.path, baseUrl)`, so an absolute URL in `path`
+    # replaced the base and the request went out with the Bearer `ELVIX_API_KEY`
+    # (CVE-2026-108542, CVSS 6.3, CWE-918). Checked in the npm tarballs: 0.1.0 and
+    # 0.10.1 build it that way; 0.10.2 (ed0c622, 2026-08-30) binds the tool to its
+    # manifest path and refuses another origin. 0.0.0 is an empty placeholder.
+    _Pin("AAK-MCP-ELVIX-CVE-2026-108542-001", "@elvix.is/sdk", ("@elvix.is/sdk",),
+         (0, 10, 2), introduced=(0, 1, 0),
+         fix_label="0.10.2; rotate any elvix API key used with the MCP server",
+         regexes=(_ELVIX_SDK_RE,), ecosystem="js"),
 )
 
 _CANDIDATE_NAMES = (

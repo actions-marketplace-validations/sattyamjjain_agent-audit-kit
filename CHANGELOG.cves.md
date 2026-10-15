@@ -16,6 +16,235 @@ open.
 > issue. The per-CVE latency figures in the tables are **measurements recorded at
 > the time**, kept as dated facts, not a standing promise.
 
+## 2026-10-13 (v0.6.21): six disclosures, two new image pins, one JVM pin, one npm pin, two out of scope
+
+The watcher opened one `cve-response` issue at 12:50Z on 2026-10-11 (#963) and
+five at 21:58Z (#973-#977), three of them `sev/high`. Four get a pin: two on
+container images, one on Maven coordinates through the JVM reader and one on npm,
+each measured with the scanner on a firing fixture and a negative one. Two are out of scope: a Go library, and a compose stack that keeps its image
+reference in an `.env` file. NVD scores all six, and the titles and `sev/` labels
+the watcher filed already match, so nothing was corrected first. NVD text below is
+quoted from the API record, read on 2026-10-13.
+
+**Unla (CVE-2026-108865) gets `AAK-MCP-UNLA-CVE-2026-108865-001` on its gateway
+images, every tag through v0.10.0.** NVD: "AmoyLab Unla through 0.10.0 contains an
+authentication bypass vulnerability that allows unauthenticated attackers to obtain
+valid access tokens because the OAuth2 server never authenticates a resource
+owner." Unla, formerly mcp-gateway, is a Go MCP gateway with no PyPI or npm
+artifact. It ships as `ghcr.io/amoylab/unla/allinone` and
+`ghcr.io/amoylab/unla/mcp-gateway`, and its Chinese README names the Aliyun mirror
+`registry.ap-southeast-1.aliyuncs.com/amoylab/unla-allinone`, which carries the same
+tags. Checked in the source: OAuth2 support (`7d15eec`, 2025-06-06) is first in
+v0.6.0, the `amoylab/unla` images start at v0.7.0, and at v0.10.0 `Authorize` issues
+a code once the client and redirect URI check out, with no step that identifies a
+user. `internal/auth/oauth.go` has not changed since 2025-10-11, and v0.10.0
+(2026-08-04) is the newest release, so there is no fixed release. On 2026-10-13
+`latest` was the v0.10.0 digest for both GHCR images, so `latest` is reported; the
+`main` tag states no version and is not. The OAuth2 server is in the gateway, so
+`ghcr.io/amoylab/unla/web` is not pinned. Unla's all-in-one compose file writes
+`${IMAGE:-ghcr.io/amoylab/unla/allinone:latest}`, which the image reader does not
+resolve, so such an instance is reported only where a file states the image.
+
+**MCP Kotlin SDK (CVE-2026-108714) gets `AAK-MCP-KOTLINSDK-CVE-2026-108714-001`
+from 0.7.3, the JVM reader's second entry.** NVD: "MCP Kotlin SDK through 0.15.0
+contains an uncontrolled memory allocation vulnerability that allows remote clients
+to exhaust server memory because Application.mcpWebSocket installs Ktor WebSockets
+without a maxFrameSize limit." `jvm_mcp_sdk_pins` already reads the SDK's Gradle,
+version-catalog and Maven coordinates for CVE-2026-53937, so this one is pinnable,
+and the module now takes a table of pins. Checked in the source and on Maven
+Central: `Application.mcpWebSocket` is absent at 0.7.2, arrives in 0.7.3 with
+`install(WebSockets)` and no `maxFrameSize`, and is unchanged through 0.15.0
+(2026-07-28), the newest release. Nothing on `main` has touched the file since
+April, so there is no fixed release. The extension is in `kotlin-sdk-server`, which
+the `kotlin-sdk` umbrella pulls in (its 0.15.0 POM depends on it), so the pin reads
+`kotlin-sdk-server`, `kotlin-sdk` and their `-jvm` variants, and not
+`kotlin-sdk-core` or `kotlin-sdk-client`. Until a fix ships, install `WebSockets`
+with a `maxFrameSize` and register the endpoint with `Route.mcpWebSocket`, which does
+not install the plugin. The CVE-2026-53937 fixtures on 0.13.0 and 0.15.0 now report
+this rule too, so their tests assert only their own rule.
+
+**mcp-go (CVE-2026-108859) is out of scope.** NVD: "mcp-go through 1.2.1 contains a
+denial of service vulnerability in StreamableHTTPServer.ServeHTTP that allows remote
+unauthenticated attackers to exhaust memory by sending oversized POST bodies."
+mcp-go is the Go module `github.com/mark3labs/mcp-go`, a library compiled into each
+server, with no image of its own. No AAK reader opens `go.mod`, the basis the SiYuan
+rows (#632) and the `mcp-shell` row took. v1.2.1 (2026-10-09) is the newest release,
+and `server/streamable_http.go` on `main` still reads the body with
+`io.ReadAll(r.Body)`, so there is no fixed release yet. Until there is, wrap the
+handler in `http.MaxBytesHandler` or cap the body size at a reverse proxy.
+`tests/test_cve_triage_2026_10_13.py` holds the boundary: a `go.mod` that requires
+mcp-go 1.2.1 produces no finding for this CVE.
+
+**@elvix.is/sdk (CVE-2026-108542) gets `AAK-MCP-ELVIX-CVE-2026-108542-001`, 0.1.0 up
+to 0.10.2.** NVD: "Affected by this vulnerability is an unknown functionality of the
+file src/mcp/index.ts of the component MCP Request Handler. The manipulation of the
+argument path results in server-side request forgery." The npm package is
+`@elvix.is/sdk`, from 021is/elvix-sdk, the repository the public report names; npm
+has no `elvix`, `elvix-sdk` or `@021is/elvix-sdk`. Checked in the tarballs: 0.1.0,
+the MCP server's first release, and 0.10.1 build each request as
+`new URL(args.path ?? tool._meta.path, baseUrl)` and send it with the Bearer
+`ELVIX_API_KEY`, so an absolute URL in `path` takes the key to any host. 0.10.2
+(`ed0c622`, 2026-08-30) binds every tool to its manifest path, refuses another
+origin and does not follow redirects. NVD repeats VulDB's note that the vendor did
+not respond, but 0.10.2 shipped three days after the public report, and npm marks
+0.0.0 to 0.10.1 deprecated: "Security: MCP tool arguments could redirect the request
+and leak ELVIX_API_KEY. Upgrade to >=0.10.2 and rotate any key used with the MCP
+server." 0.0.0 is an empty placeholder, so the pin starts at 0.1.0. Upgrade to
+0.10.2 or later and rotate the key.
+
+**Trinity (CVE-2026-108756) gets `AAK-MCP-TRINITY-CVE-2026-108756-001` on its backend
+image, through 0.9.5.** NVD: "Abilityai Trinity through 0.9.5 contains a missing
+authorization vulnerability in the Telegram router that allows agent-scoped MCP API
+keys to perform human-only binding operations." The Trinity server is on neither
+PyPI nor npm: PyPI's `trinity-cli` is its command-line client on its own 0.2.x line,
+and PyPI's `trinity` is an Ethereum client. Its backend ships as
+`ghcr.io/abilityai/trinity-backend`, tagged by release from 0.9.5-rc1. Checked in
+the source: an agent-scoped key resolves to the agent's owner, and
+`configure_telegram_bot` and `delete_telegram_binding` check ownership only, with no
+`reject_agent_principal`, at v0.9.5 and at v1.0.0-rc2 (2026-10-10). So there is no
+fixed release, and on 2026-10-13 `latest` was the 0.9.5 digest. The pin follows
+NVD's range: the 1.0.0 release candidates read as 1.0.0 and are not reported,
+although they still lack the check, so the floor needs another look when 1.0.0
+ships. Trinity's own compose files build the backend from source or write
+`trinity-backend:${TRINITY_IMAGE_TAG:-latest}`, so the pin reports a deployment that
+states the tag in a manifest, as with Kortix.
+
+**Wanwu (CVE-2026-108854) is out of scope.** NVD: "Wanwu before 0.6.3 contains an
+insecure direct object reference vulnerability that allows any authenticated
+enabled user to delete other users' legacy AppKeys by supplying a numeric apiId."
+Wanwu (UnicomAI/wanwu) is on neither PyPI nor npm, and its compose file takes each
+service's whole image reference from `${WANWU_BACKEND_IMAGE}`, set in
+`.env.image.amd64` and `.env.image.arm64`. The image reader opens neither file, so
+the official deployment never states its version in a file AAK reads. The image
+itself, `crpi-6pj79y7ddzdpexs8.cn-hangzhou.personal.cr.aliyuncs.com/wanwulite/wanwu-backend`,
+is on an account-scoped Aliyun registry whose tags could not be listed from here.
+Checked in the source: `DelAppKey` deletes by id alone from v0.3.3 through v0.6.2,
+and v0.6.3 (tag 2026-08-17, fix `13d0b22`) scopes it to the caller's user and
+organization. v0.6.5 is the newest release. Upgrade to v0.6.3 or later.
+
+| CVE | CVSS | Package | What changed | Issue |
+|---|---|---|---|---|
+| CVE-2026-108865 | 8.2 | `ghcr.io/amoylab/unla/allinone`, `ghcr.io/amoylab/unla/mcp-gateway` and the Aliyun mirror (images) | **New pin** `AAK-MCP-UNLA-CVE-2026-108865-001`: every tag through v0.10.0, and `latest`. No fixed release. | #973 |
+| CVE-2026-108714 | 7.5 | `io.modelcontextprotocol:kotlin-sdk-server` and `kotlin-sdk` (Maven) | **New pin** `AAK-MCP-KOTLINSDK-CVE-2026-108714-001`: 0.7.3 and later. No fixed release. | #974 |
+| CVE-2026-108859 | 7.5 | `github.com/mark3labs/mcp-go` (Go module) | **Out of scope**, non-pinnable, and no fixed release yet. | #975 |
+| CVE-2026-108542 | 6.3 | `@elvix.is/sdk` (npm) | **New pin** `AAK-MCP-ELVIX-CVE-2026-108542-001`: 0.1.0 up to 0.10.2. | #963 |
+| CVE-2026-108756 | 5.4 | `ghcr.io/abilityai/trinity-backend` (image) | **New pin** `AAK-MCP-TRINITY-CVE-2026-108756-001`: up to and including 0.9.5, and `latest`. No fixed release. | #976 |
+| CVE-2026-108854 | 5.4 | Wanwu (compose stack, image set in `.env`) | **Out of scope**, non-pinnable. Fixed in v0.6.3. | #977 |
+
+CVSS is NVD's CVSS 3.1 score.
+
+## 2026-10-11 (v0.6.21): seven disclosures, two new npm pins, one new image pin, four out of scope
+
+The watcher opened five `cve-response` issues at 21:44Z on 2026-10-10 (#953-#957)
+and two at 05:46Z on 2026-10-11 (#958, #959). Two get an npm pin and one a
+container image pin, each measured with the scanner on a firing fixture and a
+negative one. Four are out of scope: two desktop apps, a Composer project and a
+Maven application, none with an artifact the pin scanners read. NVD scores all
+seven, and the titles and `sev/medium` labels the watcher filed already match, so
+nothing was corrected first. NVD text below is quoted from the API record, read on
+2026-10-11.
+
+**argocd-mcp (CVE-2026-108585) gets `AAK-MCP-ARGOCD-CVE-2026-108585-001`, every
+version.** NVD: "argocd-mcp (Argo CD MCP Server) through 0.9.0 contains a path
+traversal vulnerability in the delete_application tool that allows MCP clients to
+reach unintended API endpoints via unvalidated applicationName values." The npm
+package `argocd-mcp` is argoproj-labs/mcp-for-argocd, the repository NVD cites.
+Checked in the tarballs: 0.0.1, the first release, and 0.9.0, the newest
+(2026-08-11), both build `/api/v1/applications/${applicationName}` from the raw
+argument, and the HTTP client resolves it with `new URL`, which collapses `../`.
+0.4.0 was published without its `dist/`. There is no commit after 0.9.0 and no
+fixed release, so the pin is presence-only, like the `@0xshariq/github-mcp-server`
+one. `argocd-mcp-server` and `mcp-argocd` on npm are other projects, and the pin
+stays off them. The project also publishes `ghcr.io/argoproj-labs/mcp-for-argocd`
+and `quay.io/argoprojlabs/mcp-for-argocd`, which the image reader does not pin.
+Until a fix ships, `MCP_READ_ONLY=true` turns off `delete_application` and the
+other write tools.
+
+**1MCP Agent (CVE-2026-108586) gets `AAK-MCP-1MCP-CVE-2026-108586-001`,
+`@1mcp/agent` from 0.20.0.** NVD: "1MCP Agent (@1mcp/agent) 0.20.0 through 0.39.0
+contains an incorrect authorization vulnerability that allows authenticated clients
+to bypass OAuth tag-scope enforcement using negated advanced tag-filter
+expressions." Checked in the tarballs: 0.19.0 has no `tag-filter` parameter. 0.20.0
+adds it, and its scope check validates only the tags `extractTagsFromExpression`
+finds, so `not <granted-tag>` names the granted tag alone and passes. 0.39.0, the
+newest (2026-10-09), still checks it that way, and no commit since touches the two
+files NVD cites. With no fixed release, the pin reports every version from 0.20.0,
+the `knowns` shape. The unscoped npm `1mcp` is buremba/1mcp, another aggregator on
+its own 0.1.x line, and the pin stays off it.
+
+**Kortix (CVE-2026-108115) gets `AAK-MCP-KORTIX-CVE-2026-108115-001` on the
+`kortix/kortix-api` image, 0.10.7 up to 0.13.52.** NVD: "Kortix Suna 0.10.7 before
+0.13.52 contains a server-side request forgery vulnerability that allows project
+managers to bypass the isPrivateIp guard by supplying IPv6 6to4 or Teredo addresses
+that embed private IPv4 destinations." Kortix is on neither PyPI nor npm (npm's
+`suna` 0.0.1 is a 2025 placeholder with no repository), and its desktop app and
+`kortix` CLI are binaries. Its API server ships as the Docker Hub image
+`kortix/kortix-api`, tagged by release: 0.10.6, 0.10.7, 0.12.0, 0.13.0 and 0.13.51
+to 0.13.53 all exist. Checked in the source: `apps/api/src/shared/ssrf-guard.ts` is
+absent at v0.10.6 and present at v0.10.7, and the fix, `9c949e4`, is in v0.13.52
+and not v0.13.51. v0.13.52's guard reads the IPv4 address out of a 6to4 address and
+refuses Teredo. On 2026-10-11 `stable` was the 0.13.52 digest and `latest` the
+0.13.53 one, so neither is reported. The GHCR image `ghcr.io/kortix-ai/kortix-api`
+is tagged by commit hash and states no version. A `kortix self-host` stack writes
+`image: ${API_IMAGE}` and keeps the tag in its `.env`, which the image reader does
+not read, so the pin reports a deployment that states the tag in a manifest.
+Upgrade to 0.13.52 or later.
+
+**Tabularis (CVE-2026-108604) is out of scope.** NVD: "Tabularis through 0.27.0
+contains an incorrect authorization vulnerability in the MCP run_query safety gate
+that allows prompt-injected agents or untrusted MCP clients to bypass read-only mode
+by submitting side-effecting SELECT statements." Tabularis is a Tauri desktop SQL
+client whose MCP server runs inside the app binary (`tabularis --mcp`), installed
+from its GitHub releases. It has no PyPI, npm or image artifact and no file AAK
+reads that states its version, and npm's `tabularis` 1.0.0 (2024-09-01, no
+repository) is an unrelated placeholder. v0.27.0 (2026-10-08) is the newest
+release, and the nightly builds since have not touched the two files NVD cites, so
+there is no fixed release yet.
+
+**GenOffice (CVE-2026-108582) is out of scope.** NVD: "GenOffice through 0.11.505
+contains an incorrect permissions vulnerability in its HTTP MCP server file store
+that allows local unprivileged users to read uploaded and generated documents."
+GenOffice (genspark-ai/genoffice) is a desktop app, and the HTTP MCP server runs
+inside it. The `genoffice` command MCP clients start comes with the app: its
+`@genoffice/cli` workspace package is `private: true` and not on npm, so no PyPI,
+npm or image artifact states its version. v0.11.505 (2026-10-09) is the newest
+release, and nothing has changed `packages/cli/src/mcp/files.ts` since, so there is
+no fixed release yet. Measured on placeholder files, a client config that starts
+`tabularis --mcp` or `genoffice mcp` gets `AAK-MCP-006` (a relative command path)
+and `AAK-MCP-ATTEST-001`, and no rule reads the read-only gate or the file store's
+permissions.
+
+**InnoShop (CVE-2026-108591) is out of scope.** NVD: "InnoShop 0.9.2 contains a
+local file disclosure vulnerability that allows authenticated administrators with
+files_create permission to read server files by abusing the AI Core MCP file_upload
+tool's source argument." InnoShop is a Laravel e-commerce application, distributed
+as release zips and as the Packagist project `innoshop/innoshop`. AAK reads no
+`composer.json` or `composer.lock`, so its version is invisible to the pin
+scanners, the basis the Hex `beam_mcp` records took (#928, #929). v0.9.2
+(2026-08-09) is the newest release, and `FileUploadTool.php` on `main` still passes
+`source` to `file_get_contents()`, so there is no fixed release yet.
+
+**JeecgBoot (CVE-2026-108671) is out of scope.** NVD: "JeecgBoot through 3.9.5
+contains a missing authorization vulnerability that allows any authenticated user to
+read MCP server configurations because the queryById permission check is commented
+out." JeecgBoot is a Java low-code platform built from source with Maven, and its
+compose file builds the application image instead of pulling a tagged one.
+`jvm_mcp_sdk_pins` reads only MCP SDK coordinates, so nothing AAK reads states a
+JeecgBoot version. `main` restored the check in `21facc0` (2026-09-11), but 3.9.5
+(2026-08-27) is still the newest release, so no release carries the fix yet.
+
+| CVE | CVSS | Package | What changed | Issue |
+|---|---|---|---|---|
+| CVE-2026-108585 | 5.4 | `argocd-mcp` (npm) | **New pin** `AAK-MCP-ARGOCD-CVE-2026-108585-001`: every version. No fixed release. | #955 |
+| CVE-2026-108586 | 5.4 | `@1mcp/agent` (npm) | **New pin** `AAK-MCP-1MCP-CVE-2026-108586-001`: 0.20.0 and later. No fixed release. | #956 |
+| CVE-2026-108115 | 4.9 | `kortix/kortix-api` (image) | **New pin** `AAK-MCP-KORTIX-CVE-2026-108115-001`: 0.10.7 up to 0.13.52. | #957 |
+| CVE-2026-108604 | 6.3 | Tabularis (desktop app) | **Out of scope**, non-pinnable, and no fixed release yet. | #953 |
+| CVE-2026-108582 | 5.5 | GenOffice (desktop app) | **Out of scope**, non-pinnable, and no fixed release yet. | #954 |
+| CVE-2026-108591 | 4.4 | InnoShop (Composer project) | **Out of scope**, non-pinnable, and no fixed release yet. | #958 |
+| CVE-2026-108671 | 6.5 | JeecgBoot (Maven application) | **Out of scope**, non-pinnable. Fixed on `main` in `21facc0`, not in a release yet. | #959 |
+
+CVSS is NVD's CVSS 3.1 score.
+
 ## 2026-10-10 (v0.6.21): two x64dbg-MCP Server disclosures, both out of scope
 
 Two disclosures against x64dbg-MCP Server. Both checked against the NVD references for
