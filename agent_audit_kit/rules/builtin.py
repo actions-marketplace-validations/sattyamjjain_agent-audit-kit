@@ -444,7 +444,12 @@ _r(
         "bridge (`npx mcp-remote https://...`) or under another key such as "
         "`serverUrl`. A server on a loopback host (localhost, 127.0.0.0/8, ::1 or "
         "0.0.0.0) is not reported, though one that checks no `Origin` header can still "
-        "be reached from a web page through DNS rebinding."
+        "be reached from a web page through DNS rebinding. "
+        "A URL that Node, requests and Rust's `url` crate read differently from curl, "
+        "httpx and urlsplit, which keep a backslash inside the authority, is judged "
+        "by the less safe of the two readings, so "
+        "`http://localhost\\@evil.example/`, which curl and httpx send to evil.example, "
+        "is reported."
     ),
 )
 
@@ -633,9 +638,14 @@ _r(
     adversa_references=["ADV-SSRF-01"],
     limitations=(
         "Looks in the server `url` for the 10.x, 172.16-31.x and 192.168.x ranges, a "
-        "`.local` name, or the text localhost, 127.0.0.1, 0.0.0.0 or ::1; a URL whose "
-        "own host is loopback (localhost, 127.0.0.0/8, ::1 or 0.0.0.0) is not "
-        "reported. Other internal addresses are not matched: a name such as "
+        "`.local` name, or the text localhost, 127.0.0.1, 0.0.0.0 or ::1, and reads "
+        "its host as a client does, so `http://10.1/`, `http://0xa.0.0.5/` and "
+        "`http://%31%30.0.0.5/` are 10.x too; a URL whose own host is loopback "
+        "(localhost, 127.0.0.0/8, ::1 or 0.0.0.0) is not reported. "
+        "A URL that Node, requests and Rust's `url` crate read differently from curl, "
+        "httpx and urlsplit, which keep a backslash inside the authority, is judged "
+        "by the less safe of the two readings. "
+        "Other internal addresses are not matched: a name such as "
         "`mcp.corp.internal` or the shared range 100.64.0.0/10."
     ),
 )
@@ -1399,7 +1409,12 @@ _r(
         "Parses `env.ANTHROPIC_BASE_URL` in `.claude/settings.json` and "
         "`.claude/settings.local.json` at the root of the scanned directory and accepts "
         "it when the host is `anthropic.com` or a subdomain of it, whatever the "
-        "scheme, so a cleartext `http://api.anthropic.com/v1` passes. The same "
+        "scheme, so a cleartext `http://api.anthropic.com/v1` passes. "
+        "A URL that Node, requests and Rust's `url` crate read differently from curl, "
+        "httpx and urlsplit, which keep a backslash inside the authority, is judged "
+        "by the less safe of the two readings, so "
+        "`https://api.anthropic.com\\@evil.example/v1`, Anthropic to Claude Code and "
+        "evil.example to the httpx-based Python SDK, is reported. The same "
         "override in the settings file of a subdirectory "
         "(`packages/web/.claude/settings.json`) is not read."
     ),
@@ -1890,7 +1905,10 @@ _r(
         "`iex`, and the command names what it fetches (a URL, a `$VARIABLE` or a "
         "host); an interpreter given its code on the command line "
         "(`| python3 -m json.tool`) reads the download as data, and a loopback "
-        "URL is a local API. A recursive `rm` counts when it targets `/`, `~` or "
+        "URL is a local API. " "A URL that Node, requests and Rust's `url` crate read differently from curl, "
+        "httpx and urlsplit, which keep a backslash inside the authority, is judged "
+        "by the less safe of the two readings. "
+        "A recursive `rm` counts when it targets `/`, `~` or "
         "`$HOME` where a command starts. A command a guardrail forbids is not "
         "reported: one negated in the sentence, one under a heading or lead-in "
         "such as \"### NEVER\", or one in a table row. `eval(`, `exec(`, "
@@ -1933,7 +1951,10 @@ _r(
         "The allowlist is a list of hosts whose links are ordinarily "
         "documentation; it is not a trust decision, and a link to an "
         "allowlisted host can still be hostile — an attacker can host on "
-        "github.com too. That is why AAK-AGENT-006 applies no allowlist at all."
+        "github.com too. That is why AAK-AGENT-006 applies no allowlist at all. "
+        "A URL that Node, requests and Rust's `url` crate read differently from curl, "
+        "httpx and urlsplit, which keep a backslash inside the authority, is judged "
+        "by the less safe of the two readings."
     ),
 )
 
@@ -2080,7 +2101,10 @@ _r(
         "imperative split across two lines, a verb outside its list, or a "
         "download run under another name (\"extract it and run ./tool\") — and a "
         "line that merely discusses fetching will match. This is a prompt to "
-        "read the line, not a determination that the link is hostile."
+        "read the line, not a determination that the link is hostile. "
+        "A URL that Node, requests and Rust's `url` crate read differently from curl, "
+        "httpx and urlsplit, which keep a backslash inside the authority, is judged "
+        "by the less safe of the two readings."
     ),
 )
 
@@ -2488,7 +2512,12 @@ _r(
     limitations=(
         "Reads the `url` field of each server under `mcpServers`, or `servers` in VS "
         "Code's `.vscode/mcp.json`, and flags `http://` and `ws://` unless the host is "
-        "loopback (localhost, 127.0.0.0/8, ::1) or 0.0.0.0. A cleartext URL passed as an argument "
+        "loopback (localhost, 127.0.0.0/8, ::1) or 0.0.0.0. The scheme is read as a "
+        "client reads it, so ` http://host` and `http:/host` are cleartext too. "
+        "A URL that Node, requests and Rust's `url` crate read differently from curl, "
+        "httpx and urlsplit, which keep a backslash inside the authority, is judged "
+        "by the less safe of the two readings. "
+        "A cleartext URL passed as an argument "
         "to a bridge command (`npx mcp-remote http://...`) is not a `url` field and is "
         "not read."
     ),
@@ -2658,8 +2687,12 @@ _r(
     limitations=(
         "Reads `url`, `endpoint`, `baseUrl` and `base_url` on the card and `url` "
         "and `endpoint` on each skill, and matches a value that starts with "
-        "`http://`. A plain-HTTP address under `additionalInterfaces`, an OAuth "
-        "`tokenUrl`, or a `ws://` endpoint is not read or not matched."
+        "`http://` or that a URL parser reads as http (a leading space, `HTTP:/host`, "
+        "a tab in the scheme). A plain-HTTP address under `additionalInterfaces`, an OAuth "
+        "`tokenUrl`, or a `ws://` endpoint is not read or not matched. "
+        "A URL that Node, requests and Rust's `url` crate read differently from curl, "
+        "httpx and urlsplit, which keep a backslash inside the authority, is judged "
+        "by the less safe of the two readings."
     ),
 )
 
@@ -2719,7 +2752,10 @@ _r(
         "`\"id\": \"\"` and `\"identity\": null` both satisfy it, and nothing looks for a "
         "signature or any other proof of the identity. The other condition, an "
         "`http://` address in a top-level `url`, `endpoint`, `baseUrl` or "
-        "`base_url`, does not look under `additionalInterfaces`."
+        "`base_url`, does not look under `additionalInterfaces`. "
+        "A URL that Node, requests and Rust's `url` crate read differently from curl, "
+        "httpx and urlsplit, which keep a backslash inside the authority, is judged "
+        "by the less safe of the two readings."
     ),
 )
 
@@ -3918,7 +3954,9 @@ _r(
         "capability through an MCP server it does not name, is not measured here; the "
         "per-skill scanners and Python taint analysis cover in-body behaviour. It "
         "reasons about capability, not data flow, so it flags a possible exfiltration "
-        "path, not a proven one."
+        "path, not a proven one. " "A URL that Node, requests and Rust's `url` crate read differently from curl, "
+        "httpx and urlsplit, which keep a backslash inside the authority, is judged "
+        "by the less safe of the two readings."
     ),
 )
 
@@ -3957,7 +3995,10 @@ _r(
         "path-sized pieces, or a URL built from templated fragments, reassembles the same "
         "way an attack does. It only sees file-path and URL reassembly across consecutive "
         "same-tool calls; a splice across different tools, or intent that is not a path or "
-        "URL, is out of scope. Treat a finding as a prompt to look, not a verdict."
+        "URL, is out of scope. Treat a finding as a prompt to look, not a verdict. "
+        "A URL that Node, requests and Rust's `url` crate read differently from curl, "
+        "httpx and urlsplit, which keep a backslash inside the authority, is judged "
+        "by the less safe of the two readings."
     ),
 )
 
@@ -7169,7 +7210,10 @@ _r(
         "`request.data`, `request.values`, `request.files`, `event`, `llm_input`, "
         "`user_input`, `agent.kickoff(`, `task.execute(` or `inputs=`, and no "
         "`validate_rag_url(` call. A URL that arrives as an ordinary function "
-        "parameter (`def search(website_url)`) carries no marker and is not reported."
+        "parameter (`def search(website_url)`) carries no marker and is not reported. "
+        "`validate_rag_url` itself refuses a URL whose host Node, requests and Rust's "
+        "`url` crate read differently from curl, httpx and urlsplit, which keep a "
+        "backslash inside the authority."
     ),
 )
 
@@ -8705,7 +8749,9 @@ _r(
         "boolean `false`. A remote transport with no `authentication` block at all, "
         "or with `\"required\": \"false\"` as a string, is not reported, and the "
         "endpoint is read from the `transport` object only: a top-level `url` is "
-        "ignored."
+        "ignored. " "A URL that Node, requests and Rust's `url` crate read differently from curl, "
+        "httpx and urlsplit, which keep a backslash inside the authority, is judged "
+        "by the less safe of the two readings."
     ),
 )
 
