@@ -102,20 +102,68 @@ def _returns_truthy(body: list[ast.stmt]) -> bool:
     return False
 
 
+_STOP_CALLS = frozenset({"exit", "_exit", "abort", "quit"})
+
+
+def _call_stops(name: str) -> bool:
+    """True if a call spelled `name` ends the process or the command.
+
+    A call named exit, _exit, abort or quit, as the whole name or its last
+    part (`sys.exit`, `os._exit`, `os.abort`, click's `ctx.exit` and
+    `ctx.abort`, the `exit()` and `quit()` builtins, which raise SystemExit),
+    argparse's `<parser>.error(...)`, which prints usage and exits with status
+    2, and click's `ctx.fail(...)`, which raises UsageError and ends the
+    command. Until the last two and `quit` were read, a gate that warned and
+    then called `quit(1)` or `parser.error(...)` was reported as one that
+    carries on.
+
+    The names are matched whole, not as substrings. A substring test read
+    `atexit.register(...)`, which registers an exit handler and carries on, as
+    a stop, so a gate that warned and then registered one went unreported;
+    `app.on_exit(...)` and `log_equity(...)` are not stops either. The
+    receiver decides the other two: `.error` stops only on a name containing
+    parser (`parser`, `self.arg_parser`), so `logger.error(...)` and
+    `logging.error(...)` still carry on, and `.fail` only on a name containing
+    ctx or context (`ctx`, `click.get_current_context()`).
+    """
+    receiver, _, method = name.rpartition(".")
+    if method in _STOP_CALLS:
+        return True
+    receiver = receiver.lower()
+    if method == "error" and "parser" in receiver:
+        return True
+    return method == "fail" and ("ctx" in receiver or "context" in receiver)
+
+
 def _body_is_warn_only(body: list[ast.stmt]) -> bool:
     """True if the branch warns/logs and then *continues* — no raise / return /
-    sys.exit / abort that would stop unauthenticated execution."""
+    call that would stop unauthenticated execution (see `_call_stops`)."""
     saw_warn = False
     for stmt in ast.walk(ast.Module(body=body, type_ignores=[])):
         if isinstance(stmt, (ast.Raise, ast.Return)):
             return False
         if isinstance(stmt, ast.Call):
             name = ast.unparse(stmt.func) if hasattr(ast, "unparse") else ""
-            if "exit" in name or "abort" in name:
+            if _call_stops(name):
                 return False
             if _WARN_CALL_RE.search(name):
                 saw_warn = True
     return saw_warn
+
+
+def _env_default(call: ast.Call) -> ast.expr | None:
+    """The default an `os.getenv` / `os.environ.get` call passes, if any.
+
+    Both take it second or as `default=`. Only the positional spelling was
+    read, so `os.getenv("MCP_API_KEY", default="")` shipped the same empty
+    credential unreported.
+    """
+    if len(call.args) >= 2:
+        return call.args[1]
+    for keyword in call.keywords:
+        if keyword.arg == "default":
+            return keyword.value
+    return None
 
 
 def _scan_python(text: str) -> list[tuple[int, str]]:
@@ -156,8 +204,8 @@ def _scan_python(text: str) -> list[tuple[int, str]]:
                 hits.append((lineno, "placeholder-secret"))
         elif isinstance(value, ast.Call):
             fn = ast.unparse(value.func) if hasattr(ast, "unparse") else ""
-            if fn in ("os.environ.get", "os.getenv") and len(value.args) >= 2:
-                default = value.args[1]
+            if fn in ("os.environ.get", "os.getenv"):
+                default = _env_default(value)
                 if isinstance(default, ast.Constant) and default.value == "":
                     hits.append((lineno, "empty-default-secret"))
 
@@ -201,8 +249,17 @@ _CFG_SECRET_KV_RE = re.compile(
 # idea spelled differently, and until #731 the scanner only knew the first
 # spelling: CVE-2026-90898's Bifrost config reads
 # `governance.auth_config.is_enabled: false`, carries no secret at all, and so
-# matched nothing. Covers YAML/TOML (`enabled: false`), JSON
-# (`"enabled": false`) and env (`AUTH_ENABLED=false`).
+# matched nothing. Covers YAML (`auth:` then `enabled: false`, or a dotted
+# key), TOML keys and inline tables (`auth.enabled = false`,
+# `auth = { enabled = false }`), JSON (`"auth": {"enabled": false}`,
+# `"disable_auth": true`) and env flags (`DISABLE_AUTH=true`, `AUTH=off`).
+# JSON's quoted keys were missed until the keyword could be followed by its
+# closing quote: that quote sat between the keyword and the colon, so the
+# nested `"enabled"` and the `"disable_*"` flags matched only where keys go
+# unquoted (YAML, env). The keyword keeps its `\b` on both sides, so a longer name
+# (`"disable_auth_logging"`, `"enabled_features"`) is still not read as one.
+# Not read: a TOML table header (`[auth]`, then `enabled = false` on its own
+# line) and an env name that only contains a keyword (`AUTH_ENABLED=false`).
 #
 # This took 16 seconds on a 4 KB config of `auth:` and blank lines, four times
 # the 2 KB time, and 220 seconds on 8 KB of `auth.` repeated, seven times the
@@ -220,6 +277,24 @@ _CFG_SECRET_KV_RE = re.compile(
 _AUTH_KEYWORDS = (
     r"auth|authentication|authorization|auth_config|require_auth|requireauth|security|governance"
 )
+
+
+def _whole_value(words: str) -> str:
+    """A config value that is exactly one of `words`.
+
+    Quoted, it ends at its closing quote; bare, at whitespace, a comma, a
+    closing brace or bracket, or the end of the text. The values had no end,
+    so any word that merely began with one read as auth off: `auth: office365`,
+    `auth: 0.5`, `security: normal` and `disable_auth: online` were reported
+    HIGH. `none` is listed because it was matched (as `no` followed by more
+    letters) and `auth: none` does mean no authentication.
+    """
+    return rf"""(?:"(?:{words})"|'(?:{words})'|(?:{words})(?=[\s,}}\]]|$))"""
+
+
+_AUTH_OFF_VALUE = _whole_value("false|0|no|none|off|disabled")
+_AUTH_OFF_FLAG_VALUE = _whole_value("true|1|yes|on")
+
 _CFG_AUTH_DISABLED_RE = re.compile(
     rf"""
     (?:
@@ -228,11 +303,11 @@ _CFG_AUTH_DISABLED_RE = re.compile(
         (?:(?!\b(?:{_AUTH_KEYWORDS})\b)[\w."'\-])*
         \s*[:=]\s*
         (?:\{{\s*)?
-        (?:(?:\S[\s\S]{{0,119}}?)?\b(?:is_enabled|enabled|required|require)\b\s*[:=]\s*)?
-        ["']?(?:false|0|no|off|disabled)["']?
+        (?:(?:\S[\s\S]{{0,119}}?)?\b(?:is_enabled|enabled|required|require)\b["']?\s*[:=]\s*)?
+        {_AUTH_OFF_VALUE}
       |
-        \b(?:disable_auth|no_auth|auth_disabled|skip_auth|allow_anonymous)\b
-        \s*[:=]\s*["']?(?:true|1|yes|on)["']?
+        \b(?:disable_auth|no_auth|auth_disabled|skip_auth|allow_anonymous)\b["']?
+        \s*[:=]\s*{_AUTH_OFF_FLAG_VALUE}
     )
     """,
     re.IGNORECASE | re.VERBOSE,

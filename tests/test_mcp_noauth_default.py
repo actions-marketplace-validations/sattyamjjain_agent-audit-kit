@@ -97,6 +97,35 @@ mcp.run(transport="streamable-http")
     assert _hits(findings), "warn-only secret gate + 0.0.0.0 bind must fire"
 
 
+@pytest.mark.parametrize("call", [
+    'os.getenv("MCP_API_KEY", default="")',
+    'os.environ.get("MCP_API_KEY", default="")',
+])
+def test_empty_default_passed_by_keyword_flags(tmp_path: Path, call: str) -> None:
+    """Only the second positional argument was read as the default, so the
+    keyword spelling of the same empty default went unreported."""
+    _write(tmp_path, "server.py", (
+        "import os\n"
+        "from mcp.server.fastmcp import FastMCP\n\n"
+        'mcp = FastMCP("x")\n'
+        f"API_KEY = {call}\n"
+    ))
+    findings, _ = scan(tmp_path)
+    assert [f.line_number for f in _hits(findings)] == [5]
+
+
+def test_non_empty_default_passed_by_keyword_passes(tmp_path: Path) -> None:
+    _write(tmp_path, "server.py", (
+        "import os\n"
+        "from mcp.server.fastmcp import FastMCP\n\n"
+        'mcp = FastMCP("x")\n'
+        'API_KEY = os.getenv("MCP_API_KEY", default=None)\n'
+        'REGION = os.getenv("MCP_REGION", default="")\n'
+    ))
+    findings, _ = scan(tmp_path)
+    assert not _hits(findings)
+
+
 def test_vulnerable_mcp_config_empty_secret_0000_flags(tmp_path: Path) -> None:
     """Vulnerable MCP-config sample: empty secret + 0.0.0.0 bind."""
     _write(tmp_path, "mcp.json", json.dumps({
@@ -198,6 +227,142 @@ def test_disabled_auth_config_names_the_keyword_line(tmp_path: Path, src: str, l
     assert [f.line_number for f in _hits(findings)] == [line]
 
 
+_OFF_CONFIG = "mcpServers:\n  docs:\n    host: 0.0.0.0\n    port: 8080\n"
+
+
+@pytest.mark.parametrize("flag", [
+    "auth: false", "auth: 'off'", 'auth: "no"', "auth: none", "auth: disabled # for now",
+    "security: 0", "auth:\n  enabled: false", "auth: {enabled: false}",
+    "disable_auth: true", "skip_auth: 1", 'allow_anonymous: "yes"', "no_auth: on",
+])
+def test_an_auth_off_value_flags(tmp_path: Path, flag: str) -> None:
+    _write(tmp_path, "mcp-server.yaml", _OFF_CONFIG + flag + "\n")
+    findings, _ = scan(tmp_path)
+    assert _hits(findings), flag
+
+
+@pytest.mark.parametrize("flag", [
+    "auth: office365", "auth: nope", "auth: 0.5", "security: normal",
+    "authentication: notifications", 'auth: "0 users"', "auth: offline-tokens",
+    "disable_auth: online", "skip_auth: once", "allow_anonymous: only_health",
+    "disable_auth: 10", "auth: oauth2", "disable_auth: false",
+])
+def test_a_value_that_only_starts_with_an_off_word_passes(tmp_path: Path, flag: str) -> None:
+    """The values had no end, so any word beginning with false, 0, no, off or
+    disabled (or true, 1, yes or on for the disable_* keys) read as auth off."""
+    _write(tmp_path, "mcp-server.yaml", _OFF_CONFIG + flag + "\n")
+    findings, _ = scan(tmp_path)
+    assert not _hits(findings), flag
+
+
+@pytest.mark.parametrize(("src", "fires"), [
+    ('{"mcpServers": {"docs": {"host": "0.0.0.0", "auth": false}}}', True),
+    ('{"mcpServers": {"docs": {"host": "0.0.0.0", "auth": "off", "port": 8080}}}', True),
+    ('{"mcpServers": {"docs": {"host": "0.0.0.0", "auth": "office365"}}}', False),
+    ('{"mcpServers": {"docs": {"host": "0.0.0.0", "auth": "0.5"}}}', False),
+])
+def test_an_auth_off_value_in_json(tmp_path: Path, src: str, fires: bool) -> None:
+    """A value ends at its closing quote, or at a comma or brace when bare."""
+    _write(tmp_path, "mcp.json", src)
+    findings, _ = scan(tmp_path)
+    assert bool(_hits(findings)) is fires
+
+
+_JSON_HOST = '{"mcpServers": {"docs": {"host": "0.0.0.0", %s}}}'
+
+
+@pytest.mark.parametrize("flag", [
+    '"disable_auth": true',
+    '"skip_auth": "yes"',
+    '"allow_anonymous": 1',
+    '"auth": {"enabled": false}',
+    '"auth": {"provider": "none-needed", "required": false}',
+    '"governance": {"auth_config": {"is_enabled": false}}',
+])
+def test_a_quoted_json_key_flags(tmp_path: Path, flag: str) -> None:
+    """JSON quotes every key, and the key's closing quote sat between the
+    keyword and its colon, so the `disable_*` flags and a nested `enabled` key
+    were read in YAML and env files only: Bifrost's own setting, written as
+    JSON, was silent."""
+    _write(tmp_path, "mcp.json", _JSON_HOST % flag)
+    findings, _ = scan(tmp_path)
+    assert _hits(findings), flag
+
+
+@pytest.mark.parametrize("flag", [
+    '"disable_auth_logging": true',
+    '"x_disable_auth": true',
+    '"disable_auth": false',
+    '"auth": {"enabled": true}',
+    '"auth": {"enabled_features": false}',
+    '"auth": {"required_scopes": false}',
+])
+def test_a_quoted_json_key_that_is_not_auth_off_passes(tmp_path: Path, flag: str) -> None:
+    _write(tmp_path, "mcp.json", _JSON_HOST % flag)
+    findings, _ = scan(tmp_path)
+    assert not _hits(findings), flag
+
+
+def test_a_quoted_json_flag_names_its_own_line(tmp_path: Path) -> None:
+    src = '{\n  "mcpServers": {\n    "docs": {\n      "host": "0.0.0.0",\n      "disable_auth": true\n    }\n  }\n}\n'
+    _write(tmp_path, "mcp.json", src)
+    findings, _ = scan(tmp_path)
+    assert [f.line_number for f in _hits(findings)] == [5]
+
+
+_WARN_THEN = (
+    "import logging\n"
+    "import os\n"
+    "import sys\n\n"
+    "from mcp.server.fastmcp import FastMCP\n\n"
+    'mcp = FastMCP("x")\n'
+    'SECRET = os.environ.get("MCP_SECRET")\n\n'
+    "if not SECRET:\n"
+    '    logging.warning("MCP_SECRET is not set")\n'
+    "{STOP}\n\n"
+    'mcp.run(host="0.0.0.0")\n'
+)
+
+
+@pytest.mark.parametrize("stop", [
+    "    quit(1)",
+    "    parser.error('--secret is required')",
+    "    self.arg_parser.error('--secret is required')",
+    "    ctx.fail('--secret is required')",
+    "    click.get_current_context().fail('--secret is required')",
+    "    sys.exit(1)",
+    "    os._exit(1)",
+    "    os.abort()",
+    "    ctx.exit(1)",
+    "    exit(1)",
+])
+def test_a_warning_followed_by_a_stop_passes(tmp_path: Path, stop: str) -> None:
+    """quit(), argparse's parser.error() and click's ctx.fail() end the process
+    (or the command) as surely as sys.exit(), but none of them is named exit or
+    abort, so the gate read as warn-only."""
+    _write(tmp_path, "server.py", _WARN_THEN.replace("{STOP}", stop))
+    findings, _ = scan(tmp_path)
+    assert not _hits(findings), stop
+
+
+@pytest.mark.parametrize("cont", [
+    "    pass",
+    "    logger.error('still serving')",
+    "    log.error('still serving')",
+    "    tracker.fail('MCP_SECRET')",
+    "    print_error('MCP_SECRET is not set')",
+    # A substring test read these as stops: they register or name an exit
+    # handler, and the server carries on unauthenticated.
+    "    atexit.register(cleanup)",
+    "    app.on_exit(cleanup)",
+    "    abort_controller_factory()",
+])
+def test_a_warning_that_carries_on_still_flags(tmp_path: Path, cont: str) -> None:
+    _write(tmp_path, "server.py", _WARN_THEN.replace("{STOP}", cont))
+    findings, _ = scan(tmp_path)
+    assert [f.line_number for f in _hits(findings)] == [10], cont
+
+
 _CRAFTED_CONFIGS = {
     # 4 KB of this took 16 seconds: the key prefix, the key path, two adjacent
     # `\s*` and the nested-`enabled` window all rescanned the newline run.
@@ -208,6 +373,10 @@ _CRAFTED_CONFIGS = {
     # in the run: 5,000 characters took 66 seconds.
     "secret-run": "secret" * 165_000,
     "word-run": "a" * 990_000,
+    # The quoted key forms: a keyword's closing quote, then no colon.
+    "quoted-flags": '"disable_auth"' * 70_000,
+    "quoted-enabled": '{"auth": {"enabled"' * 52_000,
+    "quoted-enabled-run": '{"auth": {' + '"enabled"' * 110_000,
 }
 
 

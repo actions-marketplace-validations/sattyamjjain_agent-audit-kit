@@ -3348,12 +3348,24 @@ _r(
     ),
 )
 
+# AAK-OAUTH-002 and an omitted method. RFC 7636 section 4.3 (fetched
+# 2026-10-17, https://www.rfc-editor.org/rfc/rfc7636#section-4.3):
+#     code_challenge_method
+#        OPTIONAL, defaults to "plain" if not present in the request.
+# so a request that leaves the method out is a plain request, which the
+# limitation says is not reported.
+# A request-level arm (a dict literal, `dict(...)` call or URL string naming
+# both `response_type` and `code_challenge`, in a file that never names the
+# method) was measured on 2026-10-17 on 3,876 files from GitHub code search:
+# 13 of its 17 findings were real omissions, 76.5%, under the 80% bar it had
+# to clear, and all four others were test inputs (fixtures, a test of an
+# authorization server), so it was left off.
 _r(
     "AAK-OAUTH-002",
     "PKCE using the plain challenge method",
-    "An OAuth client sets code_challenge_method=plain (or omits it). S256 "
-    "is mandatory; 'plain' leaks the verifier to anyone with access to the "
-    "authorization request.",
+    "An OAuth client sets code_challenge_method=plain. S256 is mandatory; "
+    "'plain' leaks the verifier to anyone with access to the authorization "
+    "request.",
     Severity.HIGH,
     Category.MCP_CONFIG,
     "Set code_challenge_method=S256 and derive code_challenge as "
@@ -3367,11 +3379,11 @@ _r(
         "authorization_endpoint, token_endpoint or client_id (in any case; "
         "`GOOGLE_CLIENT_ID` does not count) or the call `authorize(`. In them it fires "
         "only when `code_challenge_method` is assigned the literal `plain` "
-        "(`code_challenge_method=plain`, `\"code_challenge_method\": \"plain\"`). A "
-        "request that sends a `code_challenge` with no method at all, which RFC 7636 "
-        "treats as plain, one that takes the method from a constant (`METHOD = "
-        "\"plain\"`), and the same literal in a file with none of those words, are not "
-        "reported."
+        "(`code_challenge_method=plain`, `\"code_challenge_method\": \"plain\"`). An "
+        "authorization request that sends `code_challenge` with no "
+        "`code_challenge_method` defaults to `plain` (RFC 7636 §4.3) and is not "
+        "reported. Neither is a method taken from a constant (`METHOD = \"plain\"`), "
+        "or the same literal in a file with none of those words."
     ),
 )
 
@@ -3537,7 +3549,11 @@ _r(
         "`GOOGLE_CLIENT_ID` does not count) or the call `authorize(`. In them it fires "
         "on a token request (`grant_type=...`, `response_type=code`, `authorize(`, "
         "`authorization_endpoint`, `token_endpoint` or an `/authorize` or `/token` "
-        "path) in a file with no `resource` parameter. Any `resource = ...` "
+        "path) in a file with no `resource` parameter. In a .json, .yaml, .yml or "
+        ".toml file the request has to be data: a `grant_type`, "
+        "`authorization_endpoint` or `token_endpoint` key, `response_type: code`, or "
+        "a value that is wholly a URL or path ending in `/authorize` or `/token`, so "
+        "a token path written inside a sentence there is not one. Any `resource = ...` "
         "assignment, `\"resource\":` key, `?resource=` or `&resource=` parameter, "
         "`resource_indicator(s)` or the text `RFC 8707` (any case, a comment included) "
         "counts as the RFC 8707 parameter, including an unrelated local variable named "
@@ -8177,7 +8193,12 @@ _r(
         "written in exactly that case (a `\"Description\"` key hides the text), and "
         "matches words in any case. It fires on a tool whose name and description "
         "contain one of delete, remove, edit, update, overwrite or move as a whole "
-        "word and one of file, record, resource, document, doc, entry, item, object, "
+        "word, whose description has deletes, removes or overwrites, or updates, edits "
+        "or moves followed by an article or quantifier (a, an, the, this, that, these, "
+        "those, its, their, your, any, all, each, every, one, existing, specified, "
+        "selected, given or multiple), or whose name starts with one of the six verbs "
+        "(`delete_shared_file`, `deleteSharedFile`), "
+        "and one of file, record, resource, document, doc, entry, item, object, "
         "row, entity, note, message, artifact, dataset, memory, conversation or thread "
         "with at most a trailing s (`files`, not `entries`), when the file declares a "
         "shared context (`shared: true`, more than one agent, or a `scope` of shared, "
@@ -8188,8 +8209,9 @@ _r(
         "owner, actor, principal, author, user_id, caller, authoriz*, permission, "
         "tenant, requested_by, on_behalf, requester or subject_id (with `_`, `-` or "
         "nothing between the words) or the whole word acl. Not reported: a description "
-        "in the third person (`Deletes a file shared with the team`), which has no "
-        "whole-word verb; a tool with any of those property names, whether or not its "
+        "such as `Updates notes in the team workspace`, where no article follows the "
+        "verb; a verb further into a snake_case or camelCase name (`file_delete`); a "
+        "tool with any of those property names, whether or not its "
         "handler enforces it; a tool described without the shared words; and a tool "
         "declared in Python source."
     ),
@@ -8617,7 +8639,8 @@ _r(
         "of '', changeme, change-me, change_me, secret, password, passwd, admin, "
         "default, token, test, placeholder, xxx, none, your-secret-here, "
         "your_secret_here, your-token-here or example (any case) or read from the "
-        "environment with an empty second argument (`os.environ.get(\"X\", \"\")`), a "
+        "environment with an empty default, second or as `default=` "
+        "(`os.environ.get(\"X\", \"\")`, `os.getenv(\"X\", default=\"\")`), a "
         "function named is_authorized, authorize, check_auth, verify_token, "
         "verify_auth, require_auth, validate_token, validate_auth or authenticate (any "
         "case, an optional leading underscore, the underscore inside the name "
@@ -8625,7 +8648,10 @@ _r(
         "is empty, and a missing-secret check whose body calls a function whose name "
         "contains warn, logger, getLogger or print (any case; `logging.warning(...)` "
         "and `logger.info(...)` count, `logging.error(...)` does not) and has no "
-        "raise, return or call whose name contains lowercase exit or abort, in a file "
+        "raise, return, call named exit, _exit, abort or quit (the whole name or its "
+        "last part, so `sys.exit` and `os._exit` stop and `atexit.register` does not), "
+        "`.error(...)` on a name containing parser (argparse) or `.fail(...)` on a "
+        "name containing ctx or context (click), in a file "
         "that contains `0.0.0.0`, `[::]` or a quoted `::`. In files whose extension is "
         ".json, .yaml, .yml, .toml or .env that mention MCP in the same way and "
         "contain one of those addresses it flags a key containing secret, token, "
@@ -8633,13 +8659,18 @@ _r(
         "set to '' or one of changeme, change-me, change_me, secret, password, admin, "
         "default, placeholder, xxx, example, token or test (any case), and auth "
         "switched off by a flag: auth, authentication, authorization, auth_config, "
-        "require_auth, requireauth, security or governance set to a value starting "
-        "with false, 0, no, off or disabled, directly or through an enabled, "
-        "is_enabled, required or require key within 120 characters, or disable_auth, "
-        "no_auth, auth_disabled, skip_auth or allow_anonymous set to a value starting "
-        "with true, 1, yes or on. A weak non-empty default (`os.environ.get(\"X\", "
-        "\"changeme\")`) and an empty default passed by keyword (`os.getenv(\"X\", "
-        "default=\"\")`) are not flagged, and neither is the same pattern in a file "
+        "require_auth, requireauth, security or governance set to false, 0, no, "
+        "none, off or disabled, directly or through an enabled, is_enabled, required "
+        "or require key within 120 characters, or disable_auth, no_auth, "
+        "auth_disabled, skip_auth or allow_anonymous set to true, 1, yes or on, each "
+        "the whole value (quoted, or bare and followed by whitespace, a comma, a "
+        "closing brace or bracket, or the end of the file), so `auth: office365` and "
+        "`auth: 0.5` are not read as off. A key whose name only contains a keyword "
+        "(`AUTH_ENABLED=false`, `mcp_auth_enabled: false`) and a TOML table header "
+        "(`[auth]`, then `enabled = false`) are not read as auth off. A weak "
+        "non-empty default "
+        "(`os.environ.get(\"X\", \"changeme\")`) is not flagged, and neither is the "
+        "same pattern in a file "
         "that mentions none of the MCP words above or, for the warning check and the "
         "config files, contains none of those addresses, which covers a loopback bind "
         "and a host read from the environment."
