@@ -35,6 +35,104 @@ class RuleDefinition:
 
 RULES: dict[str, RuleDefinition] = {}
 
+@dataclass(frozen=True)
+class RetiredRule:
+    """A rule id that has left the registry, and what its help page says about it."""
+
+    #: The title the rule carried, so a page reached from an old alert names the rule.
+    title: str
+    #: The last release that shipped the rule.
+    last_release: str
+    #: Why it went, in sentences.
+    reason: str
+    #: What covers it now, in sentences, or what to use instead. The docs link every
+    #: registered rule id named here.
+    replacement: str
+
+
+# Ids that were registered once and have left the registry. A rule id is a public
+# name: it sits in SARIF baselines and code-scanning alerts, in `--rules` and
+# `--exclude-rules` lists, in VEX statements and in suppressions written against an
+# earlier release, so a new rule under an old id would be read as the old rule.
+# `_r()` refuses every id here, and `tests/test_retired_rules.py` fails when the
+# package, its data files or `rules.json` still name one. The alerts also keep
+# linking to the rule's help page, so `scripts/rule_pages.py` publishes a page for
+# each entry at the address its `helpUri` pointed at.
+RETIRED_RULE_IDS: dict[str, RetiredRule] = {
+    "AAK-WINDSURF-001": RetiredRule(
+        title="Windsurf .windsurf/mcp.json auto-approves server registrations",
+        last_release="0.6.22",
+        reason=(
+            "It read a project's `.windsurf/mcp.json` for `auto_approve` and `auto_execute` "
+            "keys, a group- or world-writable folder and server commands with no SHA-256 pin. "
+            "Windsurf documents neither that file nor those keys: its MCP documentation, now "
+            "at docs.devin.ai, names only the user-level `~/.config/devin/mcp_config.json` "
+            "(macOS and Linux) and `%APPDATA%\\devin\\mcp_config.json` (Windows), and its "
+            "only per-tool control is `disabledTools`."
+        ),
+        replacement=(
+            "CVE-2026-30615, in which a prompt injection rewrites Windsurf's MCP "
+            "configuration, is covered by AAK-STDIO-001, AAK-MCP-STDIO-CMD-INJ-001, "
+            "AAK-MCP-STDIO-CMD-INJ-002, AAK-MCP-STDIO-CMD-INJ-003 and "
+            "AAK-MCP-STDIO-CMD-INJ-004. Every other MCP server rule still reads "
+            "`.windsurf/mcp.json`."
+        ),
+    ),
+    "AAK-OPENCLAW-PRIVESC-001": RetiredRule(
+        title="OpenClaw agent role missing or attacker-influenced",
+        last_release="0.6.22",
+        reason=(
+            "It looked for `from openclaw import OpenClawAgent`, and no published package "
+            "provides that class. On 2026-10-17 none of the twelve files of PyPI's six "
+            "`openclaw` and `openclaw-sdk` releases contained it: `openclaw` installs the "
+            "cmdop CLI, `openclaw-sdk` imports as `openclaw_sdk`, and OpenClaw itself ships "
+            "on npm. The rule was provisional from the start, and no CVE was assigned."
+        ),
+        replacement=(
+            "Nothing replaces the role check. OpenClaw's npm releases are pinned by "
+            "AAK-MCP-OPENCLAW-CVE-2026-62195-001 and AAK-MCP-OPENCLAW-CVE-2026-102807-001, "
+            "which report its vulnerable versions."
+        ),
+    ),
+    "AAK-OX-COVERAGE-MANIFEST-001": RetiredRule(
+        title="Project OX-disclosed CVE coverage manifest",
+        last_release="0.6.22",
+        reason="It described the OX coverage manifest and never fired: it was metadata, not a detection.",
+        replacement=(
+            "Nothing replaces it as a rule. `aak coverage --source ox` reads "
+            "`agent_audit_kit/data/ox-cve-manifest.json` and prints the coverage."
+        ),
+    ),
+    "AAK-PRISMA-AIRS-COVERAGE-001": RetiredRule(
+        title="Prisma AIRS catalog coverage manifest",
+        last_release="0.6.22",
+        reason="It described the Prisma AIRS coverage map and never fired: it was metadata, not a detection.",
+        replacement=(
+            "Nothing replaces it as a rule. `aak coverage --source prisma-airs` reads "
+            "`agent_audit_kit/data/prisma-airs-catalog.json` and "
+            "`agent_audit_kit/data/prisma-airs-aak-map.json` and prints the coverage."
+        ),
+    ),
+    "AAK-MCP-KONG-CVE-2026-13341-001": RetiredRule(
+        title="Kong Konnect MCP server < 1.0.0 (indirect prompt injection)",
+        last_release="0.6.22",
+        reason=(
+            "It reported the Kong Konnect MCP server below 1.0.0 (CVE-2026-13341) by a "
+            "package name that was never published: on 2026-10-17 npm and PyPI returned 404 "
+            "for every spelling the rule matched, and for `kong-konnect-mcp`, the name in the "
+            "project's own `package.json`. Kong/mcp-konnect, the repository the advisory "
+            "names, is archived. Its README installs the server from a clone and launches "
+            "`node /absolute/path/to/mcp-konnect/build/index.js`, which states no version a "
+            "static scan can judge."
+        ),
+        replacement=(
+            "Nothing replaces it. The advisory, GHSA-7767-3m3w-2p44, gives 1.0.0 as the fix, "
+            "so a clone of Kong/mcp-konnect should be on v1.0.0 or later. Kong points users "
+            "to its remote Konnect MCP server instead."
+        ),
+    ),
+}
+
 
 # ---------------------------------------------------------------------------
 # AICM tag overlay
@@ -146,7 +244,6 @@ _AICM_TAGS: dict[str, list[str]] = {
     "AAK-OAUTH-008": ["IAM-01", "IAM-16"],
     "AAK-AZURE-MCP-NOAUTH-001": ["IAM-01", "IAM-16"],
     "AAK-MCP-AUTH-PATHTRAVERSAL-001": ["IAM-01", "IVS-04"],
-    "AAK-MCP-KONG-CVE-2026-13341-001": ["AIS-07", "AIS-12"],
     "AAK-MCP-GATEWAY-REGISTRY-CVE-2026-14471-001": ["AIS-07", "DSP-07"],
     "AAK-MCP-SSRF-001": ["IVS-04", "AIS-08"],
     "AAK-MCP-SERENA-CVE-2026-49471-001": ["IAM-01", "IAM-16"],
@@ -342,7 +439,6 @@ _AICM_TAGS: dict[str, list[str]] = {
     "AAK-ANTHROPIC-SDK-001": ["AIS-07", "STA-08"],
     "AAK-FLOWISE-001": ["STA-08"],
     "AAK-STDIO-001": ["AIS-07"],
-    "AAK-WINDSURF-001": ["AIS-07"],
     "AAK-NEO4J-001": ["IAM-02"],
     "AAK-CLAUDE-WIN-001": ["CCC-08"],
     "AAK-SEC-MD-001": ["STA-10"],
@@ -351,7 +447,6 @@ _AICM_TAGS: dict[str, list[str]] = {
     "AAK-LANGGRAPH-TOOLNODE-LIST-REGRESSION-001": ["AIS-07"],
     "AAK-DEEPSEEK-V4-MOE-TOOL-INJ-001": ["AIS-07"],
     "AAK-TIKTOK-AGENT-HIJACK-001": ["IAM-02", "CCC-08"],
-    "AAK-OX-COVERAGE-MANIFEST-001": ["STA-08"],
     # ---- v0.3.10 (2026-04-29) -------------------------------------------
     "AAK-CREWAI-CHAIN-2026-04-001": ["AIS-07", "STA-08"],
     "AAK-CREWAI-CVE-2026-2275-001": ["AIS-07", "IVS-04"],
@@ -359,8 +454,6 @@ _AICM_TAGS: dict[str, list[str]] = {
     "AAK-CREWAI-CVE-2026-2286-001": ["IVS-04"],
     "AAK-CREWAI-CVE-2026-2287-001": ["AIS-07", "IVS-04"],
     "AAK-LANGCHAIN-PROMPT-LOADER-PATH-001": ["AIS-07"],
-    "AAK-PRISMA-AIRS-COVERAGE-001": ["STA-08"],
-    "AAK-OPENCLAW-PRIVESC-001": ["IAM-02"],
 }
 
 
@@ -382,6 +475,12 @@ def _r(
     owasp_ast_references: list[str] | None = None,
     limitations: str = "",
 ) -> None:
+    if rule_id in RETIRED_RULE_IDS:
+        retired = RETIRED_RULE_IDS[rule_id]
+        raise ValueError(
+            f"{rule_id} was retired after {retired.last_release}: {retired.reason} "
+            "Give the new rule a new id."
+        )
     RULES[rule_id] = RuleDefinition(
         rule_id=rule_id,
         title=title,
@@ -5471,30 +5570,6 @@ _r(
 )
 
 # ---------------------------------------------------------------------------
-# Windsurf MCP auto-registration hardening (AAK-WINDSURF-001)
-# ---------------------------------------------------------------------------
-
-_r(
-    "AAK-WINDSURF-001",
-    "Windsurf .windsurf/mcp.json auto-approves server registrations",
-    "A `.windsurf/mcp.json` file declares auto_approve:true or "
-    "auto_execute:true, or contains server `command:` entries with no "
-    "SHA-256 pin. CVE-2026-30615 (Windsurf 1.9544.26, CVSS 8.0) shows "
-    "attackers can inject malicious MCP registrations via HTML prompt "
-    "injection when auto-approval is enabled.",
-    Severity.HIGH,
-    Category.MCP_CONFIG,
-    "Set auto_approve and auto_execute to false. Pin every server "
-    "command to a SHA-256 digest. Upgrade Windsurf to a version with "
-    "the registration confirmation flow enabled.",
-    sarif_name="WindsurfAutoApprove",
-    cve_references=["CVE-2026-30615"],
-    owasp_mcp_references=["MCP04:2025", "MCP09:2025"],
-    owasp_agentic_references=["ASI04", "ASI09"],
-    adversa_references=["ADV-RCE-05"],
-)
-
-# ---------------------------------------------------------------------------
 # Neo4j Cypher MCP read-only bypass (AAK-NEO4J-001)
 # ---------------------------------------------------------------------------
 
@@ -6951,7 +7026,7 @@ _r(
 
 # ---------------------------------------------------------------------------
 # v0.3.9 (2026-04-28) — economic-drift, ToolNode regression, DeepSeek V4
-# MoE injection, TikTok-class auto-reply hijack, OX coverage meta-rule.
+# MoE injection, TikTok-class auto-reply hijack.
 # ---------------------------------------------------------------------------
 
 _r(
@@ -7086,26 +7161,10 @@ _r(
     ),
 )
 
-_r(
-    "AAK-OX-COVERAGE-MANIFEST-001",
-    "Project OX-disclosed CVE coverage manifest",
-    "Meta / informational rule that surfaces the project's static CVE "
-    "coverage map (`agent_audit_kit/data/ox-cve-manifest.json`). Drives "
-    "the OX-coverage badge endpoint and the `aak coverage --source ox` "
-    "CLI; never fires findings on user code.",
-    Severity.INFO,
-    Category.SUPPLY_CHAIN,
-    "Run `aak coverage --source ox` to see which OX-disclosed CVEs are "
-    "covered by AAK rules. The manifest is regenerated on every release "
-    "and powers the `OX coverage` badge in README.",
-    sarif_name="OxCoverageManifest",
-)
-
 
 # ---------------------------------------------------------------------------
 # v0.3.10 (2026-04-29) — CrewAI four-CVE chain (CERT/CC VU#221883),
-# LangChain prompt-loader path traversal (CVE-2026-34070), Prisma AIRS
-# coverage manifest, OpenClaw privesc (provisional, IronPlate-cited).
+# LangChain prompt-loader path traversal (CVE-2026-34070).
 # ---------------------------------------------------------------------------
 
 _r(
@@ -7292,23 +7351,6 @@ _r(
         "directory. A file that imports `from langchain_core.prompts.loading import "
         "load_prompt` is skipped."
     ),
-)
-
-_r(
-    "AAK-PRISMA-AIRS-COVERAGE-001",
-    "Prisma AIRS catalog coverage manifest",
-    "Meta / informational rule that surfaces AAK's static coverage of "
-    "the public Prisma AIRS 3.0 attack catalog. Drives "
-    "`aak coverage --source prisma-airs` and the published coverage "
-    "matrix. Never fires findings on user code.",
-    Severity.INFO,
-    Category.SUPPLY_CHAIN,
-    "Run `aak coverage --source prisma-airs` to see how AAK's static "
-    "ruleset maps onto Palo Alto's published Prisma AIRS attack "
-    "catalog. The map is hand-curated; entries flagged "
-    "`status: catalog-private` are not publicly disclosed and "
-    "intentionally absent from AAK coverage.",
-    sarif_name="PrismaAirsCoverageManifest",
 )
 
 _r(
@@ -8088,39 +8130,6 @@ _r(
 )
 
 _r(
-    "AAK-OPENCLAW-PRIVESC-001",
-    "OpenClaw agent role missing or attacker-influenced",
-    "`OpenClawAgent(role=...)` is unset, None, or sourced from "
-    "untrusted input without `assert_role_allowlisted(role)`. "
-    "IronPlate's 2026-04-07 weekly intel flagged a CVSS 9.9 "
-    "privilege-escalation in OpenClaw where a missing/forgable role "
-    "default lets a prompt-borne agent escalate to admin actions. "
-    "Provisional rule pending a public CVE assignment.",
-    Severity.HIGH,
-    Category.TRUST_BOUNDARY,
-    "Always pass an explicit, allow-listed role to OpenClawAgent. "
-    "Wrap the assignment with `aak.checks.openclaw."
-    "assert_role_allowlisted(role)`. Pin the OpenClaw version once "
-    "the upstream patch ships; the AAK rule will auto-promote from "
-    "`provisional` to `confirmed` when "
-    "`scripts/refresh_openclaw_status.py` finds a CVE ID.",
-    sarif_name="OpenClawPrivesc",
-    owasp_agentic_references=["ASI03"],
-    incident_references=["IRONPLATE-2026-04-07"],
-    limitations=(
-        "Fires on `OpenClawAgent(...)` with no `role=` or with `role=None`, whatever "
-        "else the file holds, and on a non-constant role when the call's function, or "
-        "the file as a whole, contains `request.json` (or `request.body`, "
-        "`request.args`, `request.form`, `request.data`, `request.values`, "
-        "`request.files`), `os.environ`, `sys.argv`, `user_input` or `llm_input` and "
-        "that same scope never calls `assert_role_allowlisted(`. A role passed in as "
-        "an ordinary parameter in a file with no such marker (`def build(role)`) is "
-        "not reported, and the class imported under another name (`from openclaw "
-        "import OpenClawAgent as Agent`) is not recognised."
-    ),
-)
-
-_r(
     "AAK-MCP-SANDBOX-SELFDISABLE-001",
     "Tool schema exposes an LLM-settable sandbox/isolation-disable parameter",
     "A tool/function JSON schema or MCP tool descriptor declares a parameter "
@@ -8840,40 +8849,6 @@ _r(
         "capability counts as asserted only when its value is the boolean `true`: a "
         "card that lists `tools`, `resources`, `prompts` and `logging` as objects "
         "is not reported."
-    ),
-)
-
-_r(
-    "AAK-MCP-KONG-CVE-2026-13341-001",
-    "Kong Konnect MCP server < 1.0.0 (indirect prompt injection)",
-    "The Kong Konnect MCP server before 1.0.0 is vulnerable to indirect prompt "
-    "injection: untrusted content returned to the server (e.g. an API response, "
-    "spec, or resource body it relays to the agent) can carry attacker-authored "
-    "instructions that the agent then acts on, causing it to issue unintended "
-    "Kong Admin/Konnect API requests it was never asked to make — a "
-    "confidentiality-impacting cross-boundary injection, not a generic "
-    "prompt-injection heuristic (CVE-2026-13341, CVSS 7.4 HIGH, published "
-    "2026-07-03). A config that dispatches the Konnect MCP server at a version "
-    "below 1.0.0 (or unpinned) is exposed.",
-    Severity.HIGH,
-    Category.TOOL_POISONING,
-    "Upgrade the Kong Konnect MCP server to >= 1.0.0 and pin it explicitly. "
-    "Treat every API/spec/resource body the server relays as untrusted data "
-    "(never as instructions), and constrain the agent's Konnect/Admin API "
-    "credentials to the least scope the workflow needs so an injected request "
-    "cannot reach sensitive endpoints.",
-    sarif_name="KongKonnectMcpPromptInjection",
-    cve_references=["CVE-2026-13341"],
-    owasp_mcp_references=["MCP04:2025", "MCP06:2025"],
-    owasp_agentic_references=["ASI01", "ASI04"],
-    adversa_references=["ADV-INJECT-01"],
-    limitations=(
-        "Reads the `konnect-mcp` spelling (with an optional `kong-` or `@kong/` "
-        "before it and `-server` after it) in manifests, `.mcp.json`, `mcp.json` "
-        "and `claude_desktop_config.json` at the project root. The `mcp-konnect` "
-        "order, as in `npx @kong/mcp-konnect@0.1.0`, is not matched, and a server "
-        "configured in `.cursor/mcp.json` or `.vscode/mcp.json` is not read."
-        " A lockfile over 32 MiB is not read."
     ),
 )
 

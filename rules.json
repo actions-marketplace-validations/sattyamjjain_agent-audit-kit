@@ -5463,37 +5463,6 @@
     },
     {
       "adversa_references": [
-        "ADV-INJECT-01"
-      ],
-      "aicm_references": [
-        "AIS-07",
-        "AIS-12"
-      ],
-      "auto_fixable": false,
-      "category": "tool-poisoning",
-      "cve_references": [
-        "CVE-2026-13341"
-      ],
-      "description": "The Kong Konnect MCP server before 1.0.0 is vulnerable to indirect prompt injection: untrusted content returned to the server (e.g. an API response, spec, or resource body it relays to the agent) can carry attacker-authored instructions that the agent then acts on, causing it to issue unintended Kong Admin/Konnect API requests it was never asked to make \u2014 a confidentiality-impacting cross-boundary injection, not a generic prompt-injection heuristic (CVE-2026-13341, CVSS 7.4 HIGH, published 2026-07-03). A config that dispatches the Konnect MCP server at a version below 1.0.0 (or unpinned) is exposed.",
-      "incident_references": [],
-      "limitations": "Reads the `konnect-mcp` spelling (with an optional `kong-` or `@kong/` before it and `-server` after it) in manifests, `.mcp.json`, `mcp.json` and `claude_desktop_config.json` at the project root. The `mcp-konnect` order, as in `npx @kong/mcp-konnect@0.1.0`, is not matched, and a server configured in `.cursor/mcp.json` or `.vscode/mcp.json` is not read. A lockfile over 32 MiB is not read.",
-      "owasp_agentic_references": [
-        "ASI01",
-        "ASI04"
-      ],
-      "owasp_ast_references": [],
-      "owasp_mcp_references": [
-        "MCP04:2025",
-        "MCP06:2025"
-      ],
-      "remediation": "Upgrade the Kong Konnect MCP server to >= 1.0.0 and pin it explicitly. Treat every API/spec/resource body the server relays as untrusted data (never as instructions), and constrain the agent's Konnect/Admin API credentials to the least scope the workflow needs so an injected request cannot reach sensitive endpoints.",
-      "rule_id": "AAK-MCP-KONG-CVE-2026-13341-001",
-      "sarif_name": "KongKonnectMcpPromptInjection",
-      "severity": "high",
-      "title": "Kong Konnect MCP server < 1.0.0 (indirect prompt injection)"
-    },
-    {
-      "adversa_references": [
         "ADV-SSRF-01"
       ],
       "aicm_references": [
@@ -9148,50 +9117,6 @@
       "title": "Third-party OAuth client granted broad Workspace scopes"
     },
     {
-      "adversa_references": [],
-      "aicm_references": [
-        "IAM-02"
-      ],
-      "auto_fixable": false,
-      "category": "trust-boundary",
-      "cve_references": [],
-      "description": "`OpenClawAgent(role=...)` is unset, None, or sourced from untrusted input without `assert_role_allowlisted(role)`. IronPlate's 2026-04-07 weekly intel flagged a CVSS 9.9 privilege-escalation in OpenClaw where a missing/forgable role default lets a prompt-borne agent escalate to admin actions. Provisional rule pending a public CVE assignment.",
-      "incident_references": [
-        "IRONPLATE-2026-04-07"
-      ],
-      "limitations": "Fires on `OpenClawAgent(...)` with no `role=` or with `role=None`, whatever else the file holds, and on a non-constant role when the call's function, or the file as a whole, contains `request.json` (or `request.body`, `request.args`, `request.form`, `request.data`, `request.values`, `request.files`), `os.environ`, `sys.argv`, `user_input` or `llm_input` and that same scope never calls `assert_role_allowlisted(`. A role passed in as an ordinary parameter in a file with no such marker (`def build(role)`) is not reported, and the class imported under another name (`from openclaw import OpenClawAgent as Agent`) is not recognised.",
-      "owasp_agentic_references": [
-        "ASI03"
-      ],
-      "owasp_ast_references": [],
-      "owasp_mcp_references": [],
-      "remediation": "Always pass an explicit, allow-listed role to OpenClawAgent. Wrap the assignment with `aak.checks.openclaw.assert_role_allowlisted(role)`. Pin the OpenClaw version once the upstream patch ships; the AAK rule will auto-promote from `provisional` to `confirmed` when `scripts/refresh_openclaw_status.py` finds a CVE ID.",
-      "rule_id": "AAK-OPENCLAW-PRIVESC-001",
-      "sarif_name": "OpenClawPrivesc",
-      "severity": "high",
-      "title": "OpenClaw agent role missing or attacker-influenced"
-    },
-    {
-      "adversa_references": [],
-      "aicm_references": [
-        "STA-08"
-      ],
-      "auto_fixable": false,
-      "category": "supply-chain",
-      "cve_references": [],
-      "description": "Meta / informational rule that surfaces the project's static CVE coverage map (`agent_audit_kit/data/ox-cve-manifest.json`). Drives the OX-coverage badge endpoint and the `aak coverage --source ox` CLI; never fires findings on user code.",
-      "incident_references": [],
-      "limitations": "",
-      "owasp_agentic_references": [],
-      "owasp_ast_references": [],
-      "owasp_mcp_references": [],
-      "remediation": "Run `aak coverage --source ox` to see which OX-disclosed CVEs are covered by AAK rules. The manifest is regenerated on every release and powers the `OX coverage` badge in README.",
-      "rule_id": "AAK-OX-COVERAGE-MANIFEST-001",
-      "sarif_name": "OxCoverageManifest",
-      "severity": "info",
-      "title": "Project OX-disclosed CVE coverage manifest"
-    },
-    {
       "adversa_references": [
         "ADV-POISON-01"
       ],
@@ -9376,26 +9301,6 @@
       "sarif_name": "DenyPolicyTruncationBypass",
       "severity": "high",
       "title": "Deny policy evaluated on a truncated copy of the value the executor receives"
-    },
-    {
-      "adversa_references": [],
-      "aicm_references": [
-        "STA-08"
-      ],
-      "auto_fixable": false,
-      "category": "supply-chain",
-      "cve_references": [],
-      "description": "Meta / informational rule that surfaces AAK's static coverage of the public Prisma AIRS 3.0 attack catalog. Drives `aak coverage --source prisma-airs` and the published coverage matrix. Never fires findings on user code.",
-      "incident_references": [],
-      "limitations": "",
-      "owasp_agentic_references": [],
-      "owasp_ast_references": [],
-      "owasp_mcp_references": [],
-      "remediation": "Run `aak coverage --source prisma-airs` to see how AAK's static ruleset maps onto Palo Alto's published Prisma AIRS attack catalog. The map is hand-curated; entries flagged `status: catalog-private` are not publicly disclosed and intentionally absent from AAK coverage.",
-      "rule_id": "AAK-PRISMA-AIRS-COVERAGE-001",
-      "sarif_name": "PrismaAirsCoverageManifest",
-      "severity": "info",
-      "title": "Prisma AIRS catalog coverage manifest"
     },
     {
       "adversa_references": [],
@@ -11322,36 +11227,6 @@
       "sarif_name": "NoMcpServerAllowlist",
       "severity": "medium",
       "title": "No MCP server allowlist configured"
-    },
-    {
-      "adversa_references": [
-        "ADV-RCE-05"
-      ],
-      "aicm_references": [
-        "AIS-07"
-      ],
-      "auto_fixable": false,
-      "category": "mcp-config",
-      "cve_references": [
-        "CVE-2026-30615"
-      ],
-      "description": "A `.windsurf/mcp.json` file declares auto_approve:true or auto_execute:true, or contains server `command:` entries with no SHA-256 pin. CVE-2026-30615 (Windsurf 1.9544.26, CVSS 8.0) shows attackers can inject malicious MCP registrations via HTML prompt injection when auto-approval is enabled.",
-      "incident_references": [],
-      "limitations": "",
-      "owasp_agentic_references": [
-        "ASI04",
-        "ASI09"
-      ],
-      "owasp_ast_references": [],
-      "owasp_mcp_references": [
-        "MCP04:2025",
-        "MCP09:2025"
-      ],
-      "remediation": "Set auto_approve and auto_execute to false. Pin every server command to a SHA-256 digest. Upgrade Windsurf to a version with the registration confirmation flow enabled.",
-      "rule_id": "AAK-WINDSURF-001",
-      "sarif_name": "WindsurfAutoApprove",
-      "severity": "high",
-      "title": "Windsurf .windsurf/mcp.json auto-approves server registrations"
     }
   ],
   "schema": "agent-audit-kit/rule-bundle/3"
