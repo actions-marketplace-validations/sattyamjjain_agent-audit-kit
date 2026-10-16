@@ -171,6 +171,7 @@ _AICM_TAGS: dict[str, list[str]] = {
     "AAK-TRUST-005": ["IAM-16"],
     "AAK-TRUST-006": ["IAM-16"],
     "AAK-TRUST-007": ["IAM-02"],
+    "AAK-TRUST-008": ["IAM-16", "CEK-08"],
     "AAK-OAUTH-001": ["IAM-01", "IAM-16"],
     "AAK-OAUTH-002": ["IAM-01"],
     "AAK-OAUTH-003": ["IAM-01"],
@@ -1249,11 +1250,16 @@ _r(
 _r(
     "AAK-HOOK-001",
     "Hook executes network-capable command",
-    "A hook command contains network-capable tools (curl, wget, nc, etc.). "
-    "Hooks run automatically and can exfiltrate code, API keys, or session data.",
+    "A hook command contains network-capable tools (curl, wget, nc, etc.), or an "
+    "`http` hook posts each event to a URL that is cleartext to another machine, a "
+    "bare IP address or carries a credential. Hooks run automatically and can "
+    "exfiltrate code, API keys, or session data.",
     Severity.CRITICAL,
     Category.HOOK_INJECTION,
-    "Remove network calls from hooks. Use file-based logging if audit trail is needed.",
+    "Remove network calls from hooks. Use file-based logging if audit trail is needed. "
+    "An `http` hook that must report somewhere should post to an https URL on a host "
+    "name you control, with any credential in a header taken from `allowedEnvVars` "
+    "rather than in the URL.",
     sarif_name="HookNetworkCapableCommand",
     cve_references=["CVE-2025-59536"],
     owasp_agentic_references=["ASI05"],
@@ -1262,37 +1268,59 @@ _r(
         "Matches curl, wget, nc, ncat, ssh, scp, rsync and ftp by name, and the "
         "one-liners `python -c ... import requests` (not `python3 -c`) and `node -e "
         "... fetch(`, in the command line of each hook (its `command`, followed by "
-        "`args` when set) in `.claude/settings.json` and `.claude/settings.local.json`. "
-        "What a script file does is not followed, so `bash .claude/hooks/report.sh` "
-        "passes even when the script runs curl. An `http` hook, which posts the event "
-        "to its `url` without running a command, is not read, and neither are the "
-        "hooks a plugin ships in `hooks/hooks.json`."
+        "`args` when set). An `http` hook, which posts the event to its `url`, is "
+        "reported when the URL, read both the way Node reads it and the way urlsplit "
+        "and curl do, is plain http to a host other than this machine, names a bare IP "
+        "address other than loopback, or carries a credential that evidence redaction "
+        "masks (a password or token in the userinfo, a credential-named query parameter "
+        "such as `token`, or a known token format such as a Slack or Discord webhook "
+        "path); one to an https URL on a DNS name in "
+        "every reading is otherwise not reported, wherever it points. What a script file "
+        "does is not "
+        "followed, so `bash .claude/hooks/report.sh` passes even when the script runs "
+        "curl. Hooks are read from `.claude/settings.json`, `.claude/settings.local.json`, "
+        "a plugin's `hooks/hooks.json` (where the plugin's directory holds "
+        "`.claude-plugin/` or sits under a marketplace's "
+        "`.claude-plugin/marketplace.json`) and the frontmatter of a `SKILL.md`. A "
+        "plugin or skill file over 512,000 bytes or nested too deeply to parse is not "
+        "read, and neither is a frontmatter block that YAML aliases expand past twice "
+        "its length. "
+        "Hooks a plugin declares in `.claude-plugin/plugin.json` and hooks in a "
+        "subagent's frontmatter are not read."
     ),
 )
 
 _r(
     "AAK-HOOK-002",
     "Hook command contains environment variable exfiltration",
-    "A hook command accesses credential environment variables. "
-    "This enables direct credential theft via hook execution.",
+    "A hook command accesses credential environment variables, or an `http` hook "
+    "sends one in a header. This enables direct credential theft via hook execution.",
     Severity.CRITICAL,
     Category.HOOK_INJECTION,
     "Take the variable out of the hook command. The rule matches `$ANTHROPIC_API_KEY`, "
     "`$OPENAI_API_KEY`, `$AWS_SECRET_ACCESS_KEY` and `$AWS_ACCESS_KEY_ID`, and the "
     "pipelines `env | curl`, `printenv | nc` and `echo $VAR | base64`. Let the program "
-    "the hook runs read its own credentials from its environment.",
+    "the hook runs read its own credentials from its environment. For an `http` hook, "
+    "take the key out of `headers` and `allowedEnvVars`; a hook endpoint needs a token "
+    "of its own, not your provider key.",
     sarif_name="HookCredentialExfiltration",
     owasp_agentic_references=["ASI03"],
     adversa_references=["ADV-TOKEN-02"],
     limitations=(
         "Matches four names written as a bare `$NAME` (ANTHROPIC_API_KEY, "
         "OPENAI_API_KEY, AWS_SECRET_ACCESS_KEY, AWS_ACCESS_KEY_ID) and three "
-        "exfiltration pipelines; `$HOME` and `$PATH` are not credentials and are not "
-        "reported. The braced form `${ANTHROPIC_API_KEY}` and any "
-        "other credential variable on its own (`$GITHUB_TOKEN`) are not matched. An "
-        "`http` hook that sends `$ANTHROPIC_API_KEY` in a header it lists in "
-        "`allowedEnvVars` is not read, and neither are the hooks a plugin ships in "
-        "`hooks/hooks.json`."
+        "exfiltration pipelines in a hook's command line, and an `http` hook that sends "
+        "one of the four: a `headers` value that interpolates it (`$NAME` or `${NAME}`) "
+        "while `allowedEnvVars` lists it. `$HOME` and `$PATH` are not credentials and "
+        "are not reported. In a command line the braced form `${ANTHROPIC_API_KEY}` is "
+        "not matched, and in a command or a header neither is any other credential "
+        "variable (`$GITHUB_TOKEN`): an `http` hook that sends a token of its own "
+        "(`$HOOK_TOKEN`) is authenticating to the endpoint it reports to. A header that "
+        "names a variable `allowedEnvVars` does not list sends an empty string and is "
+        "not reported, and `httpHookAllowedEnvVars`, which another settings file can set "
+        "to stop a variable being sent, is not read. "
+        "Hooks a plugin declares in `.claude-plugin/plugin.json` and hooks in a "
+        "subagent's frontmatter are not read."
     ),
 )
 
@@ -1321,8 +1349,9 @@ _r(
         "names such a path (`cd /tmp/build`, reading `~/.config`) is not reported, "
         "and neither is deleting one. A path reached through `$HOME` or a relative "
         "climb (`../../shared/out.json`) is not matched, nor is a write made by a "
-        "script the hook runs. Hooks a plugin ships in `hooks/hooks.json` are not "
-        "read."
+        "script the hook runs. "
+        "Hooks a plugin declares in `.claude-plugin/plugin.json` and hooks in a "
+        "subagent's frontmatter are not read."
     ),
 )
 
@@ -1347,8 +1376,9 @@ _r(
         "command on any other event, such as Stop, is not reported, and a command that "
         "merely contains a formatter name anywhere, even in a trailing comment (`# "
         "prettier`), counts as a formatter. A hook that runs no command (`http`, "
-        "`prompt`, `agent`, `mcp_tool`) is not reported on any event, and the hooks a "
-        "plugin ships in `hooks/hooks.json` are not read."
+        "`prompt`, `agent`, `mcp_tool`) is not reported on any event. "
+        "Hooks a plugin declares in `.claude-plugin/plugin.json` and hooks in a "
+        "subagent's frontmatter are not read."
     ),
 )
 
@@ -1366,8 +1396,9 @@ _r(
     limitations=(
         "Matches the words base64, btoa, atob, b64encode and b64decode in a hook "
         "command. Other encodings that hide a payload the same way, hex through `xxd "
-        "-r -p` or `base32 -d`, are not matched. Hooks a plugin ships in "
-        "`hooks/hooks.json` are not read."
+        "-r -p` or `base32 -d`, are not matched. "
+        "Hooks a plugin declares in `.claude-plugin/plugin.json` and hooks in a "
+        "subagent's frontmatter are not read."
     ),
 )
 
@@ -1387,8 +1418,9 @@ _r(
     limitations=(
         "Matches sudo, doas, pkexec and `chmod` followed by whitespace and `+x`. "
         "`chmod 755`, `chmod a+x` and `su root -c`, which grant the same execute or "
-        "root rights, are not matched. Hooks a plugin ships in `hooks/hooks.json` are "
-        "not read."
+        "root rights, are not matched. "
+        "Hooks a plugin declares in `.claude-plugin/plugin.json` and hooks in a "
+        "subagent's frontmatter are not read."
     ),
 )
 
@@ -1400,16 +1432,18 @@ _r(
     Severity.MEDIUM,
     Category.HOOK_INJECTION,
     "Remove hooks that are not essential, or fold related ones into one script, until "
-    "each settings file has 15 or fewer hooks. The rule counts every hook, each one in "
-    "a matcher group's `hooks` array on its own, in `.claude/settings.json` and "
-    "`.claude/settings.local.json` separately, and fires above 15.",
+    "each file has 15 or fewer hooks. The rule counts every hook, each one in a "
+    "matcher group's `hooks` array on its own, in each settings file, plugin "
+    "`hooks/hooks.json` and `SKILL.md` separately, and fires above 15.",
     sarif_name="ExcessiveHookCount",
     adversa_references=["ADV-SCOPE-03"],
     limitations=(
-        "Counts the hooks of all events in one settings file, each hook in a "
-        "`matcher` group's `hooks` array separately, and fires above 15. Hooks split "
-        "between `.claude/settings.json` and `.claude/settings.local.json` are not "
-        "added up, and the hooks a plugin ships in `hooks/hooks.json` are not counted."
+        "Counts the hooks of all events in one file (a settings file, a plugin's "
+        "`hooks/hooks.json` or a `SKILL.md`), each hook in a `matcher` group's `hooks` "
+        "array separately, and fires above 15. Hooks split between files, such as "
+        "`.claude/settings.json` and `.claude/settings.local.json`, are not added up, "
+        "and hooks a plugin declares in `.claude-plugin/plugin.json` or a subagent in "
+        "its frontmatter are not counted."
     ),
 )
 
@@ -1437,8 +1471,9 @@ _r(
         "hex digest (an image pinned `@sha256:`) and a long readable command are not "
         "reported, and a base64 blob whose `/` characters split it into runs shorter "
         "than 64 is missed. The same text written as bash octal escapes (`$'\\143\\165\\162\\154'`) or reassembled from "
-        "shell variables (`$a$b`) is not matched. Hooks a plugin ships in "
-        "`hooks/hooks.json` are not read."
+        "shell variables (`$a$b`) is not matched. "
+        "Hooks a plugin declares in `.claude-plugin/plugin.json` and hooks in a "
+        "subagent's frontmatter are not read."
     ),
 )
 
@@ -1464,12 +1499,14 @@ _r(
         ".rb, .c, .cpp or .h, also inside `sh -c`. A pattern that names an extension "
         "(`grep '\\.py$'`) is not a read. Archiving or copying source (`tar czf out.tgz src/`, `cp src/main.py "
         "out/`) and reading a file of another type (`cat src/App.tsx`) are not "
-        "matched. Hooks a plugin ships in `hooks/hooks.json` are not read."
+        "matched. "
+        "Hooks a plugin declares in `.claude-plugin/plugin.json` and hooks in a "
+        "subagent's frontmatter are not read."
     ),
 )
 
 # ---------------------------------------------------------------------------
-# Trust Boundary Violations (7 rules)
+# Trust Boundary Violations (8 rules)
 # ---------------------------------------------------------------------------
 
 _r(
@@ -1613,6 +1650,50 @@ _r(
         "Fires only when a settings file at the root of the scanned directory sits "
         "beside a root `.mcp.json`. A package directory that carries its own "
         "`.claude/settings.json` and `.mcp.json` (`packages/web/`) is not looked at."
+    ),
+)
+
+_r(
+    "AAK-TRUST-008",
+    "Proxy or certificate-authority override in project settings",
+    "A project settings file (`.claude/settings.json`, or a committed "
+    "`.claude/settings.local.json`) sets a proxy (`HTTPS_PROXY`, `HTTP_PROXY`, "
+    "`ALL_PROXY`), a certificate authority to trust (`NODE_EXTRA_CA_CERTS`, "
+    "`SSL_CERT_FILE`, `REQUESTS_CA_BUNDLE`) or `NODE_TLS_REJECT_UNAUTHORIZED=0` in its "
+    "`env`. Claude Code's settings reference says `env` applies \"for every session and "
+    "for the subprocesses Claude Code starts from it\", from project settings once the "
+    "folder is trusted and at once in `-p` mode, and its network configuration page "
+    "says each proxy and CA variable \"can also be configured in settings.json\" and "
+    "that a terminal session reads them \"from every settings scope\". A repository "
+    "that sets them sends the API traffic of everyone who opens it, credentials "
+    "included, through a proxy it names, or has their session and the servers and "
+    "commands it starts trust a certificate authority it chose, which together let it "
+    "read and change that traffic. Where Claude Desktop manages the connection it "
+    "ignores these variables in a repository's own settings files, \"so a "
+    "checked-out repository can't redirect the TLS or proxy path of a session\"; a "
+    "terminal session has no such guard.",
+    Severity.HIGH,
+    Category.TRUST_BOUNDARY,
+    "Remove the proxy and certificate variables from the project settings' `env`. Set "
+    "them in `~/.claude/settings.json`, managed settings or your shell, where Claude "
+    "Code's network configuration docs put them, so each user chooses their own "
+    "network path. Never commit `NODE_TLS_REJECT_UNAUTHORIZED=0`.",
+    sarif_name="ProjectSettingsProxyOrCaOverride",
+    owasp_agentic_references=["ASI03", "ASI07"],
+    adversa_references=["ADV-REDIRECT-02", "ADV-TRANSPORT-02"],
+    limitations=(
+        "Reads the `env` object of `.claude/settings.json` and "
+        "`.claude/settings.local.json` at the root of the scanned directory, whether or "
+        "not the second is committed (AAK does not ask git), and reports `HTTPS_PROXY`, "
+        "`HTTP_PROXY` and `ALL_PROXY` in any case, `NODE_EXTRA_CA_CERTS`, "
+        "`SSL_CERT_FILE` and `REQUESTS_CA_BUNDLE` as written, each with a value that is "
+        "not blank, and `NODE_TLS_REJECT_UNAUTHORIZED` set to `0`. The user's own "
+        "`~/.claude/settings.json`, where the docs put these variables, is not reported, "
+        "even with `--include-user-config`. `NO_PROXY`, `CLAUDE_CODE_CERT_STORE`, the "
+        "mTLS client certificate variables, other switches with the same effect on the "
+        "programs a session starts (`CURL_CA_BUNDLE`, `GIT_SSL_NO_VERIFY`), and a "
+        "settings file in a subdirectory (`packages/web/.claude/settings.json`) are not "
+        "read."
     ),
 )
 
@@ -3725,10 +3806,12 @@ _r(
 )
 
 # ---------------------------------------------------------------------------
-# Claude Code Hook RCE (AAK-HOOK-RCE-001..003)
+# Claude Code Hook RCE (AAK-HOOK-RCE-001..003). 001 and 002 read hook commands
+# and scripts; 003 is a version pin on Claude Code itself, a row in
+# `scanners/mcp_cve_pins_2026_07._PINS`.
 #
 # References:
-#   - NVD: CVE-2025-59536 (Claude Code hooks RCE) —
+#   - NVD: CVE-2025-59536 (Claude Code startup trust dialog) —
 #     https://nvd.nist.gov/vuln/detail/CVE-2025-59536
 #   - OWASP Top 10 A03:2021 (Injection).
 #   - CWE-78 (OS Command Injection), CWE-94 (Code Injection).
@@ -3779,36 +3862,48 @@ _r(
     adversa_references=["ADV-RCE-02"],
     limitations=(
         "Matches `shell=True` before the first closing parenthesis of a "
-        "`subprocess.run`, `call`, `Popen` or `check_output` call, and `{ shell: true "
-        "}` as the first option of a Node `spawn`, `spawnSync`, `child_process.exec` "
-        "or `child_process.execSync` call, in a .sh, .bash, .py, .js, .ts or .mjs "
-        "script under `.claude/.../hooks/`. A call with another call ahead of it "
-        "(`subprocess.run(build(cmd), shell=True)`), `subprocess.check_call`, "
-        "`os.system` and `os.popen`, which always use a shell, and a Node `{ cwd: dir, "
-        "shell: true }` that does not start with `shell`, are not matched."
+        "`subprocess.run`, `call`, `Popen` or `check_output` call, and `shell: true` "
+        "as any option of a Node `spawn`, `spawnSync`, `child_process.exec` or "
+        "`child_process.execSync` call (`{ cwd: dir, shell: true }`), in a .sh, .bash, "
+        ".py, .js, .ts or .mjs script under `.claude/.../hooks/`. A call with another "
+        "call ahead of the option (`subprocess.run(build(cmd), shell=True)`, "
+        "`spawn(String(cmd), [], { shell: true })`), a quoted key (`{ \"shell\": true "
+        "}`), `shell: true` passed to `execFile` or to `exec` called by its bare "
+        "name, `subprocess.check_call`, and `os.system` and `os.popen`, which always "
+        "use a shell, are not matched."
     ),
 )
 
 _r(
     "AAK-HOOK-RCE-003",
-    "Hook trust check is bypassable by project-local config",
-    "A settings.local.json or project-relative hook file executes before "
-    "the Claude Code trust prompt. This is the core CVE-2025-59536 regression "
-    "pattern; any project-contained hook must not run until trust is "
-    "confirmed.",
+    "Claude Code below 1.0.111 runs project code before the trust dialog (CVE-2025-59536)",
+    "Claude Code (`@anthropic-ai/claude-code`, npm) shows a startup trust dialog "
+    "before it acts on what a project carries, such as the hooks in its "
+    "`.claude/settings.json`. Before 1.0.111, a bug in that dialog meant Claude Code "
+    "\"could be tricked to execute code contained in a project before the user "
+    "accepted the startup trust dialog\", so starting it in a cloned repository was "
+    "enough (CVE-2025-59536, CVSS 4.0 8.7, CWE-94, GHSA-4fgq-fpq9-mr3g). This "
+    "pin-only rule fires on a declared `@anthropic-ai/claude-code` below 1.0.111. "
+    "Until 2026-10-17 it fired on any command in a `settings.local.json` instead, "
+    "which cannot show whether a hook runs before the dialog: the release decides "
+    "that. Auto-update has delivered the fix to installs that keep it on.",
     Severity.HIGH,
-    Category.HOOK_INJECTION,
-    "Require explicit trust confirmation before loading project-local hook "
-    "configuration. Upgrade to Claude Code 1.0.111 or later.",
+    Category.SUPPLY_CHAIN,
+    "Upgrade `@anthropic-ai/claude-code` to 1.0.111 or later and pin it, or leave "
+    "auto-update on.",
     sarif_name="HookTrustBypass",
     cve_references=["CVE-2025-59536"],
     owasp_agentic_references=["ASI05", "ASI09"],
     adversa_references=["ADV-RCE-03"],
     limitations=(
-        "Reports a `command`, `cmd`, `run` or `script` value only in "
-        "`settings.local.json` at the root or in `.claude/`. The same hook committed "
-        "in `.claude/settings.json`, which a repository ships to everyone who opens "
-        "it, and hook script files are not reported."
+        "Reports `@anthropic-ai/claude-code` below 1.0.111 where a project states its "
+        "version: a package.json or lockfile entry at the root, or a versioned `npx` "
+        "reference in an MCP config. An unpinned reference is not reported, as for the "
+        "other Claude Code pins: it resolves to the newest release, and the CLI updates "
+        "itself. A global install, the usual one, is in no file AAK reads, and neither "
+        "is a package.json in a sub-directory. A file over 2 MB, or a lockfile over 32 "
+        "MiB, is not read. Settings files and hook commands are not read: whether a "
+        "hook runs before the trust dialog depends on the release, not on the hook."
     ),
 )
 
@@ -3867,12 +3962,14 @@ _r(
         "zsh, dash, ksh, fish, pwsh or powershell; python, python2, python3, node, "
         "deno, bun, ruby, perl, php, bash, sh or zsh followed directly by a path of "
         "letters, digits, `_`, `-`, `.`, `/` and `\\` that ends .py, .js, .cjs, .mjs, "
-        ".ts, .rb, .pl, .php, .sh, .bash, .zsh or .ps1; or `${`, `%{`, `{{`, `$(`, a "
+        ".ts, .rb, .pl, .php, .sh, .bash, .zsh or .ps1, where the path may start with "
+        "the workspace folder as `${workspaceFolder}`, `${workspaceFolder:name}`, "
+        "`${workspaceRoot}` or `${fileWorkspaceFolder}`; or `${`, `%{`, `{{`, `$(`, a "
         "backtick or a string `+` directly before a name beginning input, args, event, "
         "payload, user, argv or request. A script run directly (`./scripts/setup.sh`), "
         "through a runner (`npm run setup`) or after a flag (`bash -x "
-        "./scripts/setup.sh`), and a path that starts with `${workspaceFolder}`, are "
-        "not followed."
+        "./scripts/setup.sh`), and a quoted path (`bash "
+        "\"${workspaceFolder}/scripts/setup.sh\"`), are not followed."
     ),
 )
 
