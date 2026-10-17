@@ -533,24 +533,204 @@ def test_lockfile_absent_package_does_not_fire(tmp_path: Path) -> None:
 # ---------------------------------------------------------------------------
 
 
-def test_whatsapp_below_floor_fires(tmp_path: Path) -> None:
-    content = '{"dependencies": {"whatsapp-mcp": "0.1.0"}}'
-    assert "AAK-MCP-WHATSAPP-CVE-2026-46555-001" in _ids(tmp_path, "package.json", content)
+# CVE-2026-46555 (GHSA-7jj9-4qqq-4xc4) names one project, the GitHub repository
+# verygoodplugins/whatsapp-mcp, which ships a clone, release wheels
+# (`whatsapp_mcp_server-<v>-py3-none-any.whl`) and a bridge binary, and no
+# registry package. npm's `whatsapp-mcp` is Candombe/whatsapp-mcp (0.0.1 to
+# 0.1.3), PyPI's links no repository (0.1.0, 0.1.1), and PyPI's
+# `whatsapp-mcp-server` is msaelices/whatsapp-mcp-server (0.2.1 only). The pin
+# matched the first two, where no upgrade could clear it. It now reads a
+# reference to the repository that names a release.
+WHATSAPP = "AAK-MCP-WHATSAPP-CVE-2026-46555-001"
+_WA_GIT = "git+https://github.com/verygoodplugins/whatsapp-mcp"
+_WA_ASSETS = "https://github.com/verygoodplugins/whatsapp-mcp/releases/download"
 
 
-def test_whatsapp_patched_passes(tmp_path: Path) -> None:
-    content = '{"dependencies": {"whatsapp-mcp": "0.2.1"}}'
-    assert "AAK-MCP-WHATSAPP-CVE-2026-46555-001" not in _ids(tmp_path, "package.json", content)
+@pytest.mark.parametrize(("name", "content"), [
+    ("package.json", '{"dependencies": {"whatsapp-mcp": "0.1.0"}}'),
+    ("requirements.txt", "whatsapp-mcp==0.1.1\n"),
+    ("requirements.txt", "whatsapp-mcp-server==0.2.1\n"),
+    ("uv.lock", '[[package]]\nname = "whatsapp-mcp"\nversion = "0.1.0"\n'),
+    (".mcp.json", '{"mcpServers": {"w": {"command": "npx", "args": ["-y", "whatsapp-mcp@0.1.3"]}}}'),
+])
+def test_whatsapp_registry_packages_are_other_projects(tmp_path: Path, name: str, content: str) -> None:
+    assert WHATSAPP not in _ids(tmp_path, name, content)
 
 
-def test_whatsapp_uv_lock_resolved_below_floor_fires(tmp_path: Path) -> None:
-    lock = '[[package]]\nname = "whatsapp-mcp"\nversion = "0.1.5"\n'
-    assert "AAK-MCP-WHATSAPP-CVE-2026-46555-001" in _ids(tmp_path, "uv.lock", lock)
+@pytest.mark.parametrize(("name", "content", "line"), [
+    ("requirements.txt",
+     f"httpx>=0.28\nwhatsapp-mcp-server @ {_WA_GIT}@v0.2.0#subdirectory=whatsapp-mcp-server\n", 2),
+    ("requirements.txt", f"{_WA_GIT}.git@v0.1.0#egg=whatsapp-mcp-server&subdirectory=whatsapp-mcp-server\n", 1),
+    ("requirements.txt", f"{_WA_ASSETS}/v0.2.0/whatsapp_mcp_server-0.2.0-py3-none-any.whl\n", 1),
+    ("pyproject.toml",
+     '[project]\nname = "app"\ndependencies = [\n'
+     f'    "whatsapp-mcp-server @ {_WA_GIT}@v0.2.0#subdirectory=whatsapp-mcp-server",\n]\n', 4),
+    ("uv.lock",
+     '[[package]]\nname = "whatsapp-mcp-server"\nversion = "0.2.0"\nsource = { git = '
+     '"https://github.com/verygoodplugins/whatsapp-mcp?subdirectory=whatsapp-mcp-server'
+     '&rev=v0.2.0#2f7c99fcdb718edde19f96a0ff3137adcfcd325e" }\n', 4),
+    (".mcp.json",
+     '{\n  "mcpServers": {\n    "whatsapp": {\n      "command": "uv",\n      "args": [\n'
+     f'        "run", "--with",\n        "{_WA_GIT}@v0.2.0#subdirectory=whatsapp-mcp-server",\n'
+     '        "python", "-m", "main"\n      ]\n    }\n  }\n}\n', 7),
+    ("requirements.txt", f"x @ {_WA_GIT}@refs/tags/v0.2.0\n", 1),
+    ("requirements.txt", "x @ git+https://www.github.com/verygoodplugins/whatsapp-mcp@v0.2.0\n", 1),
+    ("requirements.txt",
+     "https://github.com/verygoodplugins/whatsapp-mcp/archive/refs/tags/v0.2.0.tar.gz\n", 1),
+    # The tag in a key of its own, beside the URL: uv sources, Poetry, Pipfile,
+    # and poetry.lock's package source.
+    ("pyproject.toml",
+     '[project]\nname = "app"\ndependencies = ["whatsapp-mcp-server"]\n\n[tool.uv.sources]\n'
+     'whatsapp-mcp-server = { git = "https://github.com/verygoodplugins/whatsapp-mcp", '
+     'subdirectory = "whatsapp-mcp-server", tag = "v0.2.0" }\n', 6),
+    ("pyproject.toml",
+     '[tool.poetry.dependencies]\npython = "^3.11"\n'
+     'whatsapp-mcp-server = { git = "https://github.com/verygoodplugins/whatsapp-mcp.git", '
+     'tag = "v0.2.0", subdirectory = "whatsapp-mcp-server" }\n', 3),
+    ("poetry.lock",
+     '[[package]]\nname = "whatsapp-mcp-server"\nversion = "0.2.0"\n\n[package.source]\ntype = "git"\n'
+     'url = "https://github.com/verygoodplugins/whatsapp-mcp.git"\nreference = "v0.2.0"\n'
+     'resolved_reference = "2f7c99fcdb718edde19f96a0ff3137adcfcd325e"\n', 7),
+    ("Pipfile",
+     '[packages]\nwhatsapp-mcp-server = {git = "https://github.com/verygoodplugins/whatsapp-mcp.git", '
+     'ref = "v0.2.0", subdirectory = "whatsapp-mcp-server"}\n', 2),
+])
+def test_whatsapp_a_reference_to_an_affected_release_fires(
+    tmp_path: Path, name: str, content: str, line: int
+) -> None:
+    (tmp_path / name).write_text(content, encoding="utf-8")
+    findings = [f for f in scan(tmp_path)[0] if f.rule_id == WHATSAPP]
+    assert [f.line_number for f in findings] == [line]
+    assert "0.2.1" in findings[0].evidence
 
 
-def test_whatsapp_uv_lock_patched_clears(tmp_path: Path) -> None:
-    lock = '[[package]]\nname = "whatsapp-mcp"\nversion = "0.2.1"\n'
-    assert "AAK-MCP-WHATSAPP-CVE-2026-46555-001" not in _ids(tmp_path, "uv.lock", lock)
+@pytest.mark.parametrize(("name", "content"), [
+    ("requirements.txt", f"whatsapp-mcp-server @ {_WA_GIT}@v0.2.1#subdirectory=whatsapp-mcp-server\n"),
+    ("requirements.txt", f"{_WA_ASSETS}/v0.7.0/whatsapp_mcp_server-0.7.0-py3-none-any.whl\n"),
+    # A commit or a branch names no release, and the README's clone states none.
+    ("requirements.txt", f"{_WA_GIT}@2f7c99fcdb718edde19f96a0ff3137adcfcd325e#subdirectory=x\n"),
+    ("requirements.txt", f"{_WA_GIT}@main#subdirectory=whatsapp-mcp-server\n"),
+    (".mcp.json", '{"mcpServers": {"whatsapp": {"command": "uv", "args": ["--directory", '
+                  '"/path/to/whatsapp-mcp/whatsapp-mcp-server", "run", "main.py"]}}}'),
+    # A comment is not a reference, and neither is a fork with the same name.
+    ("requirements.txt", f"# was {_WA_GIT}@v0.2.0\nrequests==2.32.0\n"),
+    ("requirements.txt", "git+https://github.com/lharries/whatsapp-mcp@v0.2.0#egg=x\n"),
+    ("requirements.txt", "git+https://github.com/verygoodplugins/whatsapp-mcp-extra@v0.1.0#egg=x\n"),
+    # Another host whose name ends in github.com, and a browse URL, which installs nothing.
+    ("requirements.txt", "x @ git+https://notgithub.com/verygoodplugins/whatsapp-mcp@v0.1.0\n"),
+    ("package.json",
+     '{"name": "app", "homepage": "https://github.com/verygoodplugins/whatsapp-mcp/tree/v0.2.0#readme"}\n'),
+    # A tag key at a fixed release, a commit or a branch, and a tag beside another repository.
+    ("pyproject.toml",
+     '[tool.uv.sources]\nwhatsapp-mcp-server = { git = "https://github.com/verygoodplugins/whatsapp-mcp", '
+     'tag = "v0.2.1" }\n'),
+    ("pyproject.toml",
+     '[tool.uv.sources]\nwhatsapp-mcp-server = { git = "https://github.com/verygoodplugins/whatsapp-mcp", '
+     'rev = "2f7c99fcdb718edde19f96a0ff3137adcfcd325e" }\n'),
+    ("Pipfile",
+     '[packages]\nwhatsapp-mcp-server = {git = "https://github.com/verygoodplugins/whatsapp-mcp.git", '
+     'ref = "main"}\n'),
+    ("pyproject.toml",
+     '# https://github.com/verygoodplugins/whatsapp-mcp\n[tool.uv.sources]\n'
+     'other = { git = "https://github.com/acme/other", tag = "v0.1.0" }\n'),
+])
+def test_whatsapp_a_patched_or_unversioned_reference_is_quiet(
+    tmp_path: Path, name: str, content: str
+) -> None:
+    assert WHATSAPP not in _ids(tmp_path, name, content)
+
+
+@pytest.mark.parametrize("name", ["requirements.txt", "pyproject.toml", "team.mcp.yaml"])
+def test_whatsapp_comment_scan_is_linear_on_unbalanced_quotes(tmp_path: Path, name: str) -> None:
+    """Comments are found in one pass over the file. Escaped quotes (`"\\` over
+    and over) leave a string with no closing quote, and a search that needs one
+    runs to the end of the line again from every later quote (20,000 pairs took
+    9 s that way)."""
+    import time
+
+    crafted = ("# github.com/verygoodplugins/whatsapp-mcp\n" + '"\\' * 100_000 + "\n"
+               + "- '" * 100_000 + "\n" + " " * 100_000 + "'#'\n")
+    start = time.perf_counter()
+    assert WHATSAPP not in _ids(tmp_path, name, crafted)
+    assert time.perf_counter() - start < 3.0
+
+
+def test_whatsapp_poetry_lock_scan_is_linear_on_a_crafted_file(tmp_path: Path) -> None:
+    """A source `url` looks a few lines ahead for its `reference`, a bounded
+    number of lines, so a lockfile of url lines over long lines costs one pass."""
+    import time
+
+    line = 'url = "https://github.com/verygoodplugins/whatsapp-mcp.git"\n' + "x" * 2_000 + "\n"
+    start = time.perf_counter()
+    assert WHATSAPP not in _ids(tmp_path, "poetry.lock", line * 3_000)
+    assert time.perf_counter() - start < 3.0
+
+
+_WA_REF = "git+https://github.com/verygoodplugins/whatsapp-mcp@v0.2.0"
+
+
+@pytest.mark.parametrize(("name", "content", "fires"), [
+    # A YAML plain scalar is not quoted: the apostrophe in `it's` opens nothing,
+    # so the `#` after it still starts a comment.
+    ("team.mcp.yaml", f"servers:\n  wa:\n    command: uvx\n    note: it's pinned  # was {_WA_REF}\n", False),
+    ("team.mcp.yaml", f"servers:\n  wa:\n    command: uvx\n    note: pinned  # was {_WA_REF}\n", False),
+    # A quote at the start of a scalar does open one, and a `#` inside it is text.
+    ("team.mcp.yaml", f"servers:\n  wa:\n    command: uvx\n    args: ['--from', '{_WA_REF}#x', 'y']\n", True),
+    ("team.mcp.yaml", f'servers:\n  wa:\n    command: uvx\n    args: ["--from", "{_WA_REF}"]\n', True),
+    # A `#` with no space before it is part of a plain scalar.
+    ("team.mcp.yaml", f"servers:\n  wa:\n    command: uvx\n    args: [--from, {_WA_REF}#sub=x]\n", True),
+    # pip's rule: a `#` at the start of a line or after a space, quotes or not.
+    ("requirements.txt", f"requests==2.32.0  # it's not {_WA_REF}\n", False),
+    ("requirements.txt", f"x @ {_WA_REF}#egg=x\n", True),
+])
+def test_whatsapp_comments_follow_each_format(
+    tmp_path: Path, name: str, content: str, fires: bool
+) -> None:
+    assert (WHATSAPP in _ids(tmp_path, name, content)) is fires
+
+
+def test_a_launch_reached_through_a_yaml_alias_names_its_line(tmp_path: Path) -> None:
+    """Positions and command entries are both walked in document order, so the
+    path a launch records through an alias is one the positions know."""
+    content = ('x-base: &base\n  command: npx\n  args: ["-y", "n8n-mcp@2.40.0"]\n'
+               "servers:\n  a: *base\n")
+    assert _lines(tmp_path, "team.mcp.yaml", content, N8NMCP) == [3]
+
+
+def test_many_findings_in_one_large_package_json_read_it_once(tmp_path: Path) -> None:
+    """A 1.8 MiB package.json with 95,000 dependencies, under the 2 MB limit. Every
+    pin filtered every declaration, so this took about 4 s before declarations
+    were indexed by name (a 1.6 MiB one measured 7.0 s on a loaded machine)."""
+    import time
+
+    deps = {f"p{i:05d}": f"^1.{i % 7}.{i % 5}" for i in range(95_000)}
+    deps.update(dict(_js_pins_at_an_affected_version()))
+    text = json.dumps({"name": "app", "dependencies": deps}, separators=(",", ":"))
+    (tmp_path / "package.json").write_text(text, encoding="utf-8")
+    start = time.perf_counter()
+    findings = scan(tmp_path)[0]
+    elapsed = time.perf_counter() - start
+    assert len(findings) > 80
+    assert all(f.line_number == 1 for f in findings)   # one line of JSON
+    assert elapsed < 3.0, f"{len(findings)} findings took {elapsed:.1f}s"
+
+
+def test_whatsapp_limitation_names_every_file_it_reads() -> None:
+    """The files the pin table reads at any depth include the `*.mcp.yaml`
+    configs, and the key forms beside a URL are read too."""
+    text = RULES[WHATSAPP].limitations
+    for named in ("requirements*.txt", "`*.mcp.yaml`", "`*.mcp.yml`", "pyproject.toml",
+                  "poetry.lock", "`reference`", "`@refs/tags/v0.2.0`"):
+        assert named in text, named
+
+
+def test_whatsapp_reference_scan_is_linear_on_a_crafted_file(tmp_path: Path) -> None:
+    import time
+
+    crafted = ("github.com/verygoodplugins/whatsapp-mcp?" + "a" * 300 + "&") * 2_000
+    start = time.perf_counter()
+    assert WHATSAPP not in _ids(tmp_path, "requirements.txt", crafted + "\n")
+    assert time.perf_counter() - start < 3.0
 
 
 def test_agenticmail_core_below_floor_fires(tmp_path: Path) -> None:
@@ -3451,3 +3631,314 @@ def test_claude_agent_sdk_evidence_names_each_fix(tmp_path: Path) -> None:
     assert set(hits) == {"requirements.txt", "package.json"}
     assert "fixed in 0.2.121" in hits["requirements.txt"]
     assert "fixed in 0.3.208" in hits["package.json"]
+
+
+# ---------------------------------------------------------------------------
+# A pin finding carries the declaration's line (item 52)
+# ---------------------------------------------------------------------------
+#
+# The table called make_finding with no line, for declarations and lockfiles
+# alike, so SARIF had no region and the VS Code extension put every pin on the
+# first line. The line now comes from where the declaration is written: the
+# physical line a requirement starts on, or the offset of the first place the
+# file spells the declaration, never a comment that names the package.
+
+LITELLM = "AAK-MCP-LITELLM-CVE-2026-59822-001"
+N8NMCP = "AAK-MCP-N8NMCP-CVE-2026-54052-001"
+
+
+def _lines(tmp_path: Path, name: str, content: str, rule: str = LITELLM) -> list[int | None]:
+    path = tmp_path / name
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(content, encoding="utf-8")
+    return [f.line_number for f in scan(tmp_path)[0] if f.rule_id == rule]
+
+
+@pytest.mark.parametrize(("name", "content", "line"), [
+    ("requirements.txt", "# deps\nrequests==2.31.0\nlitellm==1.0.0\n", 3),
+    # A comment that names the package with a number is not the declaration.
+    ("requirements.txt", "# gateway needs litellm 1.90 or newer\nlitellm==1.0.0\n", 2),
+    ("requirements.txt", "requests==2.31.0\nlitellm \\\n    ==1.0.0\n", 2),
+    ("requirements.txt", "requests==2.31.0\r\nlitellm==1.0.0\r\n", 2),
+    ("pyproject.toml",
+     '[project]\nname = "app"\n# litellm 1.90 is too new\ndependencies = [\n'
+     '    "requests>=2",\n    "litellm==1.0.0",\n]\n', 6),
+    ("pyproject.toml",
+     '[tool.poetry.dependencies]\npython = "^3.11"\nlitellm = "^1.0.0"\n', 3),
+    ("pyproject.toml",
+     '[tool.poetry.dependencies]\npython = "^3.11"\n\n'
+     '[tool.poetry.dependencies.litellm]\nversion = "1.0.0"\n', 4),
+    ("Pipfile", '[packages]\nrequests = "*"\nlitellm = "==1.0.0"\n', 3),
+    ("package.json",
+     json.dumps({"name": "app", "dependencies": {"left-pad": "1.0.0", "litellm": "1.0.0"}},
+                indent=2) + "\n", 5),
+    ("package.json", '{"dependencies":{"litellm":"1.0.0"}}', 1),
+])
+def test_a_declaration_finding_names_its_line(
+    tmp_path: Path, name: str, content: str, line: int
+) -> None:
+    assert _lines(tmp_path, name, content) == [line]
+
+
+def test_a_launch_finding_names_the_argument_not_the_server_key(tmp_path: Path) -> None:
+    """The server is usually keyed by its package name, which is not the launch."""
+    config = {"mcpServers": {"n8n-mcp": {
+        "command": "npx", "args": ["-y", "n8n-mcp@2.40.0"], "env": {"MCP_MODE": "stdio"},
+    }}}
+    content = json.dumps(config, indent=2) + "\n"
+    expected = content.splitlines().index('        "n8n-mcp@2.40.0"') + 1
+    assert _lines(tmp_path, ".mcp.json", content, N8NMCP) == [expected]
+
+
+def test_a_launch_named_in_a_jsonc_comment_is_not_its_line(tmp_path: Path) -> None:
+    content = (
+        "{\n"
+        "  // was npx -y n8n-mcp@2.40.0, see below\n"
+        '  "mcpServers": {"n8n": {"command": "npx",\n'
+        '    "args": ["-y", "n8n-mcp@2.40.0"]}}\n'
+        "}\n"
+    )
+    assert _lines(tmp_path, ".mcp.json", content, N8NMCP) == [4]
+
+
+def test_a_command_line_launch_names_its_line(tmp_path: Path) -> None:
+    content = '{"mcpServers": {\n  "n8n": {\n    "command": "npx -y n8n-mcp@2.40.0"\n  }\n}}\n'
+    assert _lines(tmp_path, "claude_desktop_config.json", content, N8NMCP) == [3]
+
+
+def test_a_yaml_launch_names_its_line(tmp_path: Path) -> None:
+    content = "servers:\n  n8n-mcp:\n    command: npx\n    args:\n      - -y\n      - n8n-mcp@2.40.0\n"
+    assert _lines(tmp_path, "agent.mcp.yaml", content, N8NMCP) == [6]
+
+
+@pytest.mark.parametrize(("name", "content", "line"), [
+    ("package-lock.json",
+     json.dumps({"lockfileVersion": 3, "packages": {
+         "": {"dependencies": {"litellm": "^1.0.0"}},
+         "node_modules/litellm": {"version": "1.0.0"}}}, indent=2) + "\n", 9),
+    ("yarn.lock",
+     '# yarn lockfile v1\n\n\nleft-pad@^1.0.0:\n  version "1.3.0"\n\n'
+     'litellm@^1.0.0:\n  version "1.0.0"\n', 7),
+    ("uv.lock",
+     'version = 1\n\n[[package]]\nname = "app"\nversion = "0.1.0"\n'
+     'dependencies = [\n    { name = "litellm" },\n]\n\n'
+     '[[package]]\nname = "litellm"\nversion = "1.0.0"\n', 11),
+    ("poetry.lock",
+     '[[package]]\nname = "litellm"\nversion = "1.0.0"\ndescription = "x"\n', 2),
+    ("Pipfile.lock",
+     json.dumps({"_meta": {}, "default": {"litellm": {"version": "==1.0.0"}}}, indent=4) + "\n", 4),
+    ("pnpm-lock.yaml",
+     "lockfileVersion: '6.0'\n\npackages:\n\n  /litellm@1.0.0:\n    resolution: {integrity: sha512-x}\n", 5),
+])
+def test_a_lockfile_finding_names_the_package_entry(
+    tmp_path: Path, name: str, content: str, line: int
+) -> None:
+    assert _lines(tmp_path, name, content) == [line]
+
+
+def test_the_line_lookup_reads_a_crafted_config_in_linear_time(tmp_path: Path) -> None:
+    """A config that names the package a few hundred thousand times on one line
+    must not cost more than reading it."""
+    import time
+
+    filler = "n8n-mcp " * 200_000
+    content = json.dumps({"mcpServers": {"n8n-mcp": {
+        "description": filler, "command": "npx", "args": ["-y", "n8n-mcp@2.40.0"]}}})
+    start = time.perf_counter()
+    assert _lines(tmp_path, ".mcp.json", content, N8NMCP) == [1]
+    assert time.perf_counter() - start < 3.0
+
+
+ATLASSIAN_73498 = "AAK-MCP-ATLASSIAN-CVE-2026-73498-001"
+
+
+def _line_of(content: str, marker: str) -> int:
+    """The 1-based line of the first line of `content` that contains `marker`."""
+    return next(i for i, line in enumerate(content.splitlines(), 1) if marker in line)
+
+
+@pytest.mark.parametrize(("name", "content", "line"), [
+    # An override names its package in the parent key (`"."`) or in a path
+    # (`**/name`), and an earlier key ending in the same name is another package.
+    ("package.json",
+     '{\n  "name": "app",\n  "dependencies": {\n    "@acme/n8n-mcp": "^3.0.0"\n  },\n'
+     '  "overrides": {\n    "n8n-mcp": {\n      ".": "2.50.0"\n    }\n  }\n}\n', 8),
+    ("package.json",
+     '{\n  "name": "app",\n  "dependencies": {\n    "@acme/n8n-mcp": "1.0.0"\n  },\n'
+     '  "resolutions": {\n    "**/n8n-mcp": "2.50.0"\n  }\n}\n', 7),
+])
+def test_an_override_finding_names_the_override(
+    tmp_path: Path, name: str, content: str, line: int
+) -> None:
+    assert _lines(tmp_path, name, content, N8NMCP) == [line]
+
+
+@pytest.mark.parametrize(("name", "content", "line"), [
+    # Two declarations of one package: the affected one, not the first, is the line.
+    ("pyproject.toml",
+     '[tool.poetry.group.dev.dependencies]\nmcp-atlassian = "^0.23.0"\n\n'
+     '[tool.poetry.dependencies]\npython = "^3.11"\nmcp-atlassian = "^0.21.0"\n', 6),
+    ("Pipfile",
+     '[packages]\nmcp-atlassian = "==0.23.0"\n\n[dev-packages]\nmcp-atlassian = "==0.21.0"\n', 5),
+    ("pyproject.toml",
+     '[project]\nname = "app"\ndependencies = ["mcp-atlassian==0.23.0"]\n\n'
+     '[project.optional-dependencies]\nconfluence = [\n    "requests",\n'
+     '    "mcp-atlassian==0.21.0",\n]\n', 8),
+    ("pyproject.toml",
+     '[tool.poetry.dependencies]\npython = "^3.11"\n\n'
+     '[tool.poetry.dependencies.mcp-atlassian]\nversion = "0.21.0"\n', 4),
+    # A comment that names the package is never the declaration, however long
+    # the comment, and a `#` inside a string does not start one.
+    ("pyproject.toml",
+     "# " + "x" * 1100 + ' was "mcp-atlassian==0.21.0"\n[project]\nname = "app"\n'
+     'dependencies = ["mcp-atlassian==0.21.0"]\n', 4),
+    ("pyproject.toml",
+     '[project]\nname = "app"\n'
+     'urls = { home = "https://example.com/#top" }  # was mcp-atlassian==0.21.0\n'
+     'dependencies = ["mcp-atlassian==0.21.0"]\n', 4),
+])
+def test_a_toml_finding_names_the_declaration_that_decides_it(
+    tmp_path: Path, name: str, content: str, line: int
+) -> None:
+    assert _lines(tmp_path, name, content, ATLASSIAN_73498) == [line]
+
+
+SDK_52869 = "AAK-MCP-SDK-CVE-2026-52869-001"
+
+
+@pytest.mark.parametrize("name", ["pyproject.toml", "requirements.txt"])
+def test_a_name_inside_a_longer_name_is_not_its_line(tmp_path: Path, name: str) -> None:
+    """`fastmcp==1.22.0` holds the text of `mcp==1.22.0`. A search with no left
+    boundary gave the mcp finding the fastmcp line."""
+    if name == "pyproject.toml":
+        content = ('[project]\nname = "app"\ndependencies = [\n'
+                   '    "fastmcp==1.22.0",\n    "mcp==1.22.0",\n]\n')
+        want = 5
+    else:
+        content, want = "fastmcp==1.22.0\nmcp==1.22.0\n", 2
+    assert _lines(tmp_path, name, content, SDK_52869) == [want]
+
+
+def test_a_patched_dependency_group_above_an_affected_main_entry(tmp_path: Path) -> None:
+    content = (
+        '[dependency-groups]\ndev = ["mcp-atlassian==0.23.0"]\n\n'
+        '[project]\nname = "app"\ndependencies = ["mcp-atlassian==0.21.0"]\n'
+    )
+    assert _lines(tmp_path, "pyproject.toml", content, ATLASSIAN_73498) == [6]
+
+
+def test_a_package_json_finding_names_the_affected_section(tmp_path: Path) -> None:
+    content = json.dumps({"name": "app", "dependencies": {"n8n-mcp": "2.94.0"},
+                          "devDependencies": {"n8n-mcp": "2.50.0"}}, indent=2) + "\n"
+    assert _lines(tmp_path, "package.json", content, N8NMCP) == [_line_of(content, '"2.50.0"')]
+
+
+def test_a_launch_finding_names_the_affected_server(tmp_path: Path) -> None:
+    """Two servers run one package, the first at a fixed version."""
+    content = json.dumps({"mcpServers": {
+        "new": {"command": "npx", "args": ["-y", "n8n-mcp@2.94.0"]},
+        "old": {"command": "npx", "args": ["-y", "n8n-mcp@2.50.0"]},
+    }}, indent=2) + "\n"
+    assert _lines(tmp_path, ".mcp.json", content, N8NMCP) == [_line_of(content, "n8n-mcp@2.50.0")]
+
+
+def test_a_lockfile_finding_names_the_affected_copy(tmp_path: Path) -> None:
+    """A fixed top-level copy, then an affected one nested under a dependency."""
+    lock = {"name": "app", "lockfileVersion": 3, "requires": True, "packages": {
+        "": {"name": "app", "dependencies": {"n8n-mcp": "^2.94.0", "n8n-mcp-addon": "1.0.0"}},
+        "node_modules/n8n-mcp": {"version": "2.94.0",
+                                 "resolved": "https://registry.npmjs.org/n8n-mcp/-/n8n-mcp-2.94.0.tgz"},
+        "node_modules/n8n-mcp-addon": {"version": "1.0.0", "dependencies": {"n8n-mcp": "2.50.0"}},
+        "node_modules/n8n-mcp-addon/node_modules/n8n-mcp": {
+            "version": "2.50.0", "resolved": "https://registry.npmjs.org/n8n-mcp/-/n8n-mcp-2.50.0.tgz"},
+    }}
+    content = json.dumps(lock, indent=2)
+    want = _line_of(content, "n8n-mcp-addon/node_modules/n8n-mcp")
+    assert _lines(tmp_path, "package-lock.json", content, N8NMCP) == [want]
+
+
+def test_a_lockfile_version_is_compared_whole(tmp_path: Path) -> None:
+    """1.0.1 is not found inside 1.0.10."""
+    content = (
+        "lockfileVersion: '9.0'\n\npackages:\n\n"
+        "  litellm@1.0.10:\n    resolution: {integrity: sha512-x}\n\n"
+        "  litellm@1.0.1:\n    resolution: {integrity: sha512-y}\n"
+    )
+    assert _lines(tmp_path, "pnpm-lock.yaml", content) == [_line_of(content, "litellm@1.0.1:")]
+
+
+def _js_pins_at_an_affected_version() -> list[tuple[str, str]]:
+    out: list[tuple[str, str]] = []
+    for pin in _PINS:
+        if pin.ecosystem == "py" or pin.requires_arg is not None:
+            continue
+        version = pin.introduced or (0, 0, 0)
+        if _fires(pin, version):
+            out.extend((name, ".".join(map(str, version))) for name in pin.names)
+    return out
+
+
+def test_many_findings_in_one_large_lockfile_read_it_once(tmp_path: Path) -> None:
+    """Every js pin at an affected version after a few MiB of other entries. Each
+    finding's line used to be searched for from the top of the file, so the cost
+    grew with findings times size (96 findings in a 31 MiB pnpm lockfile took 76 s
+    where the scan without lines took 3 s)."""
+    import time
+
+    entries = "".join(f"  {name}@{version}:\n    resolution: {{integrity: sha512-x}}\n"
+                      for name, version in _js_pins_at_an_affected_version())
+    filler = "  pad-pkg@1.0.0:\n    resolution: {integrity: sha512-x}\n"
+    content = "lockfileVersion: '9.0'\n\npackages:\n\n" + filler * 80_000 + entries
+    (tmp_path / "pnpm-lock.yaml").write_text(content, encoding="utf-8")
+    start = time.perf_counter()
+    findings = scan(tmp_path)[0]
+    elapsed = time.perf_counter() - start
+    assert len(findings) > 80
+    assert all(f.line_number and f.line_number > 80_000 for f in findings)
+    assert elapsed < 5.0, f"{len(findings)} findings took {elapsed:.1f}s"
+
+
+def test_many_findings_in_one_large_manifest_read_it_once(tmp_path: Path) -> None:
+    """The same for a package.json whose overrides pin every js package, padded
+    to a megabyte (97 findings in 1.46 MB took 35 s where the scan without lines
+    took 7.5 s)."""
+    import time
+
+    overrides = {name: {".": version} for name, version in _js_pins_at_an_affected_version()}
+    data = {"name": "app", "description": "x" * 1_000_000, "overrides": overrides}
+    (tmp_path / "package.json").write_text(json.dumps(data, indent=2), encoding="utf-8")
+    start = time.perf_counter()
+    findings = scan(tmp_path)[0]
+    elapsed = time.perf_counter() - start
+    assert len(findings) > 80
+    assert all(f.line_number and f.line_number > 3 for f in findings)
+    assert elapsed < 5.0, f"{len(findings)} findings took {elapsed:.1f}s"
+
+
+def _py_pins_at_an_affected_version() -> list[tuple[str, str]]:
+    out: list[tuple[str, str]] = []
+    for pin in _PINS:
+        if pin.ecosystem == "js" or pin.requires_arg is not None:
+            continue
+        version = pin.introduced or (0, 0, 1)
+        if _fires(pin, version):
+            out.extend((name, ".".join(map(str, version))) for name in pin.names
+                       if "/" not in name and not name.startswith("@"))
+    return out
+
+
+def test_a_large_manifest_is_judged_once_per_package(tmp_path: Path) -> None:
+    """Every pin filtered every declaration of the file, about 150 passes, so a
+    16,000-line requirements file took 7 s. Declarations are indexed by name
+    once, and each pin reads only its own packages."""
+    import time
+
+    lines = [f"pad-{i:05d}==1.0.{i % 10}" for i in range(60_000)]
+    lines += [f"{name}=={version}" for name, version in _py_pins_at_an_affected_version()]
+    (tmp_path / "requirements.txt").write_text("\n".join(lines) + "\n", encoding="utf-8")
+    start = time.perf_counter()
+    findings = scan(tmp_path)[0]
+    elapsed = time.perf_counter() - start
+    assert len(findings) > 40
+    assert all(f.line_number and f.line_number > 60_000 for f in findings)
+    assert elapsed < 3.0, f"{len(findings)} findings took {elapsed:.1f}s"

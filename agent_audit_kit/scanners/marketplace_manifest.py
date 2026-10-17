@@ -36,15 +36,26 @@ _KNOWN_UPSTREAMS = frozenset(
         "google-adk",
     }
 )
-_BROAD_PERMISSIONS = (
-    "fs:*",
-    "shell:exec",
-    "network:*",
-    "credentials:*",
-    "env:*",
-    "*:*",
+# The grants AAK-MARKETPLACE-002 calls broad, as (scope, action). A permission is
+# reported when it covers one of them, not when it equals one: the six strings
+# were compared exactly, so `shell:*` and a bare `*`, both broader than
+# `shell:exec`, passed while `shell:exec` was flagged, and so did `SHELL:EXEC`.
+_BROAD_GRANTS: tuple[tuple[str, str], ...] = (
+    ("fs", "*"),
+    ("shell", "exec"),
+    ("network", "*"),
+    ("credentials", "*"),
+    ("env", "*"),
+    ("*", "*"),
 )
 _COMMIT_SHA_RE = re.compile(r"^[a-f0-9]{40}$|^[a-f0-9]{7,40}$")
+# Where GitHub reads a SECURITY.md from: `.github/`, the root, then `docs/`, the
+# precedence its docs give for a community health file that can sit in more than
+# one place (https://docs.github.com/en/communities/setting-up-your-project-for-
+# healthy-contributions/creating-a-default-community-health-file). Only the root
+# and `.github/` were read, so a repository that kept its policy in `docs/` was
+# told it shipped none.
+_SECURITY_MD_FOLDERS = (".github", ".", "docs")
 
 
 def _iter_manifests(project_root: Path) -> list[Path]:
@@ -76,6 +87,58 @@ def _edit_distance_le_1(a: str, b: str) -> bool:
         if short[i] != long_[i]:
             return short[i:] == long_[i + 1 :]
     return True
+
+
+def _string_grant(item: str) -> tuple[str, str, str] | None:
+    """(as written, scope, action) of one `scope:action` string, a bare `*`
+    being every scope and action, or None for a string with no colon."""
+    if item.strip() == "*":
+        return item, "*", "*"
+    scope, colon, action = item.partition(":")
+    if not colon:
+        return None
+    return item, scope.strip().lower(), action.strip().lower()
+
+
+def _grants(permissions: object) -> list[tuple[str, str, str]]:
+    """(as written, scope, action) for each grant a `permissions` value makes.
+
+    A list holds `scope:action` strings, and one string alone is one grant. An
+    object maps a scope to an action, a list of actions, or `true`, which is
+    every action (`{"fs": "*"}`, `{"shell": true}`); `false` grants nothing.
+    Scope and action are compared without case or surrounding space. A string
+    with no colon other than `*`, and a value of any other type, grants nothing
+    this reads.
+    """
+    found: list[tuple[str, str, str]] = []
+    if isinstance(permissions, str):
+        permissions = [permissions]
+    if isinstance(permissions, list):
+        for item in permissions:
+            grant = _string_grant(item) if isinstance(item, str) else None
+            if grant is not None:
+                found.append(grant)
+    elif isinstance(permissions, dict):
+        for scope, value in permissions.items():
+            if not isinstance(scope, str):
+                continue
+            if value is True:
+                found.append((f"{scope}: true", scope.strip().lower(), "*"))
+                continue
+            for action in value if isinstance(value, list) else [value]:
+                if isinstance(action, str):
+                    found.append((f"{scope}:{action}", scope.strip().lower(),
+                                  action.strip().lower()))
+    return found
+
+
+def _covers(scope: str, action: str) -> bool:
+    """Does a grant reach at least as far as one of the broad grants? A `*` on
+    either side stands for every scope or every action."""
+    return any(
+        scope in ("*", broad_scope) and action in ("*", broad_action)
+        for broad_scope, broad_action in _BROAD_GRANTS
+    )
 
 
 def _is_typosquat(name: str) -> bool:
@@ -112,18 +175,17 @@ def _check_plugin_entry(
             )
         )
 
-    permissions = entry.get("permissions") or []
-    if isinstance(permissions, list):
-        broad = [p for p in permissions if p in _BROAD_PERMISSIONS]
-        if broad:
-            findings.append(
-                make_finding(
-                    "AAK-MARKETPLACE-002",
-                    rel,
-                    f"Plugin {name!r} declares broad permissions: {', '.join(broad)}",
-                    line_number=find_line_number(raw_text, f'"name": "{name}"'),
-                )
+    broad = [shown for shown, scope, action in _grants(entry.get("permissions"))
+             if _covers(scope, action)]
+    if broad:
+        findings.append(
+            make_finding(
+                "AAK-MARKETPLACE-002",
+                rel,
+                f"Plugin {name!r} declares broad permissions: {', '.join(broad)}",
+                line_number=find_line_number(raw_text, f'"name": "{name}"'),
             )
+        )
 
     if name and _is_typosquat(name):
         findings.append(
@@ -270,9 +332,9 @@ def _check_mcp_security_md(
     if not advertises_mcp:
         return []
 
-    has_security_md = (project_root / "SECURITY.md").is_file() or (
-        project_root / ".github" / "SECURITY.md"
-    ).is_file()
+    has_security_md = any(
+        (project_root / folder / "SECURITY.md").is_file() for folder in _SECURITY_MD_FOLDERS
+    )
     if has_security_md or security_contact_declared:
         return []
 

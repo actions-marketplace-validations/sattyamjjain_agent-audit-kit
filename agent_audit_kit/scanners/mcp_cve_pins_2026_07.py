@@ -44,7 +44,9 @@ available) before shipping:
   - frontmcp                        >= 1.5.7   (CVE-2026-67531)
   - langgraph-checkpoint-postgres/sqlite >= 3.1.1 (CVE-2026-71433)
   - meta-ads-mcp                    >= 1.0.109 (CVE-2026-48039)
-  - whatsapp-mcp                   >= 0.2.1   (CVE-2026-46555)
+  - verygoodplugins/whatsapp-mcp   >= 0.2.1   (CVE-2026-46555; read from a reference to
+    the GitHub repository that names a release, `_REPO_PINS`. npm's and PyPI's
+    `whatsapp-mcp` are other projects and out of scope)
   - @agenticmail/{claudecode,codex,core,openclaw} (CVE-2026-57495; fix floors
     0.2.39 / 0.1.33 / 0.9.43 / 0.5.71 respectively — one rule, four pins)
   - stata-mcp                      >= 1.19.0  (CVE-2026-47708, CVE-2026-55071 —
@@ -85,8 +87,9 @@ available) before shipping:
     upstream issue #178 open, v0.3.0 still the newest tag)
   - awslabs.postgres-mcp-server     >= 1.1.7   (CVE-2026-85787)
   - knowns                          presence-only (CVE-2026-86439 fixed in 0.30.0,
-    but CVE-2026-88938 is scoped "through 0.33.0" and 0.33.0 is the newest npm
-    release, so there is no floor left to pin to)
+    but CVE-2026-88938 is scoped "through 0.33.0" and its advisory names no
+    patched version; npm's 0.34.0 and 0.34.1 are not confirmed fixed, so there
+    is no floor to pin to)
   - langflow                        >= 1.12.0  (CVE-2026-9186 raised the 1.11.0
     floor of CVE-2026-12940; CVE-2026-85025 / CVE-2026-78575 / CVE-2026-81941,
     all scoped 1.0.0–1.11.5, then raised it again, and CVE-2026-101861, eval() on
@@ -234,23 +237,36 @@ module — see CHANGELOG.cves.md.
 
 from __future__ import annotations
 
+import bisect
 import re
 from dataclasses import dataclass
 from pathlib import Path
+from typing import Callable
+
+try:
+    import tomllib
+except ImportError:  # Python < 3.11
+    import tomli as tomllib  # type: ignore[no-redef,import-not-found]
 
 from agent_audit_kit.models import Finding
-from agent_audit_kit.scanners._helpers import make_finding, in_skip_dir
+from agent_audit_kit.scanners._helpers import make_finding, in_skip_dir, strip_jsonc
 from agent_audit_kit.scanners._manifest_deps import (
     MAX_LOCKFILE_BYTES,
     MAX_MANIFEST_BYTES,
     Declaration,
+    _json_key,
+    _toml_positions,
+    declaration_lines,
     declarations,
 )
 from agent_audit_kit.scanners._versions import TOP, ZERO, Spans, admits, intersect, parse_range
 from agent_audit_kit.scanners.supply_chain import (
     _LOCKFILES,
+    _PNPM_ENTRY_RE,
+    _lockfile_canon,
     _lockfile_index,
     _lockfile_lookup,
+    _semver3,
 )
 
 _Ver = tuple[int, int, int]
@@ -443,8 +459,9 @@ _PINS: tuple[_Pin, ...] = (
     _Pin("AAK-MCP-HEALTHOMICS-CVE-2026-15415-001", "awslabs.aws-healthomics-mcp-server",
          ("awslabs.aws-healthomics-mcp-server",), (0, 0, 36), fix_label="0.0.36"),
     # --- 2026-07-19..20 wave ---
-    _Pin("AAK-MCP-WHATSAPP-CVE-2026-46555-001", "whatsapp-mcp", ("whatsapp-mcp",),
-         (0, 2, 1), fix_label="0.2.1"),
+    # AAK-MCP-WHATSAPP-CVE-2026-46555-001 was a row here on the name `whatsapp-mcp`,
+    # and it is a `_RepoPin` below since 2026-10-17: npm's and PyPI's packages of
+    # that name are other projects, so no upgrade of either could clear it.
     # AgenticMail ships four npm packages, each with its own fix floor for the same
     # CVE — one rule_id, four pins (whichever @agenticmail/* the project depends on
     # fires below its own floor). `@agenticmail/openclaw` is distinct from the bare
@@ -948,14 +965,19 @@ _PINS: tuple[_Pin, ...] = (
     # 0.1.0 release -- the cheaper of the two errors, since 86 of the real
     # project's 87 published versions still fire.
     # CVE-2026-88938 (2026-09-10) reopened the same class on the `code.find` tool
-    # and is scoped "through 0.33.0" -- which is the newest published release
-    # (npm, 2026-09-05). There is no fixed version to pin to, so the floor drops to
-    # None and the pin becomes presence-only. That is the permanent state until
-    # upstream ships a fix, the same as `postgres-mcp` and `mcp-florence2` above.
-    # The 0.1.1 `introduced` bound still matters and is still honoured -- see the
-    # ordering note in `_fires`.
+    # and is scoped "through 0.33.0", then the newest release (npm, 2026-09-05).
+    # Its advisory, GHSA-5cj9-fcqq-g2h7, names no patched version. npm published
+    # 0.34.0 and 0.34.1 on 2026-09-22 and 2026-09-28, and neither the advisory nor
+    # NVD says whether they fix it, so the floor stays None and the pin stays
+    # presence-only until a fixed release is named, the same as `postgres-mcp` and
+    # `mcp-florence2` above. The label names the advisory's range, not a newest
+    # release, which goes stale with every publish (it read "0.33.0 is newest"
+    # for three weeks after 0.34.0). The 0.1.1 `introduced` bound still matters
+    # and is still honoured -- see the ordering note in `_fires`.
     _Pin("AAK-MCP-KNOWNS-CVE-2026-86439-001", "knowns", ("knowns",), None,
-         introduced=(0, 1, 1), fix_label="no fixed release (0.33.0 is newest and affected)"),
+         introduced=(0, 1, 1),
+         fix_label="no release yet: GHSA-5cj9-fcqq-g2h7 names no patched version, "
+                   "and CVE-2026-88938 covers every release through 0.33.0"),
     # --- 2026-09-10..11 wave ---
     # AWS Security Agent MCP server (PyPI) before 0.2.0 writes scan output to an S3
     # bucket it never verifies the ownership of, and the bucket name derives from a
@@ -1548,6 +1570,31 @@ def _names_match(pin: _Pin, declaration: Declaration) -> bool:
     return any(_canonical(n, ecosystem) == target for n in pin.names)
 
 
+def _declaration_index(found: list[Declaration]) -> dict[str, list[int]]:
+    """Where each package is declared in `found`: canonical name -> positions.
+
+    Every pin used to filter every declaration of the file, about 150 passes, so
+    a 16,000-line requirements file took 7 s. A declaration is filed under each
+    spelling `_names_match` could accept for it (both registries' for a program
+    run by name), so a pin reads only the declarations of its own names.
+    """
+    index: dict[str, list[int]] = {}
+    for position, declaration in enumerate(found):
+        ecosystems = ("py", "js") if declaration.ecosystem is None else (declaration.ecosystem,)
+        for key in {_canonical(declaration.name, ecosystem) for ecosystem in ecosystems}:
+            index.setdefault(key, []).append(position)
+    return index
+
+
+def _pin_candidates(
+    pin: _Pin, found: list[Declaration], index: dict[str, list[int]]
+) -> list[Declaration]:
+    """The declarations that may name `pin`'s packages, in file order: a superset
+    of what `_deciding_declaration` keeps, so its verdict does not change."""
+    keys = {_canonical(name, ecosystem) for name in pin.names for ecosystem in ("py", "js")}
+    return [found[i] for i in sorted({i for key in keys for i in index.get(key, ())})]
+
+
 def _affected(pin: _Pin) -> tuple[_Ver, _Ver]:
     """The pin's affected versions as one half-open span."""
     return pin.introduced or ZERO, pin.floor or TOP
@@ -1650,6 +1697,273 @@ def _deciding_declaration(pin: _Pin, found: list[Declaration]) -> Declaration | 
     return None
 
 
+@dataclass(frozen=True)
+class _RepoPin:
+    """A project that ships from its GitHub repository and no registry.
+
+    CVE-2026-46555 (GHSA-7jj9-4qqq-4xc4) names verygoodplugins/whatsapp-mcp,
+    which publishes a clone, release wheels (`whatsapp_mcp_server-<v>-py3-none-
+    any.whl`) and a bridge binary, and nothing on npm or PyPI. The registries'
+    `whatsapp-mcp` packages are other projects: npm's is Candombe/whatsapp-mcp
+    (0.0.1 to 0.1.3), PyPI's links no repository (0.1.0, 0.1.1), and PyPI's
+    `whatsapp-mcp-server`, the wheels' own name, is msaelices's 0.2.1. A pin on
+    either name reported somebody else's package, and no upgrade cleared it.
+
+    What states a release of the project is a reference to its repository that
+    names a tag: a pip or uv git URL with `@v0.2.0` or `@refs/tags/v0.2.0`, a
+    lockfile's git source with `rev=` or `tag=`, a `/releases/download/v0.2.0/`
+    asset or an `/archive/` tarball, and the TOML tables that name the tag in a
+    key of its own beside the URL: uv's sources and Poetry's `tag` or `rev`,
+    Pipfile's `ref`, and poetry.lock's `reference`. The README's own install, a
+    clone run with `uv --directory <path> run main.py`, names none, and neither
+    does a commit or a branch, so those are not reported.
+    """
+
+    rule_id: str
+    display: str
+    repository: str     # owner/name on github.com
+    floor: _Ver
+    fix_label: str
+
+
+_REPO_PINS: tuple[_RepoPin, ...] = (
+    _RepoPin("AAK-MCP-WHATSAPP-CVE-2026-46555-001", "WhatsApp MCP",
+             "verygoodplugins/whatsapp-mcp", (0, 2, 1), "v0.2.1"),
+)
+
+
+def _repo_ref_re(repository: str) -> re.Pattern[str]:
+    """A reference to `repository` on github.com that names a release tag: a
+    git URL's `@v0.2.0` or `@refs/tags/v0.2.0`, a release asset, an archive
+    tarball, or a lockfile's `rev=` or `tag=`.
+
+    The host is bounded on the left, so `notgithub.com/...` is another host. A
+    browse URL (`/tree/v0.2.0`, a package.json `homepage`) installs nothing and
+    is not read. Each part is a literal or bounded, so a crafted line costs one
+    pass.
+    """
+    return re.compile(
+        r"(?<![\w.-])(?:www\.)?github\.com[/:]" + re.escape(repository) + r"(?:\.git)?"
+        r"(?:@(?:refs/tags/)?|/releases/download/|/archive/(?:refs/tags/)?"
+        r"|\?(?:[^#\s\"'?]{0,256}&)?(?:rev|tag)=)"
+        r"v?(\d{1,6})\.(\d{1,6})\.(\d{1,6})(?!\d)",
+        re.IGNORECASE,
+    )
+
+
+def _repo_url_re(repository: str) -> re.Pattern[str]:
+    """The repository's URL alone, as a TOML `git` or `url` value states it."""
+    return re.compile(
+        r"(?<![\w.-])(?:www\.)?github\.com[/:]" + re.escape(repository)
+        + r"(?:\.git)?/?(?![\w.-])",
+        re.IGNORECASE,
+    )
+
+
+_REPO_REF_RES = {pin.repository: _repo_ref_re(pin.repository) for pin in _REPO_PINS}
+_REPO_URL_RES = {pin.repository: _repo_url_re(pin.repository) for pin in _REPO_PINS}
+# uv's `[tool.uv.sources]`, Poetry's dependency tables and Pipfile name the
+# repository in one key and the tag in another (`{ git = "https://github.com/o/r",
+# tag = "v0.2.0" }`, `ref = "v0.2.0"`), which a URL search cannot pair. Those two
+# manifests are read as TOML; they are under the manifest size limit and already
+# parsed for their declarations. poetry.lock, which may reach the lockfile limit,
+# is read line by line instead: Poetry writes a git source as `url = ...` with
+# its `reference = ...` a line or two below.
+_TOML_REPO_FILES = frozenset({"pyproject.toml", "pipfile"})
+_TAG_KEYS = ("tag", "rev", "ref", "reference")
+_RELEASE_TAG_RE = re.compile(r"v?(\d{1,6})\.(\d{1,6})\.(\d{1,6})")
+_POETRY_SOURCE_RE = re.compile(
+    r'^url[ \t]*=[ \t]*"([^"\n]{1,2048})"[ \t]*\r?\n(?:[^\[\n][^\n]*\n){0,8}?'
+    r'reference[ \t]*=[ \t]*"([^"\n]{1,256})"',
+    re.MULTILINE,
+)
+# Where a comment starts depends on the format.
+#
+# TOML: a `#` outside a quoted string, anywhere on the line (a string or a `#`
+# is matched, so a `#` inside quotes is not read as a comment).
+# requirements and yarn.lock: pip's rule, a `#` at the start of a line or after a
+# space; quotes mean nothing there, and `#egg=` inside a URL is not a comment.
+# YAML: a `#` at the start of a line or after a space, outside a quoted scalar;
+# a quote opens a scalar only where one starts (after `: `, `- `, `[`, `{` or
+# `,`), so the apostrophe in a plain `note: it's pinned` opens nothing.
+#
+# A quote with no partner runs to the end of its line, so every character is read
+# once: had the closing quote been required, a line of escaped quotes (`"\` over
+# and over) would be searched to its end again from every quote in it.
+_HASH_COMMENT_RE = re.compile(r'"(?:[^"\\\n]|\\.)*"?|\'[^\'\n]*\'?|#')
+_PIP_COMMENT_RE = re.compile(r"(?:^|(?<=[ \t]))#[^\n]*", re.MULTILINE)
+_YAML_MARK_RE = re.compile(r"[\"'#]")
+_YAML_DOUBLE_RE = re.compile(r'"(?:[^"\\\n]|\\.)*"?')
+_YAML_SINGLE_RE = re.compile(r"'(?:[^'\n]|'')*'?")
+
+
+def _toml_comment_spans(text: str) -> list[tuple[int, int]]:
+    spans: list[tuple[int, int]] = []
+    at, n = 0, len(text)
+    while True:
+        m = _HASH_COMMENT_RE.search(text, at)
+        if m is None:
+            return spans
+        if m.group() == "#":
+            end = text.find("\n", m.start())
+            end = n if end < 0 else end
+            spans.append((m.start(), end))
+            at = end
+        else:
+            at = m.end()
+
+
+def _yaml_comment_spans(text: str) -> list[tuple[int, int]]:
+    spans: list[tuple[int, int]] = []
+    at, n = 0, len(text)
+    while True:
+        m = _YAML_MARK_RE.search(text, at)
+        if m is None:
+            return spans
+        i, mark = m.start(), m.group()
+        before = text[i - 1] if i else "\n"
+        if mark == "#":
+            if before in " \t\n":
+                end = text.find("\n", i)
+                end = n if end < 0 else end
+                spans.append((i, end))
+                at = end
+            else:
+                at = i + 1
+            continue
+        # The last character before the quote that is not a space; each run of
+        # spaces is passed once, by the one quote that follows it.
+        j = i - 1
+        while j >= 0 and text[j] in " \t":
+            j -= 1
+        lead = text[j] if j >= 0 else "\n"
+        if before in "\n[{," or (before in " \t" and lead in "\n:-?[{,"):
+            quoted = (_YAML_DOUBLE_RE if mark == '"' else _YAML_SINGLE_RE).match(text, i)
+            at = quoted.end() if quoted else i + 1
+        else:
+            at = i + 1
+
+
+def _comment_spans(text: str, file_name: str) -> list[tuple[int, int]]:
+    """(start, end) of every comment in a candidate file, in one pass, by the
+    rules of its format (see `_HASH_COMMENT_RE`). A comment runs to the end of
+    its line however long the line is, which a look-back of fixed length did not
+    see past."""
+    if file_name.endswith((".yaml", ".yml")):
+        return _yaml_comment_spans(text)
+    if file_name.endswith(".txt") or file_name == "yarn.lock":
+        return [(m.start(), m.end()) for m in _PIP_COMMENT_RE.finditer(text)]
+    return _toml_comment_spans(text)
+
+
+def _in_spans(spans: list[tuple[int, int]], starts: list[int], offset: int) -> bool:
+    index = bisect.bisect_right(starts, offset) - 1
+    return index >= 0 and offset < spans[index][1]
+
+
+def _toml_repo_refs(
+    text: str, url_re: re.Pattern[str]
+) -> list[tuple[_Ver, tuple[str | int, ...], str]]:
+    """(version, path of the URL key, evidence) for every TOML table that points
+    `git` or `url` at the repository and names a release tag beside it."""
+    try:
+        data = tomllib.loads(text)
+    except (tomllib.TOMLDecodeError, ValueError, RecursionError):
+        return []
+    refs: list[tuple[_Ver, tuple[str | int, ...], str]] = []
+    stack: list[tuple[object, tuple[str | int, ...]]] = [(data, ())]
+    while stack:
+        node, where = stack.pop()
+        if isinstance(node, dict):
+            for url_key in ("git", "url"):
+                url = node.get(url_key)
+                if not isinstance(url, str) or not url_re.search(url):
+                    continue
+                for tag_key in _TAG_KEYS:
+                    tag = node.get(tag_key)
+                    tag_m = _RELEASE_TAG_RE.fullmatch(tag.strip()) if isinstance(tag, str) else None
+                    if tag_m:
+                        version = (int(tag_m.group(1)), int(tag_m.group(2)), int(tag_m.group(3)))
+                        refs.append((version, where + (url_key,),
+                                     f"{url_key} = {url!r}, {tag_key} = {tag!r}"))
+                        break
+            stack.extend((value, where + (key,)) for key, value in node.items())
+        elif isinstance(node, list):
+            stack.extend((value, where + (index,)) for index, value in enumerate(node))
+    return refs
+
+
+def _first_repo_reference(pin: _RepoPin, file_name: str, text: str) -> tuple[int, str] | None:
+    """(line, evidence) of the earliest reference in the file to an affected
+    release, outside comments, or None. Line 0 means its position is unknown."""
+    hits: list[tuple[int, str]] = []
+    searched = text
+    in_comment: Callable[[int], bool] = lambda offset: False  # noqa: E731
+    if file_name.endswith(".json"):
+        # MCP clients read these as JSONC; comments become spaces, offsets kept.
+        try:
+            searched = strip_jsonc(text)
+        except ValueError:
+            pass
+    else:
+        spans = _comment_spans(text, file_name)
+        starts = [start for start, _ in spans]
+        in_comment = lambda offset: _in_spans(spans, starts, offset)  # noqa: E731
+    for m in _REPO_REF_RES[pin.repository].finditer(searched):
+        if in_comment(m.start()):
+            continue
+        version = (int(m.group(1)), int(m.group(2)), int(m.group(3)))
+        if version < pin.floor:
+            hits.append((
+                searched.count("\n", 0, m.start()) + 1,
+                f"{pin.display} referenced at {m.group(1)}.{m.group(2)}.{m.group(3)} "
+                f"({m.group(0)!r}) — fixed in {pin.fix_label}; pin the patched release.",
+            ))
+            break
+    if file_name in _TOML_REPO_FILES:
+        refs = [ref for ref in _toml_repo_refs(text, _REPO_URL_RES[pin.repository])
+                if ref[0] < pin.floor]
+        positions = _toml_positions(text) if refs else {}
+        for version, where, shown in refs:
+            hits.append((
+                positions.get(where, 0),
+                f"{pin.display} referenced at {'.'.join(map(str, version))} ({shown}) — "
+                f"fixed in {pin.fix_label}; pin the patched release.",
+            ))
+    elif file_name == "poetry.lock":
+        for m in _POETRY_SOURCE_RE.finditer(text):
+            tag_m = _RELEASE_TAG_RE.fullmatch(m.group(2).strip())
+            if tag_m is None or not _REPO_URL_RES[pin.repository].search(m.group(1)):
+                continue
+            version = (int(tag_m.group(1)), int(tag_m.group(2)), int(tag_m.group(3)))
+            if version < pin.floor:
+                hits.append((
+                    text.count("\n", 0, m.start()) + 1,
+                    f"{pin.display} referenced at {'.'.join(map(str, version))} "
+                    f"(url = {m.group(1)!r}, reference = {m.group(2)!r}) — fixed in "
+                    f"{pin.fix_label}; pin the patched release.",
+                ))
+                break
+    if not hits:
+        return None
+    return min(hits, key=lambda hit: (hit[0] == 0, hit[0]))
+
+
+def _repo_findings(rel: str, file_name: str, text: str) -> list[Finding]:
+    """One finding per repository pin per file, on its earliest reference to an
+    affected release."""
+    findings: list[Finding] = []
+    lowered = text.lower()
+    for pin in _REPO_PINS:
+        if pin.repository.lower() not in lowered:
+            continue
+        hit = _first_repo_reference(pin, file_name.lower(), text)
+        if hit is not None:
+            line, evidence = hit
+            findings.append(make_finding(pin.rule_id, rel, evidence, line or None))
+    return findings
+
+
 def _evidence(pin: _Pin, declaration: Declaration) -> str:
     stated = parse_range(declaration.version, declaration.dialect) is not None
     how = "" if stated else ", which states no version AAK can read"
@@ -1689,14 +2003,21 @@ def scan(project_root: Path) -> tuple[list[Finding], set[str]]:
         # `len(all_scanned_files)` as files_scanned, so gating this on a match
         # under-reported the denominator and made a clean repo look unscanned.
         scanned.add(rel)
+        findings.extend(_repo_findings(rel, path.name, text))
         if lockfile:
             findings.extend(_lockfile_findings(path, rel, text))
             continue
         found = declarations(path, text)
+        index = _declaration_index(found)
+        lines: Callable[[Declaration], int | None] | None = None
         for pin in _PINS:
-            declaration = _deciding_declaration(pin, found)
+            declaration = _deciding_declaration(pin, _pin_candidates(pin, found, index))
             if declaration is not None:  # one finding per pin per file
-                findings.append(make_finding(pin.rule_id, rel, _evidence(pin, declaration)))
+                if lines is None:  # the file's positions, read once at its first finding
+                    lines = declaration_lines(path, text)
+                findings.append(make_finding(
+                    pin.rule_id, rel, _evidence(pin, declaration), lines(declaration),
+                ))
 
     return findings, scanned
 
@@ -1716,17 +2037,117 @@ def _lockfile_findings(path: Path, rel: str, text: str) -> list[Finding]:
     # Parsed once, not once a pin: a hundred pins re-parsed a large lockfile a
     # hundred times.
     index = _lockfile_index(text, filename)
+    hits: list[tuple[_Pin, _Ver]] = []
     for pin in _PINS:
         if not _pin_applies(pin, file_ecosystem) or pin.requires_arg is not None:
             continue
         resolved = _lockfile_lookup(index, filename, pin.names)
         affected = [v for v in resolved if _fires(pin, v)]
         if affected:
-            shown = ".".join(str(x) for x in affected[0])
-            findings.append(make_finding(
-                pin.rule_id,
-                rel,
-                f"{pin.display} resolves to {shown} in {path.name} — fixed "
-                f"in {pin.fix_label}; upgrade and re-lock.",
-            ))
+            hits.append((pin, affected[0]))
+    if not hits:
+        return findings
+    # Where the entries of the reported packages sit, read once for all of them.
+    entries = _lockfile_entries(
+        text, filename, {_lockfile_canon(n, filename) for pin, _ in hits for n in pin.names})
+    for pin, version in hits:
+        shown = ".".join(str(x) for x in version)
+        findings.append(make_finding(
+            pin.rule_id,
+            rel,
+            f"{pin.display} resolves to {shown} in {path.name} — fixed "
+            f"in {pin.fix_label}; upgrade and re-lock.",
+            _lockfile_line(entries, filename, pin.names, version),
+        ))
     return findings
+
+
+# Where a lockfile writes a package's own entry, as against the dependency lists
+# of other packages, which name it too, read in one pass the first time a
+# lockfile has a finding. package-lock.json keys an entry `node_modules/<name>`
+# (lockfileVersion 1 nests `"<name>": {` objects under `dependencies`), yarn v1
+# starts one at column 0 with `<name>@`, pnpm writes `<name>@<version>`, uv.lock
+# and poetry.lock open one with `[[package]]`, and Pipfile.lock keys it
+# `"<name>": {`. An entry's version is read inside the entry, up to the next
+# one, and compared whole: a window of fixed length reached into the next entry,
+# and a substring test read 1.0.1 inside 1.0.10. Every pattern is bounded.
+_NPM_LOCK_KEY_RE = re.compile(r'node_modules/((?:@[^"/\\\n]{1,214}/)?[^"/\\\n]{1,214})"[ \t]*:[ \t]*\{')
+_JSON_OBJECT_KEY_RE = re.compile(r'"((?:[^"\\\n]|\\.){1,214})"[ \t]*:[ \t]*\{')
+_JSON_VERSION_RE = re.compile(r'"version"[ \t]*:[ \t]*"([^"\\\n]{0,64})"')
+_YARN_HEADER_RE = re.compile(r'^(?![ \t#\r\n])"?((?:@[^@"\s/]{1,214}/)?[^@"\s/,:]{1,214})@', re.MULTILINE)
+_YARN_VERSION_RE = re.compile(r'^[ \t]+version:?[ \t]+"?([0-9][\w.\-]{0,64})', re.MULTILINE)
+_TOML_PACKAGE_RE = re.compile(r"^\[\[package\]\]", re.MULTILINE)
+_TOML_NAME_RE = re.compile(r'^name[ \t]*=[ \t]*"([^"\n]{1,214})"', re.MULTILINE)
+_TOML_VERSION_RE = re.compile(r'^version[ \t]*=[ \t]*"([0-9][^"\n]{0,64})"', re.MULTILINE)
+
+
+def _entry_versions(
+    text: str, filename: str, heads: list[tuple[int, int, str]],
+    version_re: re.Pattern[str], wanted: set[str],
+) -> list[tuple[int, str, str]]:
+    """(offset, name, version) for each entry head of a wanted package, its
+    version read between the head and the next head."""
+    out: list[tuple[int, str, str]] = []
+    for i, (start, end, name) in enumerate(heads):
+        if _lockfile_canon(name, filename) not in wanted:
+            continue
+        stop = heads[i + 1][0] if i + 1 < len(heads) else len(text)
+        m = version_re.search(text, end, stop)
+        out.append((start, name, m.group(1) if m else ""))
+    return out
+
+
+def _lockfile_entries(
+    text: str, filename: str, wanted: set[str]
+) -> dict[str, list[tuple[int, _Ver | None]]]:
+    """Each entry the lockfile writes for a package in `wanted` (canonical
+    names): canonical name -> [(line, version)], in file order.
+
+    One pass over the file, for every reported package at once: the line of a
+    finding used to be searched for from the top of the file for each finding.
+    """
+    found: list[tuple[int, str, str]] = []
+    if filename in ("package-lock.json", "pipfile.lock"):
+        heads = [] if filename == "pipfile.lock" else [
+            (m.start(), m.end(), m.group(1)) for m in _NPM_LOCK_KEY_RE.finditer(text)]
+        if not heads:
+            heads = [(m.start(), m.end(), _json_key('"' + m.group(1) + '"'))
+                     for m in _JSON_OBJECT_KEY_RE.finditer(text)]
+        found = [(offset, name, version.lstrip("=")) for offset, name, version
+                 in _entry_versions(text, filename, heads, _JSON_VERSION_RE, wanted)]
+    elif filename == "yarn.lock":
+        heads = [(m.start(), m.end(), m.group(1)) for m in _YARN_HEADER_RE.finditer(text)]
+        found = _entry_versions(text, filename, heads, _YARN_VERSION_RE, wanted)
+    elif filename == "pnpm-lock.yaml":
+        # pnpm states the version in the entry itself.
+        found = [(m.start(), m.group(1), m.group(2)) for m in _PNPM_ENTRY_RE.finditer(text)
+                 if m.group(1).lower() in wanted]
+    elif filename in ("uv.lock", "poetry.lock"):
+        starts = [m.start() for m in _TOML_PACKAGE_RE.finditer(text)] + [len(text)]
+        for start, stop in zip(starts, starts[1:]):
+            name_m = _TOML_NAME_RE.search(text, start, stop)
+            if name_m is None or _lockfile_canon(name_m.group(1), filename) not in wanted:
+                continue
+            version_m = _TOML_VERSION_RE.search(text, start, stop)
+            if version_m is not None:
+                found.append((name_m.start(), name_m.group(1), version_m.group(1)))
+    entries: dict[str, list[tuple[int, _Ver | None]]] = {}
+    line, last = 1, 0
+    for offset, name, version in found:  # in file order
+        line += text.count("\n", last, offset)
+        last = offset
+        entries.setdefault(_lockfile_canon(name, filename), []).append((line, _semver3(version)))
+    return entries
+
+
+def _lockfile_line(
+    entries: dict[str, list[tuple[int, _Ver | None]]], filename: str,
+    names: tuple[str, ...], version: _Ver,
+) -> int | None:
+    """The first entry of one of `names` that resolves to `version`, else the
+    package's first entry, else None."""
+    lines = [entry for name in names for entry in entries.get(_lockfile_canon(name, filename), ())]
+    exact = [line for line, resolved in lines if resolved == version]
+    if exact:
+        return min(exact)
+    return min((line for line, _ in lines), default=None)

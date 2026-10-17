@@ -2961,12 +2961,17 @@ _r(
 
 _r(
     "AAK-LEGAL-001",
-    "Copyleft license (AGPL/SSPL) in dependency",
-    "A dependency uses a copyleft license (AGPL, SSPL) that may impose obligations "
-    "on your project.",
+    "Copyleft license (AGPL, SSPL, GPL-3 or EUPL) declared in package.json",
+    "A package.json in the project declares a copyleft license (AGPL, SSPL, GPL-3 "
+    "or EUPL) in its `license` field. The rule reads the project's own manifests, "
+    "not the dependencies it installs. Distributing that package, or offering it "
+    "as a network service under AGPL or SSPL, carries the license's obligations.",
     Severity.HIGH,
     Category.LEGAL_COMPLIANCE,
-    "Review license obligations. Consider replacing with permissively-licensed alternatives.",
+    "Confirm that the declared license is the one the package should ship under, "
+    "and that its obligations suit how the project is distributed or hosted. "
+    "Installed dependencies are not checked here: run a license checker over the "
+    "resolved dependency tree for those.",
     sarif_name="CopyleftLicenseDep",
     limitations=(
         "Reads the `license` field of each `package.json` in the scanned tree and "
@@ -2978,11 +2983,14 @@ _r(
 
 _r(
     "AAK-LEGAL-002",
-    "Dependency with no declared license",
-    "A dependency has no declared license, creating legal uncertainty about usage rights.",
+    "package.json declares no license",
+    "A package.json in the project has no `license` field, so the package states no "
+    "terms under which others may use it. The rule reads the project's own "
+    "manifests, not the dependencies it installs.",
     Severity.MEDIUM,
     Category.LEGAL_COMPLIANCE,
-    "Contact the maintainer to clarify licensing or replace with a properly licensed alternative.",
+    "Add a `license` field to the package.json: an SPDX identifier such as `MIT`, "
+    "or `UNLICENSED` for a private package that grants no rights to others.",
     sarif_name="NoLicenseDep",
     limitations=(
         "Reads the `license` key of each `package.json` in the scanned tree and "
@@ -4367,10 +4375,16 @@ _r(
     owasp_agentic_references=["ASI02"],
     adversa_references=["ADV-SUPPLY-05"],
     limitations=(
-        "Compares a plugin's `permissions` list with six exact strings: `fs:*`, "
-        "`shell:exec`, `network:*`, `credentials:*`, `env:*` and `*:*`. The same "
-        "grant spelled another way (`shell:*`, a bare `*`), in another case "
-        "(`SHELL:EXEC`), or given as an object instead of a list is not reported."
+        "Reads the `permissions` of each plugin entry in a marketplace.json, as a "
+        "list of `scope:action` strings, one such string, or an object from scope "
+        "to an action, a list of actions or `true` (every action), and reports a "
+        "grant that covers `fs:*`, `shell:exec`, `network:*`, `credentials:*`, "
+        "`env:*` or `*:*`: case is ignored, a `*` on either side stands for every "
+        "scope or action, and a bare `*` is `*:*`. A narrower grant on one of those "
+        "scopes (`fs:write`, `credentials:read`), a grant that covers none of the "
+        "six (`*:read` reads every scope but is not one), a string with no colon "
+        "(`network`), and permissions declared in a plugin's own "
+        "`.claude-plugin/plugin.json` are not reported."
     ),
 )
 
@@ -5787,14 +5801,16 @@ _r(
     "AAK-SEC-MD-001",
     "MCP server repo missing SECURITY.md or security_contact",
     "A repository whose name or pyproject keywords declare it as an "
-    "MCP server ships without a top-level SECURITY.md AND without a "
+    "MCP server ships no SECURITY.md in the root, `docs/` or `.github/` "
+    "(the three folders GitHub reads a security policy from) AND no "
     "`security_contact` entry in marketplace.json / pyproject.toml / "
     "package.json. Anthropic's April 2026 SECURITY.md guidance makes "
     "this the baseline expectation so researchers have a channel.",
     Severity.LOW,
     Category.SUPPLY_CHAIN,
-    "Add SECURITY.md at the repo root with a disclosure email and "
-    "response SLA; OR add `security_contact` to the project manifest.",
+    "Add SECURITY.md with a disclosure email and response SLA at the "
+    "repo root, in `docs/` or in `.github/`; OR add `security_contact` "
+    "to the project manifest.",
     sarif_name="McpServerNoSecurityMd",
     owasp_mcp_references=["MCP04:2025"],
     owasp_agentic_references=["ASI04"],
@@ -7025,7 +7041,10 @@ _r(
         "reported. The source pattern is same-file co-occurrence of an Atlassian "
         "client, a Jira/Confluence field and a sink, not data flow, and it never "
         "reads mcp-atlassian's own code."
-        " A lockfile over 32 MiB is not read."
+        " The `ghcr.io/sooperset/mcp-atlassian` image is read at a version tag (a "
+        "`docker run` argument in an MCP config, an `image:` value, a Dockerfile "
+        "`FROM` or Helm values); an untagged, `latest` or digest reference is not "
+        "reported. A lockfile over 32 MiB is not read."
     ),
 )
 
@@ -7057,7 +7076,10 @@ _r(
         "install and a lockfile's separate name and version lines are not "
         "reported. The source pattern is same-file co-occurrence of an Atlassian "
         "client, a Jira/Confluence field and a write sink, not data flow."
-        " A lockfile over 32 MiB is not read."
+        " The `ghcr.io/sooperset/mcp-atlassian` image is read at a version tag (a "
+        "`docker run` argument in an MCP config, an `image:` value, a Dockerfile "
+        "`FROM` or Helm values); an untagged, `latest` or digest reference is not "
+        "reported. A lockfile over 32 MiB is not read."
     ),
 )
 
@@ -7106,13 +7128,14 @@ _r(
 _r(
     "AAK-MCP-INSPECTOR-CVE-2026-23744-001",
     "Vendored mcpjam-inspector fork carries CVE-2026-23744",
-    "CVE-2026-23744 (CVSS 9.8) in mcp-inspector ≤ 1.4.2. The "
-    "preset-only entry from v0.3.5 caught configured presence; this "
-    "rule catches forks that vendored or `node_modules`-pinned the "
-    "vulnerable code regardless of declared dependency. Path-match on "
-    "`vendor/mcpjam-inspector/**`, `node_modules/@mcpjam/inspector/**`, "
-    "any `**/mcpjam-inspector/**` plus the unique "
-    "`inspectorServer.handle(...)` call shape.",
+    "CVE-2026-23744 (CVSS 9.8): MCPJam Inspector (`@mcpjam/inspector`) 1.4.2 "
+    "and earlier listens on 0.0.0.0, and a crafted HTTP request makes it "
+    "install and run an MCP server, so anyone who can reach the port runs "
+    "code. The preset-only entry from v0.3.5 caught configured presence; this "
+    "rule catches a copy of the package in the tree, installed under "
+    "`node_modules/@mcpjam/inspector/` or vendored in a `*mcpjam-inspector*` "
+    "directory, and judges it by the version its own package.json states. It "
+    "also reports the `inspectorServer.handle(...)` call shape anywhere else.",
     Severity.CRITICAL,
     Category.SUPPLY_CHAIN,
     "Bump `@mcpjam/inspector` to >= 1.4.3 in package.json AND remove "
@@ -7125,13 +7148,17 @@ _r(
     adversa_references=["ADV-SUPPLY-04"],
     incident_references=["MCPJAM-INSPECTOR-2026-04"],
     limitations=(
-        "Reads files with a .ts, .tsx, .js, .mjs or .cjs extension and reports one "
-        "whose path contains `mcpjam-inspector` or `@mcpjam/inspector`, or whose "
-        "text calls `inspectorServer.handle(`, at any version, a patched one "
-        "included. It never reads package.json, a lockfile or an `npx` launcher, so "
-        "`@mcpjam/inspector` 1.4.2 declared as a dependency, the case the "
-        "remediation tells you to bump, is not reported when the code is not in the "
-        "scanned tree."
+        "Reports a copy of the package, a `node_modules/@mcpjam/inspector/` "
+        "directory or one whose name contains `mcpjam-inspector` holding .ts, .tsx, "
+        ".js, .mjs or .cjs files, once per copy, unless the copy's package.json "
+        "names `@mcpjam/inspector` at 1.4.3 or later. A copy with no such "
+        "package.json (a fork renamed to its own numbering, or none at all) is "
+        "reported at any version. Outside a copy, a file is reported only when it "
+        "calls `inspectorServer.handle(`, which the published package does not "
+        "contain. It never reads a dependency declaration, a lockfile or an `npx` "
+        "launcher, so `@mcpjam/inspector` 1.4.2 declared as a dependency, the case "
+        "the remediation tells you to bump, is not reported when the code is not in "
+        "the scanned tree."
     ),
 )
 
@@ -9798,8 +9825,12 @@ _r(
         "version. The dependency is not read when it is declared in a sub-directory "
         "manifest (`packages/app/package.json`), in `.cursor/mcp.json` or "
         "`.vscode/mcp.json`, or in a lockfile format the reader does not parse (a "
-        "Yarn 2+ `yarn.lock`). A file over 2 MB, or a lockfile over 32 MiB, is not "
-        "read."
+        "Yarn 2+ `yarn.lock`). The `ghcr.io/czlonkowski/n8n-mcp` and "
+        "`ghcr.io/czlonkowski/n8n-mcp-railway` images are read at a version tag (a "
+        "`docker run` argument in an MCP config, an `image:` value, a Dockerfile "
+        "`FROM` or Helm values); an untagged, `latest` or digest reference is not "
+        "reported, whichever release it resolves to. A file over 2 MB, or a lockfile "
+        "over 32 MiB, is not read."
     ),
 )
 
@@ -9969,7 +10000,8 @@ _r(
 
 _r(
     "AAK-MCP-WHATSAPP-CVE-2026-46555-001",
-    "whatsapp-mcp < 0.2.1 (unauthenticated loopback bridge + media_path traversal → file exfil)",
+    "WhatsApp MCP (verygoodplugins/whatsapp-mcp) below 0.2.1 (unauthenticated loopback bridge + "
+    "media_path traversal → file exfil)",
     "The WhatsApp MCP Server's `whatsapp-bridge` HTTP API before 0.2.1 listens on "
     "127.0.0.1:8080 with no authentication and no Host-header validation, and its "
     "`/api/send` endpoint accepts an absolute `media_path` with no directory "
@@ -9980,28 +10012,40 @@ _r(
     "dotfiles) as document attachments; the missing Host validation also enables "
     "DNS-rebinding from a visited webpage (CVE-2026-46555, CVSS 7.7). Fixed in "
     "0.2.1, which adds required bearer-token auth, a Host allow-list, and "
-    "media_path confinement. Treat < 0.2.1 (or unpinned) as exposed.",
+    "media_path confinement. The project is the GitHub repository "
+    "verygoodplugins/whatsapp-mcp, which ships as a clone and release assets and "
+    "on no registry; npm's and PyPI's `whatsapp-mcp` are other projects. A "
+    "reference to the repository that names an earlier release is reported.",
     Severity.HIGH,
     Category.SUPPLY_CHAIN,
-    "Upgrade whatsapp-mcp to >= 0.2.1 and pin it. Require the bridge bearer token on "
-    "all requests, enable Host-header allow-listing, and confine `media_path` to a "
-    "configured root (reject absolute paths and `..`). Do not run the bridge next to "
-    "untrusted local MCP servers, browser extensions, or other untrusted processes.",
+    "Update the verygoodplugins/whatsapp-mcp checkout or release to v0.2.1 or later "
+    "and pin that tag, then restart both the bridge and the MCP server so the server "
+    "reads the bridge token. Require the bridge bearer token on all requests, enable "
+    "Host-header allow-listing, and confine `media_path` to a configured root "
+    "(reject absolute paths and `..`). Do not run the bridge next to untrusted local "
+    "MCP servers, browser extensions, or other untrusted processes.",
     sarif_name="WhatsAppMcpUnauthBridgeTraversal",
     cve_references=["CVE-2026-46555"],
     owasp_mcp_references=["MCP04:2025", "MCP07:2025"],
     owasp_agentic_references=["ASI02", "ASI04"],
     adversa_references=["ADV-AUTH-01"],
     limitations=(
-        "Reads `whatsapp-mcp` in requirements*.txt at any depth and, at the project "
-        "root only, in pyproject.toml, Pipfile, package.json, .mcp.json, mcp.json, "
-        "claude_desktop_config.json and the Pipfile.lock, poetry.lock, uv.lock, "
-        "package-lock.json, pnpm-lock.yaml and yarn.lock lockfiles, taking the "
-        "lowest version a range allows and reporting a reference that states no "
-        "version. The dependency is not read when it is declared in a sub-directory "
-        "manifest (`services/api/pyproject.toml`), in `.cursor/mcp.json` or "
-        "`.vscode/mcp.json`, or in a lockfile format the reader does not parse "
-        "(`pdm.lock`). A file over 2 MB, or a lockfile over 32 MiB, is not read."
+        "Reads a reference to `github.com/verygoodplugins/whatsapp-mcp` that names "
+        "a release below v0.2.1: a git URL with `@v0.2.0` or `@refs/tags/v0.2.0`, a "
+        "lockfile's git source with `rev=` or `tag=`, a `/releases/download/` asset "
+        "or an `/archive/` tarball, and a `tag`, `rev`, `ref` or `reference` key "
+        "beside a `git` or `url` key that names the repository (uv sources, Poetry, "
+        "Pipfile, poetry.lock). It reads requirements*.txt, `*.mcp.yaml` and "
+        "`*.mcp.yml` at any depth and, at the project root only, pyproject.toml, "
+        "Pipfile, package.json, .mcp.json, mcp.json, claude_desktop_config.json and "
+        "the Pipfile.lock, poetry.lock, uv.lock, package-lock.json, pnpm-lock.yaml "
+        "and yarn.lock lockfiles. The install the project's README documents, a "
+        "clone run with `uv --directory <path> run main.py`, states no version and "
+        "is not reported, and neither is a reference by commit or branch, or one in "
+        "`.cursor/mcp.json`, `.vscode/mcp.json`, a sub-directory manifest "
+        "(`services/api/pyproject.toml`) or `pdm.lock`. npm's and PyPI's "
+        "`whatsapp-mcp`, and PyPI's `whatsapp-mcp-server`, are other projects and "
+        "are not read. A file over 2 MB, or a lockfile over 32 MiB, is not read."
     ),
 )
 
@@ -10918,9 +10962,11 @@ _r(
         "lockfiles, taking the lowest version a range allows and reporting a "
         "reference that states no version; it is not read when declared in a "
         "sub-directory manifest (`services/api/pyproject.toml`), in "
-        "`.cursor/mcp.json` or `.vscode/mcp.json`, or in `pdm.lock`, and the "
-        "`ghcr.io/sooperset/mcp-atlassian` image tag of an MCP config that starts it "
-        "with `docker run` is not read either. The source arm reads Python files "
+        "`.cursor/mcp.json` or `.vscode/mcp.json`, or in `pdm.lock`. The "
+        "`ghcr.io/sooperset/mcp-atlassian` image is read at a version tag (a `docker "
+        "run` argument in an MCP config, an `image:` value, a Dockerfile `FROM` or "
+        "Helm values); an untagged, `latest` or digest reference is not reported. "
+        "The source arm reads Python files "
         "that define a `confluence_upload_attachment` or `_upload_attachment_direct` "
         "handler and open `file_path`, `filepath`, `attachment_path` or `path` in "
         "`rb` mode with no path-validation call, so a copy that opens the path under "
@@ -13205,18 +13251,19 @@ _r(
     "confine the `path` argument of the `code.find` MCP tool to the project root, "
     "so an agent session supplies an absolute path or traversal sequence and "
     "retrieves full file contents from anywhere the server process can read. "
-    "0.33.0 is the newest published release (npm, 2026-09-05) and is itself in the "
-    "affected range, so **there is no fix floor to upgrade to** and this pin is "
-    "presence-only: it fires on any referenced version. That is the permanent "
-    "state until upstream ships a fix, not a placeholder — the same shape as the "
-    "`postgres-mcp` and `mcp-florence2` pins in this table.",
+    "Its advisory (GHSA-5cj9-fcqq-g2h7) names no patched version, and the releases "
+    "published since 0.33.0 are not confirmed fixed, so **there is no fix floor to "
+    "upgrade to** and this pin is presence-only: it fires on any referenced "
+    "version. That holds until upstream names a fixed release, and is not a "
+    "placeholder — the same shape as the `postgres-mcp` and `mcp-florence2` pins in "
+    "this table.",
     Severity.HIGH,
     Category.SUPPLY_CHAIN,
-    "No fixed release exists: 0.33.0 is the newest and is affected. Until upstream "
-    "ships one, run `knowns` against a directory that contains nothing the agent "
-    "session should not read, or drop it. When a fix lands, upgrade past 0.33.0 and "
-    "pin it. The upstream fix has to resolve every path taken from a tool argument "
-    "and reject any result that escapes the project root before opening it.",
+    "No release is confirmed fixed. Until upstream names one, run `knowns` against "
+    "a directory that contains nothing the agent session should not read, or drop "
+    "it. When a fixed release is named, upgrade to it and pin it. The upstream fix "
+    "has to resolve every path taken from a tool argument and reject any result "
+    "that escapes the project root before opening it.",
     sarif_name="KnownsMcpPathTraversal",
     cve_references=["CVE-2026-86439", "CVE-2026-88938"],
     owasp_mcp_references=["MCP04:2025", "MCP05:2025"],
