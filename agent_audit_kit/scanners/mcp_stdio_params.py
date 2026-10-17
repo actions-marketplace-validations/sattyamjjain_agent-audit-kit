@@ -38,7 +38,15 @@ from pathlib import Path
 from agent_audit_kit.models import Finding
 
 from . import _ts_stdio_taint
-from ._helpers import in_skip_dir, make_finding
+from ._helpers import (
+    _JS_IDENT_CHARS,
+    _JS_OPERAND,
+    _js_regex_allowed,
+    _js_skip_regex,
+    blank_js_comments,
+    in_skip_dir,
+    make_finding,
+)
 
 
 # ---------------------------------------------------------------------------
@@ -395,29 +403,131 @@ _TS_TAINT_RE = re.compile(
 )
 
 
+# A `command:` or `args:` member of a transport's options object, quoted or not.
+_TS_SINK_KEY_RE = re.compile(r"""\s*["']?(?:command|args)["']?\s*:""")
+_TS_SINK_SPAN = 1024
+
+
+def _ts_sink_members(text: str, start: int, stop: int) -> list[str]:
+    """The top-level members of the options object a transport call opens.
+
+    Reads from `start`, just after `new StdioClientTransport(`, to the `)` that
+    closes the call, and never past `stop`. Strings, template literals and regex
+    literals are skipped whole and brackets nest, so a `,` inside `args: [a, b]`
+    does not end the member. A regex literal is told from a division the way
+    `_helpers.blank_js_comments` tells them apart, by the token before the `/`:
+    a quote inside one (`u.replace(/'/g, '')`) used to open a string that hid
+    every member after it. So a slash after a postfix `i++` or `i--` divides,
+    and so does one after any `}`: a block's brace and an object's are the same
+    token, and `if (a) {} /'/.test(s)` is read as a division. A quoted string
+    ends at an unescaped newline, as `_helpers._js_skip_quoted` ends it, so a
+    quote opened by such a misread hides only the rest of its line.
+    """
+    members: list[str] = []
+    depth = 0
+    member_start = -1
+    quote = ""
+    # The last significant character, where it is, and where the word it ends
+    # starts (-1: it ends none). The word is sliced only at a `/`, so a long
+    # identifier is not rebuilt character by character.
+    prev, last, word_start = "", -1, -1
+    i = start
+    while i < stop:
+        ch = text[i]
+        if quote:
+            if ch == "\\":
+                i += 1
+            elif ch == quote or (ch == "\n" and quote != "`"):
+                quote = ""
+                prev, word_start = _JS_OPERAND, -1
+            i += 1
+            continue
+        postfix = prev in "+-" and last > start and text[last - 1] == prev
+        if ch == "/" and not postfix and _js_regex_allowed(prev, text[word_start:last + 1] if word_start >= 0 else ""):
+            i = _js_skip_regex(text, i, stop)
+            prev, word_start = _JS_OPERAND, -1
+            continue
+        if not ch.isspace():
+            if ch not in _JS_IDENT_CHARS:
+                word_start = -1
+            elif not (last == i - 1 and prev in _JS_IDENT_CHARS and word_start >= 0):
+                word_start = i
+            prev, last = ch, i
+        if ch in "\"'`":
+            quote = ch
+        elif ch in "([{":
+            depth += 1
+            if depth == 1 and ch == "{":
+                member_start = i + 1
+        elif ch in ")]}":
+            if depth == 1 and member_start >= 0:
+                members.append(text[member_start:i])
+                member_start = -1
+            depth -= 1
+            if depth < 0:
+                break
+        elif ch == "," and depth == 1 and member_start >= 0:
+            members.append(text[member_start:i])
+            member_start = i + 1
+        i += 1
+    return members
+
+
 def _walk_ts_proximity(text: str, path: Path, project_root: Path, scanned: set[str]) -> list[Finding]:
-    """Original heuristic: a taint marker within 1024 chars before the sink.
+    """Original heuristic: a taint marker within 1024 chars before the sink,
+    or in the sink's own `command` / `args`.
 
     Retained as the fallback for when the tree-sitter grammar is unavailable, so
     the package keeps working with no new hard dependency. It both over-fires
     (an unrelated source that happens to sit nearby) and under-fires (a real
     source that reaches the sink from beyond the window).
+
+    It used to read only the 1024 characters before `new
+    StdioClientTransport(`, so the most direct shape, `{ command:
+    req.body.command }` in the transport's own options, was CRITICAL with
+    tree-sitter and silent without it, and a default install has no
+    tree-sitter. The options are read up to the next transport at most, so a
+    file of transports that never close is read once.
+
+    The transports and their options are read with comments blanked, as the
+    data-flow path parses them away: a comment before a key hid the member, an
+    apostrophe in one opened a string that ran on, a source named in one
+    counted as a value, and a commented-out transport took the next line's
+    code as its options. A member's value is judged by the data-flow path's
+    own source test, so Koa's `ctx.query` and a lower-case `process.env` name
+    count on both paths. The look-back window still reads the source as
+    written.
     """
     findings: list[Finding] = []
-    for m in _TS_STDIO_TRANSPORT_RE.finditer(text):
-        window_start = max(0, m.start() - 1024)
-        window = text[window_start : m.start()]
-        if not _TS_TAINT_RE.search(window):
-            continue
+    code = blank_js_comments(text)
+    sinks = list(_TS_STDIO_TRANSPORT_RE.finditer(code))
+    for n, m in enumerate(sinks):
+        stop = min(len(code), m.end() + _TS_SINK_SPAN)
+        if n + 1 < len(sinks):
+            stop = min(stop, sinks[n + 1].start())
+        own = any(
+            _TS_SINK_KEY_RE.match(member) and _ts_stdio_taint._is_taint_source(member)
+            for member in _ts_sink_members(code, m.end(), stop)
+        )
+        if not own:
+            window_start = max(0, m.start() - 1024)
+            window = text[window_start : m.start()]
+            if not _TS_TAINT_RE.search(window):
+                continue
         rel = str(path.relative_to(project_root))
         scanned.add(rel)
         line = text.count("\n", 0, m.start()) + 1
+        where = (
+            "has a network-controlled source (req.body / fetch / axios / "
+            "process.env / JSON.parse) written in its own command or args."
+            if own else
+            "is built shortly after a network-controlled source (req.body / "
+            "fetch / axios / process.env / JSON.parse)."
+        )
         findings.append(make_finding(
             "AAK-MCP-STDIO-CMD-INJ-002",
             rel,
-            "new StdioClientTransport({...}) is built shortly after a "
-            "network-controlled source (req.body / fetch / axios / "
-            "process.env / JSON.parse). OX MCP Apr-2026 class. "
+            f"new StdioClientTransport({{...}}) {where} OX MCP Apr-2026 class. "
             "[proximity heuristic — install tree-sitter for data-flow analysis]",
             line_number=line,
         ))

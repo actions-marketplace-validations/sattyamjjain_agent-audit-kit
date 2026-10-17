@@ -8,13 +8,15 @@ STDIO transport must add its own argv sanitizer. This scanner fires when:
 1. A dependency manifest at the project root declares the upstream SDK
    (Python / TS / Java / Rust), read by `_helpers.declares_mcp_sdk`, the gate
    AAK-MCP-STATELESS-001..004 and AAK-MCP-SAMPLING-001 share.
-2. A repo file uses a STDIO-transport API from the SDK.
-3. None of the opt-outs are present:
+2. A repo file builds a STDIO transport from the SDK (one that only names it is not read).
+3. That file carries none of the opt-outs, and the project has not accepted
+   the risk:
    - `shlex.quote` / `shlex.split` call (Python) or `execFile([...])` (Node).
    - An allow-list function (`ALLOWED_`, `WHITELIST`, `VALID_TOOLS`, ...).
    - A config opts out of STDIO (`transports=['http']` / `stdio_disabled`).
    - `.agent-audit-kit.yml` carries `accepts_stdio_risk: true` with a
-     non-empty `justification:` field (documented risk acceptance).
+     non-empty `justification:` field (documented risk acceptance, the one
+     opt-out that covers the whole project).
 """
 
 from __future__ import annotations
@@ -62,9 +64,33 @@ _SANITIZER_HINTS = (
 
 _LANG_EXTS_FOR_STDIO_MARKERS = (".py", ".ts", ".tsx", ".js", ".mjs", ".java", ".kt", ".rs")
 
+# Building a STDIO transport, as opposed to naming one. A file that only
+# imports, re-exports, types or mocks a transport (`export { StdioServerTransport }
+# from ...`, `jest.mock('.../stdio.js', ...)`) exposes nothing, and once guards
+# counted only for their own file, every such file beside a guarded server was
+# reported HIGH. A class or function of the same name is a definition, not a
+# use. The names are spelled out, with a bounded tail, because `\w*Transport\w*`
+# reads a long identifier once for every `Transport` inside it.
+_STDIO_CONSTRUCT_RE = re.compile(
+    r"""
+    (?P<definition>\b(?:class|def|function|fun|interface|type)\s+)?
+    (?:
+        \bnew\s+Stdio\w{0,48}\s*\(                         # new StdioServerTransport(  (TS/JS/Java)
+      | \bStdio(?:Server|Client)?Transport\w{0,16}\s*\(    # StdioServerTransport(...)  (Python/Kotlin)
+      | \bstdio_(?:server|client)\s*\(                      # stdio_server() / stdio_client(params)
+      | \bStdio\w{0,48}\s*::\s*new\s*\(                     # StdioTransport::new(       (Rust)
+    )
+    """,
+    re.VERBOSE,
+)
+
+
+def _constructs_stdio(text: str) -> bool:
+    return any(not m.group("definition") for m in _STDIO_CONSTRUCT_RE.finditer(text))
+
 
 def _uses_stdio(project_root: Path) -> list[Path]:
-    """Return files that contain a STDIO-transport marker."""
+    """Return files that build a STDIO transport."""
     hits: list[Path] = []
     for path in project_root.rglob("*"):
         if not path.is_file():
@@ -77,24 +103,28 @@ def _uses_stdio(project_root: Path) -> list[Path]:
             text = path.read_text(encoding="utf-8", errors="replace")
         except OSError:
             continue
-        if any(m in text for m in _STDIO_MARKERS):
+        if any(m in text for m in _STDIO_MARKERS) and _constructs_stdio(text):
             hits.append(path)
     return hits
 
 
-def _has_sanitizer_or_optout(stdio_files: list[Path]) -> bool:
-    # Global sanitizer/opt-out markers reachable anywhere in the repo.
-    for path in stdio_files:
-        try:
-            text = path.read_text(encoding="utf-8", errors="replace")
-        except OSError:
-            continue
-        if _STDIO_OPT_OUT_RE.search(text):
-            return True
-        for pat in _SANITIZER_HINTS:
-            if pat.search(text):
-                return True
-    return False
+def _has_sanitizer_or_optout(path: Path) -> bool:
+    """A sanitizer or STDIO opt-out named in this file.
+
+    This used to pool the evidence of every STDIO file in the project, so one
+    name anywhere cleared every STDIO transport, whatever the name guarded: an
+    `ALLOWED_ORIGINS` list in `src/cors.ts` silenced an unguarded
+    `StdioServerTransport` in `src/server.ts`. A guard now counts for the file
+    it is written in. A sanitizer kept in another module is not seen from
+    here, so the file that imports it is still reported.
+    """
+    try:
+        text = path.read_text(encoding="utf-8", errors="replace")
+    except OSError:
+        return False
+    if _STDIO_OPT_OUT_RE.search(text):
+        return True
+    return any(pat.search(text) for pat in _SANITIZER_HINTS)
 
 
 def _accepts_risk(project_root: Path) -> bool:
@@ -133,11 +163,10 @@ def scan(project_root: Path) -> tuple[list[Finding], set[str]]:
         scanned.add(".agent-audit-kit.yml")
         return [], scanned
 
-    if _has_sanitizer_or_optout(stdio_files):
-        return [], scanned
-
     findings: list[Finding] = []
     for path in stdio_files:
+        if _has_sanitizer_or_optout(path):
+            continue
         rel = str(path.relative_to(project_root))
         scanned.add(rel)
         findings.append(make_finding(

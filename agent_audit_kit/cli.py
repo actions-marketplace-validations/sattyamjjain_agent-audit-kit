@@ -145,7 +145,7 @@ def verify_cmd(path: str) -> None:
     """Verify MCP tool definitions against pinned hashes.
 
     Exits 1 when a tool changed, was added or was removed, 2 when the pin file
-    cannot be read, and 0 when every tool matches its pin.
+    cannot be read or the check fails, and 0 when every tool matches its pin.
     """
     from agent_audit_kit.pinning import PinFileError, verify_pins
 
@@ -156,6 +156,16 @@ def verify_cmd(path: str) -> None:
         # This printed "All tool definitions match their pins." and exited 0:
         # nothing had been compared, because the pin file did not parse.
         click.echo(f"Cannot verify: {exc}. No tool definition was compared with its pin.", err=True)
+        sys.exit(EXIT_ERROR)
+    except Exception as exc:  # noqa: BLE001
+        # A check that failed for another reason, such as an MCP config it
+        # could not decode, ended in a traceback and exit 1, the code for
+        # drift, while `watch --once` reported the same failure and exited 2.
+        click.echo(
+            f"Cannot verify: the check raised {type(exc).__name__}: {exc}. "
+            "No tool definition was compared with its pin.",
+            err=True,
+        )
         sys.exit(EXIT_ERROR)
     if not findings:
         click.echo("All tool definitions match their pins.")
@@ -558,9 +568,16 @@ def suggest_cmd(
               help="HTTP endpoint to POST a Slack-shaped JSON when drift is detected. "
                    "Falls back to $AAK_WEBHOOK_URL.")
 @click.option("--once", is_flag=True, default=False,
-              help="Run a single check and exit (useful for cron/CI).")
+              help="Run a single check and exit (useful for cron/CI): 1 on drift, "
+                   "2 when the pin file is unreadable or the check failed, 0 otherwise.")
 def watch_cmd(path: str, interval_seconds: int, webhook_url: str | None, once: bool) -> None:
-    """Continuously monitor pinned tool surface for drift (Ctrl-C to stop)."""
+    """Continuously monitor pinned tool surface for drift (Ctrl-C to stop).
+
+    With `--once`, exits as `verify` does: 1 when a tool changed, was added or
+    was removed, 2 when the pin file cannot be read or the check fails, and 0
+    otherwise. Without it, a drift is reported and the watch goes on; it exits
+    0 when stopped.
+    """
     from agent_audit_kit.watch import run_watch
 
     result = run_watch(
@@ -574,6 +591,12 @@ def watch_cmd(path: str, interval_seconds: int, webhook_url: str | None, once: b
         f"{result.unverified} not verified.",
         err=True,
     )
+    # `--once` is the form the help offers for cron and CI, and it exited 0
+    # after printing a drift, so a job built on it could never fail.
+    if once and result.drift_events:
+        sys.exit(EXIT_FINDINGS)
+    if once and result.unverified:
+        sys.exit(EXIT_ERROR)
 
 
 @cli.command("notify")

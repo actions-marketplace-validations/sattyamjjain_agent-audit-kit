@@ -5230,21 +5230,32 @@ _r(
     limitations=(
         "Reads `.md`, `.json`, `.yaml`, `.yml` and `.txt` files and matches a short "
         "phrase list: `I am a/your therapist`, `act as a/your counselor`, `provide "
-        "therapy`, `deliver psychotherapy`, `replace your therapist` and `licensed "
-        "mental health professional`. The contraction `I'm your therapist`, `acting "
-        "as your counselor` and the third-person `provides licensed therapy` or "
-        "`delivers psychotherapy` are not matched, and neither is a persona written "
-        "in a `.py` file."
+        "therapy`, `deliver psychotherapy`, `replace your therapist` (or replaces, "
+        "replaced, replacing) and `licensed mental health professional`, passing over one "
+        "with not, never, no, cannot or n't (its apostrophe straight, curly or U+02BC, or "
+        "left out of a common contraction such as `isnt`) among the four words before it, "
+        "within 200 characters, on its line and in its clause, or with `without`, `instead "
+        "of` or `rather than` directly before it (`no human`, `no clinician`, `no physician`, "
+        "`no doctor` and `not only` never count). The contraction "
+        "`I'm your therapist`, `acts as` and `acting as your counselor`, `provides` and "
+        "`providing therapy`, and `delivers` and `delivering psychotherapy` are "
+        "not matched: on 632 healthcare READMEs and docs from GitHub code search, "
+        "24 of the 459 findings they added were an AI's claim. "
+        "A claim in the second person (`You are a licensed therapist`), one with a "
+        "negation of something else among those four words (`If you are not in "
+        "crisis, I am your therapist`) and a persona written in a `.py` file are "
+        "not matched either."
     ),
 )
 
 _r(
     "AAK-HEALTHCARE-AI-002",
     "AI makes prior-authorization / medical-necessity decisions alone",
-    "Code or prompt describes an AI system making prior-authorization "
-    "or medical-necessity decisions without licensed-physician review. "
-    "Kansas, Washington, and Utah 2026 laws require a clinician in the "
-    "loop for these decisions.",
+    "A prompt, tool description, SKILL.md body or agent card in a "
+    "Markdown, JSON, YAML or text file describes an AI system making "
+    "prior-authorization or medical-necessity decisions without "
+    "licensed-physician review. Kansas, Washington, and Utah 2026 laws "
+    "require a clinician in the loop for these decisions.",
     Severity.HIGH,
     Category.LEGAL_COMPLIANCE,
     "Route every prior-auth / medical-necessity output through a "
@@ -5252,21 +5263,32 @@ _r(
     sarif_name="HealthcareAiPriorAuthSolo",
     limitations=(
         "Reads `.md`, `.json`, `.yaml`, `.yml` and `.txt` files and matches an "
-        "adverb or a `no human` phrase, a verb in its base form and a decision "
-        "object, as in `automatically approve prior authorization`. The same "
-        "decision in the third person or another form (`automatically approves "
-        "prior authorization requests`, `auto-denies medical necessity appeals`, "
-        "`with no physician review`) is not matched, and neither is a rule written "
-        "in a `.py` file."
+        "adverb or a `no human` phrase, a verb in its base form and a singular "
+        "decision object, as in `automatically approve prior authorization`, "
+        "passing over one with not, never, no, cannot or n't (its apostrophe straight, curly "
+        "or U+02BC, or left out of a common contraction such as `isnt`) among the four words "
+        "before it, within 200 characters, on its line and in its clause, or with `without`, "
+        "`instead of` or `rather than` directly before it (`no human`, `no clinician`, `no "
+        "physician`, `no doctor` and `not only` never count). The third person, the -ing form "
+        "and a plural object (`automatically approves prior authorization "
+        "requests`, `automatically deny claims`) are not matched: on 632 healthcare "
+        "READMEs and docs from GitHub code search, none of the 15 findings they "
+        "added was an AI deciding medical necessity. A "
+        "prefixed verb (`auto-denies medical necessity appeals`), a missing review "
+        "stated after the object (`with no physician review`), a decision with a "
+        "negation of something else among those four words (`If not reviewed, it "
+        "will automatically approve ...`) and a rule written in a `.py` file are "
+        "not matched either."
     ),
 )
 
 _r(
     "AAK-HEALTHCARE-AI-003",
     "AI-only insurance coverage decision",
-    "Code / prompt describes an AI system approving or denying insurance "
-    "coverage without a human in the loop. Georgia and Iowa 2026 laws "
-    "restrict AI-only coverage / benefit determinations.",
+    "A prompt, tool description, SKILL.md body or agent card in a "
+    "Markdown, JSON, YAML or text file describes an AI system approving or "
+    "denying insurance coverage without a human in the loop. Georgia and "
+    "Iowa 2026 laws restrict AI-only coverage / benefit determinations.",
     Severity.HIGH,
     Category.LEGAL_COMPLIANCE,
     "Require human sign-off on coverage decisions; disclose AI "
@@ -5275,10 +5297,15 @@ _r(
     limitations=(
         "Reads `.md`, `.json`, `.yaml`, `.yml` and `.txt` files and matches `AI`, "
         "`algorithm` or `model`, then `only`, `solely` or `alone`, a decision verb "
-        "and a singular object, as in `AI solely determines coverage`. `AI solely "
-        "denies claims` (a plural object), `AI-only coverage decisions` (a hyphen) "
-        "and `the model alone decides whether a benefit applies` (a clause in "
-        "between) are not matched."
+        "and an object, singular or plural, as in `AI solely denies claims`, "
+        "passing over one with not, never, no, cannot or n't (its apostrophe straight, curly "
+        "or U+02BC, or left out of a common contraction such as `isnt`) among the four words "
+        "before it, within 200 characters, on its line and in its clause, or with `without`, "
+        "`instead of` or `rather than` directly before it. `AI-only coverage decisions` (a "
+        "hyphen), "
+        "`the model alone decides whether a benefit applies` (a clause in between) "
+        "and a decision with a negation of something else among those four words "
+        "(`If not reviewed, the AI alone decides coverage`) are not matched."
     ),
 )
 
@@ -5296,10 +5323,12 @@ _r(
     sarif_name="HealthcareAiNoDisclosure",
     limitations=(
         "Reads `.md`, `.json`, `.yaml`, `.yml` and `.txt` files. Healthcare context "
-        "is one of nine whole words (`patient`, `clinical`, `medical`, `mental "
-        "health`, `therapy`, `diagnosis`, `symptom`, `treatment`, `medication`), so "
-        "plurals do not count: a persona about `symptoms` and `medications` is "
-        "skipped, as is one about a nurse, a prescription or a dosage."
+        "is one of nine words (`patient`, `clinical`, `medical`, `mental health`, "
+        "`therapy`, `diagnosis`, `symptom`, `treatment`, `medication`) or its "
+        "plural, except `diagnoses`, which is also a verb, and `symptoms`: on the "
+        "892-repo instruction-file slice its only match was engineering prose. A "
+        "persona about a nurse, a prescription or a dosage is skipped, as is one "
+        "that names only `diagnoses` or `symptoms`."
     ),
 )
 
@@ -5679,8 +5708,7 @@ _r(
         "`locales/fr.json`, a file of UI strings, counts as an eval for French. It "
         "recognises 30 two-letter language codes (`ta` and `te` are not among them) "
         "and finds agent configs by file name (`agent.yaml`, `crew.yaml`, "
-        "`manifest.yaml` and a few more; `config.yaml` is not read). `multilingual: "
-        "true` with no named locales is not read."
+        "`manifest.yaml` and a few more; `config.yaml` is not read)."
     ),
 )
 
@@ -6106,12 +6134,15 @@ _r(
         "Fires on a TypeScript or JavaScript file that reads a request body with "
         "`req.on('data', ...)`, `for await (... of req)` or a function called "
         "`readRequestBody` and appends chunks to a variable named body, data, buf or "
-        "chunks, with `+=` in a statement that ends with a semicolon or with "
-        "`.push(chunk)`, and has no size check. A comparison with `<`, `>`, `<=` or "
+        "chunks (a leading underscore allowed, as in `this._body`), with `+=` of a "
+        "name or of its `.toString(...)`, or with `.push(chunk)`, in code rather "
+        "than a comment, and has no size check. A comparison with `<`, `>`, `<=` or "
         "`>=` of total, length or size against a number literal anywhere in the file, "
-        "such as `parts.length > 0`, counts as a size check; an accumulator under "
-        "another name (`raw += chunk`) and a `+=` statement without its semicolon "
-        "(`body += chunk.toString() }`) are not matched."
+        "such as `parts.length > 0`, counts as a size check, and an accumulator under "
+        "another name (`raw += chunk`) is not matched. A `req.on('data', ...)` whose "
+        "first `)` comes more than 1,024 characters after the comma, as behind a long "
+        "comment in the handler, is not read as a body read; on 88,502 TS/JS files it "
+        "came at most 36 after."
     ),
 )
 
@@ -6197,12 +6228,20 @@ _r(
     incident_references=["OX-MCP-2026-04-15"],
     aicm_references=["AIS-07", "STA-08"],
     limitations=(
-        "Recognises a sanitizer or opt-out by name in any file that uses a STDIO "
-        "transport: a `shlex.quote(` or `shlex.split(` call, an `ALLOWED_*`, "
-        "`WHITELIST_*` or `VALID_TOOLS` constant, or an HTTP-only transport "
-        "setting. One such file clears every STDIO file in the project, whatever "
-        "the name guards: an `ALLOWED_ORIGINS` list in `src/cors.ts` silences an "
-        "unguarded `StdioServerTransport` in `src/server.ts`."
+        "Judges each file that builds a STDIO transport (`new StdioServerTransport(`, a "
+        "`StdioServerTransport(...)` call, `stdio_server(`, `stdio_client(` or Rust's "
+        "`StdioTransport::new(`); a file that only imports, re-exports, types or mocks one is "
+        "not read, nor is one whose builder name runs more than 48 characters past `Stdio`, "
+        "or more than 16 past `Transport` in a `StdioServerTransport(...)` call. Recognises a "
+        "sanitizer or opt-out by name in that file: a "
+        "`shlex.quote(` or `shlex.split(` call, an `ALLOWED_*`, `WHITELIST_*` or "
+        "`VALID_TOOLS` constant, or an HTTP-only transport setting. Such a name "
+        "clears its own file, whatever it guards: an `ALLOWED_ORIGINS` list in "
+        "`src/server.ts` silences an unguarded `StdioServerTransport` in the same "
+        "file. A guard kept in another module counts when the file imports it by "
+        "one of those names (`import { ALLOWED_COMMANDS } from './allow'`); one "
+        "imported under another name (`import { safeArgv } from './guard'`) is not "
+        "seen, so the file is still reported."
     ),
 )
 
@@ -6741,10 +6780,21 @@ _r(
         "StdioServerTransport(...)` counts as tainted when its command or args "
         "derive, through assignments, destructuring, template strings or one helper "
         "return, from `req.body`, `req.query`, `req.params`, `req.headers` (or the "
-        "`request` forms), `process.env`, `JSON.parse` or an awaited fetch or axios "
-        "call in that file. A config object passed in from another file "
-        "(`connect(req.body)` in routes.ts, `connect(cfg)` in client.ts) is not "
-        "followed, with or without the optional tree-sitter extra."
+        "`request`, `ctx` and `context` forms), `process.env`, `JSON.parse` or an "
+        "awaited fetch or axios call in that file. A config object passed in from "
+        "another file (`connect(req.body)` in routes.ts, `connect(cfg)` in "
+        "client.ts) is not followed, with or without the optional tree-sitter "
+        "extra. Without that extra (`agent-audit-kit[taint]`) the rule falls back "
+        "to proximity, and the evidence ends `[proximity heuristic ...]`: a "
+        "transport counts as tainted when one of those sources is written in its "
+        "own `command` or `args` within the first 1,024 characters of the call, "
+        "comments aside, or when a `req`, `request`, "
+        "upper-case `process.env`, `JSON.parse` or awaited fetch or axios source "
+        "appears anywhere in the 1024 characters before it, comments included, "
+        "whether or not it flows in. A source further back, such as a helper at the top of a "
+        "long file, is missed. The fallback reads a `/` right after a block's closing brace "
+        "as a division (`if (a) {} /'/.test(s)`), as it reads one after an object's, so a "
+        "quote in such a regex can hide the `command` and `args` after it."
     ),
 )
 
