@@ -130,11 +130,19 @@ def discover_cmd(path: str | None, verbose: bool, output_format: str) -> None:
 @click.version_option(version=__version__)
 @click.argument("path", default=".", type=click.Path(exists=True, file_okay=False, resolve_path=True))
 def pin_cmd(path: str) -> None:
-    """Pin current MCP tool definitions for rug pull detection."""
-    from agent_audit_kit.pinning import create_pins
+    """Pin current MCP tool definitions for rug pull detection.
+
+    Exits 2 when the pin file cannot be written inside the project, for
+    instance because `.agent-audit-kit` is a link that leads out of it.
+    """
+    from agent_audit_kit.pinning import PIN_FILE, PinWriteError, create_pins
 
     project_root = Path(path)
-    count = create_pins(project_root)
+    try:
+        count = create_pins(project_root)
+    except PinWriteError as exc:
+        click.echo(f"Cannot pin: {exc}. {PIN_FILE} was not written.", err=True)
+        sys.exit(EXIT_ERROR)
     click.echo(f"Pinned {count} tool definition(s) to .agent-audit-kit/tool-pins.json")
 
 
@@ -551,10 +559,12 @@ def suggest_cmd(
     for fix in fixes:
         click.echo(f"  {fix.rule_id}  {fix.file_path}", err=True)
     if not dry_run:
+        # This also said "log written to .agent-audit-kit/fix-log.json". `run_fixes`
+        # now refuses a log that would land outside the project, and says so on
+        # stderr, so the claim would contradict that line.
         click.echo(
-            "suggest: log written to .agent-audit-kit/fix-log.json. Review the "
-            "diff before committing — these are mechanical edits, not reviewed "
-            "changes.",
+            "suggest: review the diff before committing — these are mechanical "
+            "edits, not reviewed changes.",
             err=True,
         )
 
