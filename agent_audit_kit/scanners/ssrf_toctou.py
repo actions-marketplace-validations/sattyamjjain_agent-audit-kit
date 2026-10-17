@@ -33,7 +33,12 @@ the guard; names are now matched with leading underscores stripped. The body
 track still needs the guard defined in the same file as the fetch, and
 upstream's lives in another module, so the name is what finds it there.
 
-Pin check: `langchain-openai < 1.1.14`.
+Pin check: `langchain-openai < 1.1.14`. It took the first number after the
+name, so `langchain-openai<1.1.14`, which admits only affected releases, read
+as the fix and was silent, and the extras in `langchain-openai[x]==1.1.14` read
+as a name with no version and fired. Manifests and lockfiles are now read as
+the CVE pin table reads them (`_dependency_pins`), which also reads the
+Pipfile.lock the lockfile pattern listed and never matched.
 """
 
 from __future__ import annotations
@@ -44,15 +49,21 @@ from pathlib import Path
 
 from agent_audit_kit.models import Finding
 
-from ._helpers import in_skip_dir, find_line_number, make_finding
+from ._dependency_pins import (
+    DependencyPin,
+    locked_affected_versions,
+    pinned_dependency,
+    read_lockfile,
+    read_manifest,
+    read_text,
+)
+from ._helpers import in_skip_dir, make_finding
 from ._manifest_deps import MAX_LOCKFILE_BYTES
 
 
 _PY_PATCHED = (1, 1, 14)
-_SEMVER_RE = re.compile(r"[^\d]*(\d+)\.(\d+)(?:\.(\d+))?")
-_REQ_LINE_RE = re.compile(
-    r"^\s*(?P<name>[A-Za-z0-9_.\-]+)\s*(?P<op>==|>=|<=|~=|!=|>|<)?\s*(?P<ver>[0-9][0-9A-Za-z.\-+]*)?"
-)
+# A bare name is reported too, as the requirements reader always reported one.
+_PIN = DependencyPin(("langchain-openai",), _PY_PATCHED, ecosystem="py", report_unversioned=True)
 
 
 _VALIDATOR_NAMES = frozenset({
@@ -160,15 +171,6 @@ _PIN_MARKERS_RE = re.compile(
 )
 
 
-def _parse_semver(spec: str | None) -> tuple[int, int, int] | None:
-    if not spec:
-        return None
-    m = _SEMVER_RE.match(str(spec))
-    if not m:
-        return None
-    return int(m.group(1)), int(m.group(2)), int(m.group(3) or 0)
-
-
 def _attr_name(node: ast.AST) -> str | None:
     if isinstance(node, ast.Attribute):
         return node.attr
@@ -248,9 +250,8 @@ def _check_pattern(project_root: Path, scanned: set[str]) -> list[Finding]:
     for path in project_root.rglob("*.py"):
         if in_skip_dir(path, project_root):
             continue
-        try:
-            text = path.read_text(encoding="utf-8", errors="replace")
-        except OSError:
+        text = read_text(path)
+        if text is None:
             continue
         findings.extend(_walk_python(text, path, project_root, scanned))
     return findings
@@ -259,72 +260,35 @@ def _check_pattern(project_root: Path, scanned: set[str]) -> list[Finding]:
 def _check_pin(project_root: Path, scanned: set[str]) -> list[Finding]:
     findings: list[Finding] = []
 
-    def _fire(rel: str, raw: str, line: int | None) -> None:
+    def _fire(rel: str, how: str, line: int | None) -> None:
         findings.append(make_finding(
             "AAK-SSRF-TOCTOU-001",
             rel,
-            f"langchain-openai pinned at {raw!r} — CVE-2026-41488 "
-            "TOCTOU/DNS-rebind is patched in 1.1.14.",
+            f"langchain-openai {how} — "
+            "CVE-2026-41488 TOCTOU/DNS-rebind is patched in 1.1.14.",
             line_number=line,
         ))
 
-    for req in project_root.glob("requirements*.txt"):
-        try:
-            text = req.read_text(encoding="utf-8", errors="replace")
-        except OSError:
-            continue
-        rel = str(req.relative_to(project_root))
-        for lineno, line in enumerate(text.splitlines(), 1):
-            raw = line.split("#", 1)[0].strip()
-            if not raw:
-                continue
-            m = _REQ_LINE_RE.match(raw)
-            if not m:
-                continue
-            name = (m.group("name") or "").lower()
-            if name != "langchain-openai":
-                continue
-            ver = m.group("ver")
-            parsed = _parse_semver(ver)
-            if parsed is None or parsed < _PY_PATCHED:
-                scanned.add(rel)
-                _fire(rel, ver or "<no-version>", lineno)
-
-    pyproject = project_root / "pyproject.toml"
-    if pyproject.is_file():
-        try:
-            text = pyproject.read_text(encoding="utf-8", errors="replace")
-        except OSError:
-            text = ""
-        for m in re.finditer(
-            r"""['"]langchain-openai['"]?\s*[=<>~]=?\s*['"]?([0-9][0-9A-Za-z.\-+]*)['"]?""",
-            text,
-        ):
-            parsed = _parse_semver(m.group(1))
-            if parsed and parsed < _PY_PATCHED:
-                scanned.add("pyproject.toml")
-                _fire("pyproject.toml", m.group(1), find_line_number(text, m.group(0)))
+    # The root requirements files and pyproject.toml, read as the CVE pin table
+    # reads them (`_dependency_pins`).
+    manifests = sorted(project_root.glob("requirements*.txt"))
+    if (project_root / "pyproject.toml").is_file():
+        manifests.append(project_root / "pyproject.toml")
+    for path in manifests:
+        manifest = read_manifest(path)
+        hit = pinned_dependency(manifest, _PIN) if manifest is not None else None
+        if hit is not None:
+            rel = str(path.relative_to(project_root))
+            scanned.add(rel)
+            _fire(rel, f"referenced as {hit.quoted}", hit.line)
 
     for lock_name in ("poetry.lock", "Pipfile.lock", "uv.lock"):
-        lock = project_root / lock_name
-        if not lock.is_file():
-            continue
-        try:
-            if lock.stat().st_size > MAX_LOCKFILE_BYTES:
-                continue  # unread, as the pin table skips one (see MAX_LOCKFILE_BYTES)
-            text = lock.read_text(encoding="utf-8", errors="replace")
-        except OSError:
-            continue
-        for m in re.finditer(
-            r"""(?:name|package)\s*=\s*['"]langchain-openai['"][^\n]*\n[^\n]*?version\s*=\s*['"]([0-9][0-9A-Za-z.\-+]*)['"]""",
-            text,
-            re.IGNORECASE,
-        ):
-            parsed = _parse_semver(m.group(1))
-            if parsed and parsed < _PY_PATCHED:
-                rel = lock_name
-                scanned.add(rel)
-                _fire(rel, m.group(1), find_line_number(text, m.group(0)))
+        # None when absent, unreadable or over MAX_LOCKFILE_BYTES, which the pin table skips too.
+        lockfile = read_lockfile(project_root / lock_name, MAX_LOCKFILE_BYTES)
+        affected = locked_affected_versions(lockfile, _PIN) if lockfile is not None else []
+        if affected:
+            scanned.add(lock_name)
+            _fire(lock_name, f"pinned at {'.'.join(str(n) for n in affected[0])!r}", None)
 
     return findings
 

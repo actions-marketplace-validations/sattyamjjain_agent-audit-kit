@@ -1,32 +1,36 @@
 """AAK-SPLUNK-TOKLOG-001 — token-shaped values in log sinks.
 
-CVE-2026-20205 (splunk-mcp-server < 1.0.3) logged session tokens into
-the Splunk `_internal` index in cleartext. The pattern generalises:
+CVE-2026-20205 (the Splunk MCP Server app below 1.0.3) logged session
+tokens into the Splunk `_internal` index in cleartext. The pattern generalises:
 any `logger.info|warn|error` or `print` whose interpolated argument
 matches a Bearer / JWT / `splunkd_session` / `st-*` shape is a token
 leak into whatever the log sink is wired to.
 
-Two detections:
+One detection, and no version pin:
 
 1. Pattern: log-sink call (Python / TS / JS) whose argument contains a
    token-shaped literal or writes the value of a credential-named variable,
    attribute or key (`access_token`, `client_secret`, `headers["Authorization"]`).
-2. Pin check: `splunk-mcp-server < 1.0.3` in Python / npm manifests.
+
+The module used to pin `splunk-mcp-server` below 1.0.3 in Python and npm
+manifests, which could only match the wrong package. CVE-2026-20205 names the
+Splunk MCP Server app (Splunkbase app 7931, `Splunk_MCP_Server`; Splunk's
+SVD-2026-0407), which installs into Splunk, not from a package registry. On
+2026-10-17 PyPI had no `splunk-mcp-server`, and npm's, 0.1.1 since 2026-03-09
+with no repository, is an unrelated MCP server for Splunk's REST API, every
+release of which read as affected. The pin is gone; the app's version, in its
+`default/app.conf`, is not read.
 """
 
 from __future__ import annotations
 
-import json
 import re
 from bisect import bisect_left
 from pathlib import Path
 
 from agent_audit_kit.models import Finding
 
-from ._helpers import in_skip_dir, find_line_number, make_finding
-
-_SPLUNK_PATCHED = (1, 0, 3)
-_SEMVER_RE = re.compile(r"[^\d]*(\d+)\.(\d+)(?:\.(\d+))?")
+from ._helpers import in_skip_dir, make_finding
 
 # A log-level call on any receiver; `_is_logger_receiver` decides whether the receiver
 # is a logger. The receiver used to be part of this pattern, as `\b(?:logger|logging|
@@ -156,15 +160,6 @@ _REDACT_HINTS_RE = re.compile(
 _PY_EXTS = (".py",)
 _JS_EXTS = (".ts", ".tsx", ".js", ".mjs", ".cjs")
 _JAVA_EXTS = (".java", ".kt")
-
-
-def _parse_semver(spec: str | None) -> tuple[int, int, int] | None:
-    if not spec:
-        return None
-    m = _SEMVER_RE.match(str(spec))
-    if not m:
-        return None
-    return int(m.group(1)), int(m.group(2)), int(m.group(3) or 0)
 
 
 def _identifier_start(text: str, end: int, lo: int) -> int:
@@ -470,89 +465,8 @@ def _check_pattern(project_root: Path, scanned: set[str]) -> list[Finding]:
     return findings
 
 
-def _check_splunk_pin(project_root: Path, scanned: set[str]) -> list[Finding]:
-    findings: list[Finding] = []
-
-    for req in project_root.glob("requirements*.txt"):
-        try:
-            text = req.read_text(encoding="utf-8", errors="replace")
-        except OSError:
-            continue
-        rel = str(req.relative_to(project_root))
-        scanned.add(rel)
-        for lineno, line in enumerate(text.splitlines(), 1):
-            raw = line.split("#", 1)[0].strip()
-            if not raw:
-                continue
-            m = re.match(
-                r"^(splunk[_-]mcp[_-]server)\s*(==|<=|<|~=)\s*([0-9][0-9A-Za-z.\-+]*)\s*$",
-                raw,
-                re.IGNORECASE,
-            )
-            if not m:
-                continue
-            parsed = _parse_semver(m.group(3))
-            if parsed and parsed < _SPLUNK_PATCHED:
-                findings.append(make_finding(
-                    "AAK-SPLUNK-TOKLOG-001",
-                    rel,
-                    f"splunk-mcp-server pinned at {m.group(2)}{m.group(3)} — "
-                    "CVE-2026-20205 fixed in 1.0.3.",
-                    line_number=lineno,
-                ))
-
-    pyproject = project_root / "pyproject.toml"
-    if pyproject.is_file():
-        try:
-            text = pyproject.read_text(encoding="utf-8", errors="replace")
-        except OSError:
-            text = ""
-        for m in re.finditer(
-            r"""['"]splunk[-_]mcp[-_]server['"]?\s*[=<>~]=?\s*['"]?([0-9][0-9A-Za-z.\-+]*)['"]?""",
-            text,
-            re.IGNORECASE,
-        ):
-            parsed = _parse_semver(m.group(1))
-            if parsed and parsed < _SPLUNK_PATCHED:
-                findings.append(make_finding(
-                    "AAK-SPLUNK-TOKLOG-001",
-                    "pyproject.toml",
-                    f"splunk-mcp-server pinned at {m.group(1)} in pyproject.toml — "
-                    "CVE-2026-20205 fixed in 1.0.3.",
-                    line_number=find_line_number(text, m.group(0)),
-                ))
-                scanned.add("pyproject.toml")
-
-    pkg = project_root / "package.json"
-    if pkg.is_file():
-        try:
-            data = json.loads(pkg.read_text(encoding="utf-8", errors="replace"))
-        except json.JSONDecodeError:
-            data = {}
-        if isinstance(data, dict):
-            for section in ("dependencies", "devDependencies"):
-                deps = data.get(section) or {}
-                if not isinstance(deps, dict):
-                    continue
-                spec = deps.get("splunk-mcp-server")
-                if not spec:
-                    continue
-                parsed = _parse_semver(str(spec))
-                if parsed and parsed < _SPLUNK_PATCHED:
-                    findings.append(make_finding(
-                        "AAK-SPLUNK-TOKLOG-001",
-                        "package.json",
-                        f"splunk-mcp-server pinned at {spec!r} in {section} — "
-                        "CVE-2026-20205 fixed in 1.0.3.",
-                    ))
-                    scanned.add("package.json")
-
-    return findings
-
-
 def scan(project_root: Path) -> tuple[list[Finding], set[str]]:
     scanned: set[str] = set()
     findings: list[Finding] = []
     findings.extend(_check_pattern(project_root, scanned))
-    findings.extend(_check_splunk_pin(project_root, scanned))
     return findings, scanned

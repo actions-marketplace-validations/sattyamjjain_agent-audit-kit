@@ -90,6 +90,10 @@ def _partial(token: str) -> tuple[list[int], bool] | None:
     `1.2.3` is ([1, 2, 3], False), `1.2` is ([1, 2], False), `1.x` is ([1], True)
     and `*` is ([], True). A wildcard ends the numeric components, so `1.x.3` is
     `1.x`. A fourth component or a pre-release tail is accepted and ignored.
+    PEP 440 allows `.*` after any number of release components, so `1.2.3.*` and
+    `1.2.3.4.*` are ([1, 2, 3], True). The wildcard used to count only among the
+    first three, so `==1.22.0.*` was no version at all, and `mcp>=1.0,!=1.22.0.*`
+    read as unpinned.
     """
     text = token
     if not text or len(text) > _MAX_TOKEN:
@@ -119,6 +123,15 @@ def _partial(token: str) -> tuple[list[int], bool] | None:
         if i == start:
             return None
         parts.append(int(text[start:i]))
+    if not wild:
+        j = i
+        while j + 1 < n and text[j] == "." and _is_digit(text[j + 1]):
+            j += 1
+            while j < n and _is_digit(text[j]):
+                j += 1
+        if text[j:] == ".*":
+            wild = True
+            i = n
     if not parts and not wild:
         return None
     if not _valid_tail(text[i:]):
@@ -160,13 +173,66 @@ def union(spans: list[Span] | Spans) -> Spans:
 
 
 def intersect(a: Spans, b: Spans) -> Spans:
+    """The versions both admit, in one merge pass over two sorted span tuples.
+
+    Every `Spans` this module returns is sorted, disjoint and merged, so the
+    pieces come out in order. Comparing every span of `a` with every span of
+    `b` cost their product, which a crafted range made the square of its
+    length (see `_conjunction`).
+    """
     out: list[Span] = []
-    for a_lo, a_hi in a:
-        for b_lo, b_hi in b:
-            lo, hi = max(a_lo, b_lo), min(a_hi, b_hi)
-            if lo < hi:
-                out.append((lo, hi))
+    i = j = 0
+    while i < len(a) and j < len(b):
+        lo, hi = max(a[i][0], b[j][0]), min(a[i][1], b[j][1])
+        if lo < hi:
+            out.append((lo, hi))
+        if a[i][1] < b[j][1]:
+            i += 1
+        else:
+            j += 1
     return union(out)
+
+
+def intersect_all(sets: list[Spans]) -> Spans:
+    """The versions every one of `sets` admits, in one sorted sweep.
+
+    Intersecting one set at a time rebuilds a result that can grow with each
+    set, so a manifest declaring one package 8,000 times, each line excluding
+    another release, took 38 s. Here every span is an event, and a version is
+    admitted where all of the sets cover it.
+    """
+    if not sets:
+        return ANY
+    events: list[tuple[Ver, int]] = []
+    for spans in sets:
+        for lo, hi in spans:
+            events.append((lo, 1))
+            events.append((hi, -1))
+    # At one version an end sorts before a start, since a span stops short of its end.
+    events.sort()
+    out: list[Span] = []
+    depth = 0
+    start = ZERO
+    for version, step in events:
+        depth += step
+        if step == 1 and depth == len(sets):
+            start = version
+        elif step == -1 and depth == len(sets) - 1 and start < version:
+            out.append((start, version))
+    return union(out)
+
+
+def _complement(spans: Spans) -> Spans:
+    """Every version `spans` does not admit; `spans` is sorted and merged."""
+    out: list[Span] = []
+    lo = ZERO
+    for s_lo, s_hi in spans:
+        if lo < s_lo:
+            out.append((lo, s_lo))
+        lo = max(lo, s_hi)
+    if lo < TOP:
+        out.append((lo, TOP))
+    return tuple(out)
 
 
 def admits(spans: Spans, lo: Ver, hi: Ver) -> bool:
@@ -232,11 +298,7 @@ def _comparator(op: str, token: str, dialect: str) -> Spans | None:
     if op in ("", "=", "==", "==="):
         return _equal(parts, wild, op, dialect)
     if op == "!=":
-        excluded = _equal(parts, wild, "==", dialect)
-        if not excluded:
-            return ANY
-        ex_lo, ex_hi = excluded[0]
-        return union(list(_span(ZERO, ex_lo) + _span(ex_hi, TOP)))
+        return _complement(_equal(parts, wild, "==", dialect))
     if op == ">=":
         return _span(_pad(parts), TOP)
     if op == ">":
@@ -300,14 +362,26 @@ def _conjunction(text: str, dialect: str) -> Spans | None:
     if not clauses:
         return None
     result: Spans = ANY
+    removed: list[Span] = []
     for clause in clauses:
         op, token = _split_operator(clause)
         if dialect == "pep440" and op in ("^", "~"):
             return None
+        if op == "!=":
+            # What a `!=` removes is taken out once, after the loop. One at a time,
+            # each exclusion split a span in two and the next intersection read
+            # every piece, so 16,000 of them (180 KB on one line) took 82 s.
+            parsed = _partial(token)
+            if parsed is None:
+                return None
+            removed.extend(_equal(parsed[0], parsed[1], "==", dialect))
+            continue
         spans = _comparator(op, token, dialect)
         if spans is None:
             return None
         result = intersect(result, spans)
+    if removed:
+        result = intersect(result, _complement(union(removed)))
     return result
 
 
