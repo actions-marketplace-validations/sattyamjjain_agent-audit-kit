@@ -35,8 +35,9 @@ vulnerable version.
 
 from __future__ import annotations
 
+import functools
+import itertools
 import re
-import shlex
 from dataclasses import dataclass
 
 from agent_audit_kit.redaction import is_secret_option
@@ -126,15 +127,182 @@ def shell_tokens(line: str) -> list[str]:
     """Split a shell command line into words and control operators.
 
     `#` is not a comment here: it opens the commit fragment of
-    `github:org/repo#sha`. An unbalanced quote falls back to whitespace.
+    `github:org/repo#sha`. An unbalanced quote, or a backslash with nothing
+    after it, falls back to whitespace.
+
+    This is `shlex.shlex(line, posix=True, punctuation_chars=True)` with
+    `whitespace_split` on and no comment characters, which it used to call;
+    `shell_words` says why it no longer does.
     """
-    lexer = shlex.shlex(line, posix=True, punctuation_chars=True)
-    lexer.whitespace_split = True
-    lexer.commenters = ""
-    try:
-        return list(lexer)
-    except ValueError:
-        return line.split()
+    return shell_words(line, punctuation="();<>|&", whitespace=" \t\r\n", commenters="")
+
+
+def shell_words(line: str, *, punctuation: str, whitespace: str, commenters: str) -> list[str]:
+    """Split `line` exactly as a posix shlex lexer with `whitespace_split` on would.
+
+    That is `shlex.shlex(line, posix=True, punctuation_chars=punctuation)` with
+    its `whitespace` and `commenters` set to these, falling back to
+    `line.split()` where shlex raises (an unclosed quote, or a backslash with
+    nothing after it), as both callers did. `tests/test_shell_tokens.py` checks
+    both callers' settings against shlex itself.
+
+    shlex grows each token one character at a time, `self.token += nextchar` on
+    an attribute, which CPython cannot extend in place, so a word of n
+    characters cost about n squared: a package.json script of one 1 MB word
+    took 11 s to read, the CVE pin table reads package.json scripts and MCP
+    config arguments up to 2 MB, and hook_injection splits hook commands up to
+    1 MB. This reads the same grammar in runs, found with regular expressions
+    and joined once, so the cost grows with the length of the line. A length
+    cut-over to `str.split()` would have been faster still, but then padding a
+    line would change how a quoted or operator-glued word splits.
+
+    Args:
+        line: The text to split.
+        punctuation: shlex's `punctuation_chars`; a run of them is one token.
+        whitespace: shlex's `whitespace`.
+        commenters: shlex's `commenters`; one starts a comment that runs
+            through the next newline, outside quotes.
+
+    Returns:
+        The tokens, with quotes removed and escapes applied.
+    """
+    tokens = _shell_split(line, _shell_syntax(punctuation, whitespace, commenters))
+    return line.split() if tokens is None else tokens
+
+
+@dataclass(frozen=True)
+class _ShellSyntax:
+    """A lexer's character classes, with the patterns that find their runs."""
+
+    whitespace: frozenset[str]
+    punctuation: frozenset[str]
+    commenters: frozenset[str]
+    blank_run: re.Pattern[str]
+    operator_run: re.Pattern[str]
+    word_stop: re.Pattern[str]
+
+
+# shlex's quotes and escape in posix mode. The backslash escapes anything outside
+# quotes, nothing inside single quotes, and only itself or `"` inside double
+# quotes. Every character in none of the classes is part of a word.
+_SHELL_QUOTES = "'\""
+_SHELL_ESCAPE = "\\"
+_SHELL_DOUBLE_QUOTE_STOP = re.compile(r'["\\]')
+
+
+def _char_class(chars: str) -> str:
+    """A pattern matching one of `chars`, or nothing when there are none."""
+    return "[" + "".join(re.escape(c) for c in sorted(set(chars))) + "]" if chars else "(?!)"
+
+
+@functools.lru_cache(maxsize=None)
+def _shell_syntax(punctuation: str, whitespace: str, commenters: str) -> _ShellSyntax:
+    """The syntax for one set of settings, built once.
+
+    shlex settles a character that sits in two classes by the order of its
+    checks, and this splitter does not, so overlapping classes are refused.
+    """
+    classes = (punctuation, whitespace, commenters, _SHELL_QUOTES, _SHELL_ESCAPE)
+    for a, b in itertools.combinations(classes, 2):
+        if set(a) & set(b):
+            raise ValueError(f"shell syntax classes overlap: {sorted(set(a) & set(b))!r}")
+    return _ShellSyntax(
+        whitespace=frozenset(whitespace),
+        punctuation=frozenset(punctuation),
+        commenters=frozenset(commenters),
+        blank_run=re.compile(_char_class(whitespace) + "+"),
+        operator_run=re.compile(_char_class(punctuation) + "+"),
+        word_stop=re.compile(_char_class("".join(classes))),
+    )
+
+
+def _comment_end(line: str, i: int) -> int:
+    """The index after the newline that ends a comment at `i`, or the end.
+
+    shlex reads the rest of the line, newline included, and drops it, so a
+    newline that is punctuation is not a token after a comment.
+    """
+    newline = line.find("\n", i)
+    return len(line) if newline == -1 else newline + 1
+
+
+def _shell_split(line: str, syntax: _ShellSyntax) -> list[str] | None:
+    """The tokens shlex gives for `line`, or None where shlex raises ValueError.
+
+    A run of punctuation characters is one token (`&&`, `>&`, `);`). A word
+    runs to the next whitespace, punctuation or comment character outside
+    quotes, and an empty quoted word (`''`) is a token. A comment ends the word
+    it is in and is dropped, through its newline. shlex raises "No closing
+    quotation" for an unclosed quote and "No escaped character" for a
+    backslash at the end, inside double quotes or out.
+    """
+    tokens: list[str] = []
+    i, n = 0, len(line)
+    while True:
+        blanks = syntax.blank_run.match(line, i)
+        if blanks:
+            i = blanks.end()
+        if i == n:
+            return tokens
+        if line[i] in syntax.commenters:
+            i = _comment_end(line, i)
+            continue
+        operators = syntax.operator_run.match(line, i)
+        if operators:
+            tokens.append(operators.group())
+            i = operators.end()
+            continue
+        parts: list[str] = []
+        while i < n and line[i] not in syntax.whitespace and line[i] not in syntax.punctuation:
+            char = line[i]
+            if char in syntax.commenters:
+                i = _comment_end(line, i)
+                break
+            if char == "\\":
+                if i + 1 == n:
+                    return None
+                parts.append(line[i + 1])
+                i += 2
+            elif char == "'":
+                end = line.find("'", i + 1)
+                if end == -1:
+                    return None
+                parts.append(line[i + 1:end])
+                i = end + 1
+            elif char == '"':
+                i = _double_quoted(line, i + 1, parts)
+                if i == -1:
+                    return None
+            else:
+                stop = syntax.word_stop.search(line, i)
+                end = stop.start() if stop else n
+                parts.append(line[i:end])
+                i = end
+        tokens.append("".join(parts))
+
+
+def _double_quoted(line: str, i: int, parts: list[str]) -> int:
+    """Read a double-quoted run that opened just before `i` into `parts`.
+
+    Returns the index after the closing quote, or -1 where shlex raises. A
+    backslash keeps itself unless a backslash or a double quote follows it.
+    """
+    n = len(line)
+    while True:
+        stop = _SHELL_DOUBLE_QUOTE_STOP.search(line, i)
+        if stop is None:
+            return -1
+        j = stop.start()
+        parts.append(line[i:j])
+        if line[j] == '"':
+            return j + 1
+        if j + 1 == n:
+            return -1
+        escaped = line[j + 1]
+        if escaped not in '\\"':
+            parts.append("\\")
+        parts.append(escaped)
+        i = j + 2
 
 
 def _option(token: str) -> tuple[str, str | None]:
@@ -154,12 +322,14 @@ def _parse(
     package_options: frozenset[str],
     extra_options: frozenset[str],
     command_only: bool = False,
-) -> tuple[list[Launched], int]:
+) -> tuple[list[Launched], int, int | None]:
     """Read one invocation from `tokens[start:]`.
 
-    Returns the packages it fetches and the index just past the positional
+    Returns the packages it fetches, the index just past the positional
     argument (the package, or the command when an option named the package), so
-    the caller resumes scanning in that command's own arguments.
+    the caller resumes scanning in that command's own arguments, and the index
+    of that positional when it is a command the launcher runs rather than the
+    package it fetches (`npx -p pkg cmd`, `uv run cmd`), else None.
     """
     found: list[Launched] = []
     named_by_option = False
@@ -168,7 +338,7 @@ def _parse(
     while i < n:
         token = tokens[i]
         if token in _CONTROL:
-            return found, i
+            return found, i, None
         if not end_of_options and token == "--":
             end_of_options = True
             i += 1
@@ -190,8 +360,9 @@ def _parse(
             continue
         if not (command_only or named_by_option):
             found.append(Launched(ecosystem, token, launcher))
-        return found, i + 1
-    return found, i
+            return found, i + 1, None
+        return found, i + 1, i
+    return found, i, None
 
 
 def _uv_subcommand(tokens: list[str], start: int) -> tuple[str, int] | None:
@@ -207,7 +378,7 @@ def _uv_subcommand(tokens: list[str], start: int) -> tuple[str, int] | None:
     return None
 
 
-def _launch_at(tokens: list[str], i: int) -> tuple[list[Launched], int] | None:
+def _launch_at(tokens: list[str], i: int) -> tuple[list[Launched], int, int | None] | None:
     """Parse a launcher that starts at `tokens[i]`, or None when none does."""
     word = basename(tokens[i]).lower()
     nxt = tokens[i + 1].lower() if i + 1 < len(tokens) else ""
@@ -252,6 +423,25 @@ def invocation_packages(tokens: list[str]) -> list[Launched]:
     return hit[0] if hit else []
 
 
+def invocation(tokens: list[str]) -> tuple[list[Launched], list[str]]:
+    """The packages the launcher at `tokens[0]` fetches, and the command it runs.
+
+    The command is the argv after the packages when an option named them
+    (`npx -p pkg sh ./x.sh`, `npm exec --package=pkg -- cmd`, `uvx --from pkg
+    cmd`) or the launcher runs a command of the project's own (`uv run cmd`);
+    it is empty when the positional argument is the package itself, whose own
+    command runs (`npx pkg args`). Read as argv, as `invocation_packages` is.
+    """
+    hit = _launch_at(tokens, 0) if tokens else None
+    if hit is None:
+        return [], []
+    packages, _resume, command_at = hit
+    if command_at is None:
+        return packages, []
+    end = next((j for j in range(command_at, len(tokens)) if tokens[j] in _CONTROL), len(tokens))
+    return packages, tokens[command_at:end]
+
+
 def launched_packages(tokens: list[str], _depth: int = 0) -> list[Launched]:
     """Every package any launcher in `tokens` fetches, in order.
 
@@ -266,7 +456,7 @@ def launched_packages(tokens: list[str], _depth: int = 0) -> list[Launched]:
     while i < len(tokens):
         hit = _launch_at(tokens, i)
         if hit is not None:
-            packages, resume = hit
+            packages, resume, _command_at = hit
             found.extend(packages)
             i = max(resume, i + 1)
             continue

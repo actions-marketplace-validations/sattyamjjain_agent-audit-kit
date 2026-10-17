@@ -1,9 +1,12 @@
 from __future__ import annotations
 
+import dataclasses
 import json
 import re
 from pathlib import Path
 from typing import Any
+
+import yaml
 
 from agent_audit_kit.models import Finding
 from agent_audit_kit.scanners._helpers import (
@@ -13,8 +16,29 @@ from agent_audit_kit.scanners._helpers import (
     loads_jsonc,
     make_finding,
 )
-from agent_audit_kit.scanners._launchers import invocation_packages, launch_evidence, pin_problem
-from agent_audit_kit.scanners._manifest_deps import MAX_LOCKFILE_BYTES, MAX_MANIFEST_BYTES
+from agent_audit_kit.scanners._launchers import (
+    Launched,
+    _shell_split,
+    _shell_syntax,
+    basename,
+    invocation,
+    invocation_packages,
+    launch_evidence,
+    launched_packages,
+    npm_spec,
+    pin_problem,
+    shell_tokens,
+    starts_with_launcher,
+)
+from agent_audit_kit.scanners._manifest_deps import (
+    MAX_LOCKFILE_BYTES,
+    MAX_MANIFEST_BYTES,
+    Declaration,
+    _argv,
+    _command_entries,
+    declarations,
+)
+from agent_audit_kit.scanners._versions import parse_range, parse_version
 
 # Known vulnerable packages: ecosystem -> name -> affected version range
 # Covers npm, Python (PyPI), and Rust (crates.io)
@@ -38,23 +62,76 @@ KNOWN_VULNERABLE_PACKAGES: dict[str, dict[str, dict[str, str]]] = {
     "rust": {},
 }
 
-# Typosquat patterns for popular MCP server packages
+# Typosquat patterns for popular MCP server packages: misspellings of the
+# official scope, each one edit from `modelcontextprotocol`. Neither matches a
+# package on npm (checked 2026-10-17). A third pattern, the name shape
+# `mcp-server-<word>-<word>`, matched real servers (`mcp-server-code-runner`,
+# `@baidumap/mcp-server-baidu-map`: 37 of the first 1,000 packages npm's search
+# returns for "mcp-server"), so it reported published packages at HIGH as
+# potential typosquats and was dropped.
 TYPOSQUAT_PATTERNS = [
     re.compile(r"modelcontextprotocal", re.IGNORECASE),  # typo of "protocol"
-    re.compile(r"mcp-server-[a-z]+-[a-z]+", re.IGNORECASE),  # suspicious double-hyphen patterns
     re.compile(r"@modlecontextprotocol", re.IGNORECASE),  # typo of "model"
 ]
 
 # Install script keys in package.json
 INSTALL_SCRIPTS = {"preinstall", "postinstall", "prepare", "install"}
 
-# Network commands in install scripts
+# Network commands in install scripts. `https` joined `http`: as a whole word
+# `http` matched neither `require('https')` nor an `https://` URL.
 NETWORK_IN_SCRIPTS = re.compile(
-    r"\b(curl|wget|fetch|nc|ncat|ssh|http|axios|request)\b", re.IGNORECASE
+    r"\b(curl|wget|fetch|nc|ncat|ssh|https?|axios|request)\b", re.IGNORECASE
 )
+
+# The build tools a command of an install script may run to pass AAK-SUPPLY-003,
+# by program name (`node_modules/.bin/tsc` is `tsc`). They were matched as a text
+# prefix of the command, so `tscripts/setup.sh`, `vite-installer` and, through
+# `node`, `NODE_ENV=production sh ./evil.sh` passed. `npx` was a prefix too, so
+# any package given to it passed: a launcher is judged by the package it runs
+# instead (`_launch_is_local`). `node-gyp` and `node-gyp-build` passed as
+# prefixes of `node` and stay: npm itself runs `node-gyp rebuild` for a package
+# with a binding.gyp and no install script, and node-gyp-build builds the
+# package's own sources or loads the prebuilds it ships, fetching nothing.
+# `node-pre-gyp` and `prebuild-install`, which download a prebuilt binary from
+# a host the package.json names, are not on the list. `ts-node`, `tsx` and
+# `vite-node` run a TypeScript script as `node` runs a JavaScript one, and
+# `node <script>` passes, so they pass too; `node_modules/.bin/ts-node` passed
+# as a prefix of `node`, and `vite-node` as a prefix of `vite`.
+_SAFE_SCRIPT_TOOLS = frozenset({
+    "tsc", "node", "node-gyp", "node-gyp-build", "ts-node", "tsx", "vite-node",
+    "webpack", "rollup", "esbuild", "vite",
+})
+# A shell variable assignment before a command (`NODE_ENV=production webpack`).
+_ASSIGNMENT = re.compile(r"[A-Za-z_][A-Za-z0-9_]*=")
+# The scripts `npm run` may name to pass: `build`, or `build:<name>`.
+_BUILD_SCRIPT = re.compile(r"build(?::.+)?")
+# How deep command substitutions nested in each other are judged; one nested
+# deeper is reported unread.
+_MAX_SUBSTITUTION_DEPTH = 4
+# Words and operator runs, for a line the shell splitter gives up on.
+_FALLBACK_WORD = re.compile(r"[();<>|&]+|[^ \t\r\n();<>|&]+")
+# What ends a word for sh, so a `#` after one of these starts a comment.
+_WORD_BREAKS = frozenset(" \t\r\n;&|()<>")
+# Launchers that run a package from node_modules when it is installed and fetch
+# it only when it is not. `pnpm dlx`, `pnpx` and `yarn dlx` always fetch.
+_LOCAL_FIRST_LAUNCHERS = frozenset({"npx", "npm exec", "npm x", "bunx", "bun x"})
+# Fallbacks that run nothing (`node install.js || true`), skipped after the
+# first command unless they redirect into a file.
+_NO_OP_COMMANDS = frozenset({"true", "false", ":", "exit", "echo"})
+# The longest of 3,171 install scripts read from npm manifests and GitHub repos
+# (2026-10-17) was 578 characters. A script over this is reported without being
+# split into commands, which bounds what one crafted script costs the scan.
+_MAX_JUDGED_SCRIPT = 4096
+_SHELL_PUNCTUATION = frozenset("();<>|&")
 
 # Package fetchers for MCP config
 PACKAGE_FETCHERS = frozenset({"npx", "uvx", "bunx", "pnpx"})
+
+# The client configs AAK-SUPPLY-001 and AAK-SUPPLY-006 read, at the project root.
+# AAK-SUPPLY-006 kept a list of its own, .mcp.json and .vscode/mcp.json, so a
+# vulnerable launch in Cursor's, Amazon Q's or the root mcp.json was never looked
+# up, though AAK-SUPPLY-001 judged its pin in all five.
+_MCP_CONFIGS = (".mcp.json", ".cursor/mcp.json", ".vscode/mcp.json", ".amazonq/mcp.json", "mcp.json")
 
 
 _find_line_number = find_line_number
@@ -95,15 +172,7 @@ def _version_in_range(version: str, affected: str) -> bool:
 def _scan_mcp_configs_for_supply_chain(project_root: Path) -> list[Finding]:
     """Check MCP configs for unpinned packages (AAK-SUPPLY-001)."""
     findings: list[Finding] = []
-    mcp_files = [
-        project_root / ".mcp.json",
-        project_root / ".cursor" / "mcp.json",
-        project_root / ".vscode" / "mcp.json",
-        project_root / ".amazonq" / "mcp.json",
-        project_root / "mcp.json",
-    ]
-
-    for mcp_path in mcp_files:
+    for mcp_path in (project_root / name for name in _MCP_CONFIGS):
         if not mcp_path.is_file():
             continue
         try:
@@ -168,11 +237,12 @@ def _scan_npm_lockfile(project_root: Path) -> list[Finding]:
 
     # Check packages in lockfile v2/v3 format
     packages = data.get("packages", {})
-    if not packages:
-        # Try lockfile v1 format
+    if packages:
+        dep_count = sum(1 for key, info in packages.items() if _is_npm_dependency(key, info))
+    else:
+        # Try lockfile v1 format, which has no entry for the root package
         packages = data.get("dependencies", {})
-
-    dep_count = len(packages)
+        dep_count = len(packages)
 
     for pkg_path, pkg_info in packages.items():
         if not isinstance(pkg_info, dict):
@@ -212,6 +282,19 @@ def _scan_npm_lockfile(project_root: Path) -> list[Finding]:
     return findings
 
 
+def _is_npm_dependency(key: str, info: object) -> bool:
+    """Is a lockfile v2/v3 `packages` entry a dependency (AAK-SUPPLY-005)?
+
+    The entries are keyed by install path. The root package is the `""` entry,
+    and a workspace member is a folder entry (`packages/web`) with a `link` to it
+    under node_modules; each is the project's own package, not a dependency.
+    Counting them reported 200 dependencies as 201, so a lockfile with exactly
+    200 crossed the threshold. A package installed under a member
+    (`packages/web/node_modules/x`) is a dependency like any other.
+    """
+    return "node_modules/" in key and not (isinstance(info, dict) and info.get("link") is True)
+
+
 def _scan_package_json(project_root: Path) -> list[Finding]:
     """Check package.json for install scripts (AAK-SUPPLY-003)."""
     findings: list[Finding] = []
@@ -228,9 +311,10 @@ def _scan_package_json(project_root: Path) -> list[Finding]:
     rel_path = str(pkg_json.relative_to(project_root))
     scripts = data.get("scripts", {})
     if isinstance(scripts, dict):
+        declared = _declared_packages(data)
         for script_name, script_cmd in scripts.items():
             if script_name in INSTALL_SCRIPTS and isinstance(script_cmd, str):
-                if NETWORK_IN_SCRIPTS.search(script_cmd) or not _is_safe_script(script_cmd):
+                if _install_script_reported(script_cmd, declared):
                     findings.append(_make_finding(
                         "AAK-SUPPLY-003", rel_path,
                         f"scripts.{script_name}: {script_cmd}",
@@ -240,11 +324,240 @@ def _scan_package_json(project_root: Path) -> list[Finding]:
     return findings
 
 
-def _is_safe_script(cmd: str) -> bool:
-    """Check if an install script is likely safe (build tools only)."""
-    safe_patterns = {"tsc", "node", "npm run build", "npx", "webpack", "rollup", "esbuild", "vite"}
-    cmd_lower = cmd.strip().lower()
-    return any(cmd_lower.startswith(p) for p in safe_patterns)
+def _install_script_reported(script: str, declared: set[str], depth: int = 0) -> bool:
+    """Does an install script run something AAK-SUPPLY-003 reports?
+
+    A script that names a network word is reported, as is one too long to
+    split. Otherwise every command it runs is judged (`_command_passes`), not
+    only the first: `tsc && sh ./evil.sh` passed because it started with `tsc`.
+    A command after the first that runs nothing (`|| true`, `&& echo done`) is
+    not judged, unless it redirects into a file, but every command substitution,
+    `$(...)` or backticks, is judged wherever it sits, as a script of its own:
+    `tsc && echo "$(sh ./evil.sh)"` hid one inside the quoted argument of a
+    command that runs nothing. Inside a substitution a command that runs
+    nothing is not judged in any position (`node $(echo build.js)`); one nested
+    deeper than `_MAX_SUBSTITUTION_DEPTH` is reported unread.
+    """
+    if NETWORK_IN_SCRIPTS.search(script) or len(script) > _MAX_JUDGED_SCRIPT:
+        return True
+    text, substitutions = _shell_parts(script)
+    for inner in substitutions:
+        if depth >= _MAX_SUBSTITUTION_DEPTH or _install_script_reported(inner, declared, depth + 1):
+            return True
+    for index, (words, redirected) in enumerate(_script_commands(text)):
+        program = _without_assignments(words)
+        if (index or depth) and not redirected and program and program[0] in _NO_OP_COMMANDS:
+            continue
+        if not _command_passes(program, declared):
+            return True
+    return False
+
+
+def _without_assignments(words: list[str]) -> list[str]:
+    """The command after any leading `NAME=value` words."""
+    i = 0
+    while i < len(words) and _ASSIGNMENT.match(words[i]):
+        i += 1
+    return words[i:]
+
+
+def _command_passes(words: list[str], declared: set[str]) -> bool:
+    """Does one command of an install script run only what AAK-SUPPLY-003 allows?
+
+    The command is read after its variable assignments, which run nothing, so a
+    command that is only assignments does not pass. It passes when its program
+    is a build tool on the safe list, by name (`node_modules/.bin/tsc` is
+    `tsc`), when it is `npm run build` or `npm run build:<name>`, or when it is
+    a launcher running packages the project installs (`_launch_is_local`). The
+    safe list was matched as a prefix of the command text, so
+    `tscripts/setup.sh`, `vite-installer`, `npm run build-and-setup` and,
+    through `node`, `NODE_ENV=production sh ./evil.sh` passed. The
+    package.json controls a `build:css` script exactly as much as `build`, and
+    neither script is read, so the `build:<name>` family (npm-run-all's naming)
+    passes as `build` does. When an option named the
+    launcher's package (`npx -p pkg cmd`, `npm exec --package=pkg -- cmd`), the
+    command it then runs is judged in turn, unless it is that package's own
+    (`npx -p husky husky`): `npx -p husky sh ./evil.sh` passed because only
+    husky was looked at.
+    """
+    while words and starts_with_launcher(words):
+        packages, command = invocation(words)
+        if not packages or not all(_launch_is_local(one, declared) for one in packages):
+            return False
+        if not command or basename(command[0]) in {npm_spec(one.spec).name for one in packages}:
+            return True
+        words = _without_assignments(command)
+    if not words:
+        return False
+    if basename(words[0]).lower() in _SAFE_SCRIPT_TOOLS:
+        return True
+    return (
+        basename(words[0]).lower() == "npm"
+        and words[1:2] == ["run"]
+        and _BUILD_SCRIPT.fullmatch(words[2] if len(words) > 2 else "") is not None
+    )
+
+
+def _launch_is_local(launched: Launched, declared: set[str]) -> bool:
+    """Does a launcher in an install script run a package the project installs?
+
+    `npx`, `npm exec` and `bunx` run a package from node_modules when one is
+    installed and fetch it from the registry when it is not, so `npx husky
+    install` with husky declared runs the project's own husky, while `npx
+    some-remote-package` fetches whatever the registry serves and runs it during
+    install. `npx` used to pass whatever it was given. A build tool on the safe
+    list passes under them too (`npx tsc`), as it does alone. Only a bare name
+    or a registry version passes: `npx husky@github:attacker/evil` and `npx
+    husky@npm:evil-installer` name a declared package and fetch another, and a
+    tag (`husky@latest`) can name a release the project does not install.
+    `pnpm dlx`, `pnpx` and `yarn dlx` fetch the package even when it is
+    installed.
+    """
+    if launched.launcher not in _LOCAL_FIRST_LAUNCHERS or launched.ecosystem != "js":
+        return False
+    spec = npm_spec(launched.spec)
+    if spec.kind != "registry" or (spec.version and parse_range(spec.version, "npm") is None):
+        return False
+    return spec.name in declared or spec.name.lower() in _SAFE_SCRIPT_TOOLS
+
+
+def _script_commands(script: str) -> list[tuple[list[str], bool]]:
+    """The commands a script runs, each with whether it redirects into a file.
+
+    A line is split at `&&`, `||`, `;`, `|`, `&` and parentheses; a newline
+    ends a command too. A line the shell splitter gives up on (an unclosed
+    quote) is split at whitespace and those operators: it fell back to
+    whitespace alone, so the `#'` of `tsc&&sh ./evil.sh #'` left `tsc&&sh` one
+    word, though sh reads `#'` as a comment (dropped first, in `_shell_parts`). A redirection and its target are dropped from
+    the words (`node build.js > build.log`), so the target is not read as a
+    command.
+    """
+    commands: list[tuple[list[str], bool]] = []
+    syntax = _shell_syntax("();<>|&", " \t\r\n", "")
+    for line in script.splitlines():
+        tokens = _shell_split(line, syntax)
+        if tokens is None:
+            tokens = _FALLBACK_WORD.findall(line)
+        words: list[str] = []
+        redirected = skip = False
+        for token in tokens:
+            if skip:
+                skip = False
+            elif token and set(token) <= _SHELL_PUNCTUATION:
+                if token[0] in "<>" or token.startswith("&>"):
+                    redirected = skip = True
+                    continue
+                if words:
+                    commands.append((words, redirected))
+                words, redirected = [], False
+            else:
+                words.append(token)
+        if words:
+            commands.append((words, redirected))
+    return commands
+
+
+def _shell_parts(script: str) -> tuple[str, list[str]]:
+    """A script as sh reads it: its text without comments, and the text of
+    each outermost command substitution, `$(...)` or backticks, in it.
+
+    A comment starts at a `#` that begins a word outside quotes and runs to the
+    end of its line; a `#` inside a word (`github:org/repo#sha`, `$#`) is part
+    of it. Quotes are followed across lines, as sh follows them, so a `#` on a
+    line inside a quoted string does not hide the lines after it. sh runs a
+    substitution outside single quotes, inside double quotes too, so a single
+    quote within double quotes (`"it's $(cmd)"`) does not hide one, and a `#`
+    inside one does not end the line around it. An ANSI-C string (`$'...'`),
+    whose backslash escapes a quote, is replaced by an empty string, which the
+    shell splitter reads as sh does.
+    """
+    kept: list[str] = []
+    substitutions: list[str] = []
+    quote = ""
+    word_start = True
+    i = start = 0
+    n = len(script)
+    while i < n:
+        char = script[i]
+        if quote == "'":
+            if char == "'":
+                quote = ""
+            i += 1
+            continue
+        if char == "\\":
+            i += 2
+            word_start = False
+            continue
+        if char == "`" or (char == "$" and script.startswith("(", i + 1)):
+            if char == "`":
+                end = i + 1
+                while end < n and script[end] != "`":
+                    end += 2 if script[end] == "\\" else 1
+                substitutions.append(script[i + 1:end])
+            else:
+                end = _closing_paren(script, i + 2)
+                substitutions.append(script[i + 2:end])
+            i = end + 1
+            word_start = False
+            continue
+        if quote:
+            if char == '"':
+                quote = ""
+        elif char == "$" and script.startswith("'", i + 1):
+            end = i + 2
+            while end < n and script[end] != "'":
+                end += 2 if script[end] == "\\" else 1
+            kept.append(script[start:i])
+            kept.append("''")
+            i = start = end + 1
+            word_start = False
+            continue
+        elif char in "'\"":
+            quote = char
+            word_start = False
+        elif char == "#" and word_start:
+            kept.append(script[start:i])
+            end = script.find("\n", i)
+            i = start = n if end == -1 else end
+            continue
+        else:
+            word_start = char in _WORD_BREAKS
+        i += 1
+    kept.append(script[start:])
+    return "".join(kept), substitutions
+
+
+def _closing_paren(text: str, i: int) -> int:
+    """The index of the `)` that closes a `(` just before `i`, or the end."""
+    depth, quote, n = 1, "", len(text)
+    while i < n:
+        char = text[i]
+        if char == "\\" and quote != "'":
+            i += 2
+            continue
+        if quote:
+            if char == quote:
+                quote = ""
+        elif char in "'\"":
+            quote = char
+        elif char == "(":
+            depth += 1
+        elif char == ")":
+            depth -= 1
+            if depth == 0:
+                return i
+        i += 1
+    return n
+
+
+def _declared_packages(data: dict[str, Any]) -> set[str]:
+    """Every package a package.json declares, in any dependency section."""
+    declared: set[str] = set()
+    for section in ("dependencies", "devDependencies", "optionalDependencies", "peerDependencies"):
+        deps = data.get(section)
+        if isinstance(deps, dict):
+            declared.update(str(name) for name in deps)
+    return declared
 
 
 def _check_lockfile_exists(project_root: Path) -> list[Finding]:
@@ -253,9 +566,12 @@ def _check_lockfile_exists(project_root: Path) -> list[Finding]:
 
     npm_manifest = project_root / "package.json"
     if npm_manifest.is_file():
+        # Bun 1.2 and later writes the text bun.lock; earlier releases wrote the
+        # binary bun.lockb. Only bun.lockb was accepted, so a current Bun project
+        # was reported as having no lockfile.
         has_lock = any(
             (project_root / lf).is_file()
-            for lf in ["package-lock.json", "yarn.lock", "pnpm-lock.yaml", "bun.lockb"]
+            for lf in ["package-lock.json", "yarn.lock", "pnpm-lock.yaml", "bun.lock", "bun.lockb"]
         )
         if not has_lock:
             findings.append(_make_finding(
@@ -382,6 +698,11 @@ def _scan_rust_deps(project_root: Path) -> list[Finding]:
     A Cargo.toml without a Cargo.lock is `_check_lockfile_exists`'s to report
     (AAK-SUPPLY-004). This ended with that check too, but it returns early when
     there is no Cargo.lock, so the check could never fire here.
+
+    Only a package with a `source` (a registry or a git repository) counts as a
+    dependency. Cargo.lock lists the root crate as a `[[package]]` too, without
+    one, and counting it reported 200 dependencies as 201. Workspace members and
+    path dependencies have no `source` either: they are the project's own crates.
     """
     findings: list[Finding] = []
     rust_vulns = KNOWN_VULNERABLE_PACKAGES.get("rust", {})
@@ -402,6 +723,7 @@ def _scan_rust_deps(project_root: Path) -> list[Finding]:
     # Parse TOML-style Cargo.lock: [[package]] blocks
     current_name = ""
     current_version = ""
+    current_has_source = False
     dep_count = 0
     for line in raw.splitlines():
         line = line.strip()
@@ -415,13 +737,17 @@ def _scan_rust_deps(project_root: Path) -> list[Finding]:
                         f"{current_name}@{current_version} — {vuln_info['description']}",
                         _find_line_number(raw, current_name),
                     ))
+            if current_has_source:
+                dep_count += 1
             current_name = ""
             current_version = ""
-            dep_count += 1
+            current_has_source = False
         elif line.startswith('name = "'):
             current_name = line.split('"')[1]
         elif line.startswith('version = "'):
             current_version = line.split('"')[1]
+        elif line.startswith("source = "):
+            current_has_source = True
 
     # Check last package
     if current_name and current_version and current_name in rust_vulns:
@@ -432,6 +758,8 @@ def _scan_rust_deps(project_root: Path) -> list[Finding]:
                 f"{current_name}@{current_version} — {vuln_info['description']}",
                 _find_line_number(raw, current_name),
             ))
+    if current_has_source:
+        dep_count += 1
 
     # AAK-SUPPLY-005 for Rust
     if dep_count > 200:
@@ -449,7 +777,7 @@ def scan(project_root: Path) -> tuple[list[Finding], set[str]]:
 
     # Track which files exist and were scanned
     for candidate in [
-        ".mcp.json", ".cursor/mcp.json", ".vscode/mcp.json", ".amazonq/mcp.json", "mcp.json",
+        *_MCP_CONFIGS,
         "package.json", "package-lock.json", "yarn.lock", "pnpm-lock.yaml",
         "pyproject.toml", "Pipfile", "Pipfile.lock", "poetry.lock", "uv.lock",
         "Cargo.toml", "Cargo.lock",
@@ -503,10 +831,6 @@ def scan(project_root: Path) -> tuple[list[Finding], set[str]]:
 _PY_VERSION_TAIL = r"\s*(?:(?:==|>=|~=|<=|<|>)\s*)?([0-9][\w.\-]*)"
 
 _DORIS_PATCHED = (0, 6, 1)
-_DORIS_VERSION_RE = re.compile(
-    r"apache-doris-mcp-server" + _PY_VERSION_TAIL,
-    re.IGNORECASE,
-)
 
 
 def _semver3(spec: str) -> tuple[int, int, int] | None:
@@ -536,16 +860,6 @@ def _lockfile_over_limit(path: Path) -> bool:
     their limitations. ``stat`` raises OSError, as the read it guards does.
     """
     return path.name.lower() in _LOCKFILES and path.stat().st_size > MAX_LOCKFILE_BYTES
-
-
-def _resolve_lockfile_version(
-    text: str, filename: str, names: tuple[str, ...]
-) -> tuple[int, int, int] | None:
-    """Lowest resolved version of any of ``names`` in a lockfile, or None if the
-    package is absent / unparseable (conservative — a `None` result means the
-    pin does not fire on this lockfile)."""
-    resolved = _resolve_lockfile_versions(text, filename, names)
-    return min(resolved) if resolved else None
 
 
 def _resolve_lockfile_versions(
@@ -685,6 +999,132 @@ def _lockfile_index(text: str, filename: str) -> dict[str, list[tuple[int, int, 
     }
 
 
+# ---------------------------------------------------------------------------
+# How the Doris, gateway-registry, Serena, Excel and LiteLLM pins read a file.
+#
+# They read the first number after the package name, so an upper bound read as
+# the version: `litellm<1.83.7`, which admits only affected releases, read as
+# 1.83.7 and passed, and `<2.0.0,>=1.0.0` passed where `>=1.0.0,<2.0.0` fired.
+# A comment that named the package with a number decided the file, as the first
+# mention decided the gateway-registry and Serena checks. A lockfile, where the
+# name and its version sit on separate lines, read as unpinned or not at all.
+# They now read a file the way the CVE pin table does: a lockfile on the
+# versions it resolves, any other file on the declarations it makes in its own
+# format (`_manifest_deps`), each judged by the releases its range admits
+# (`_versions`) with the pin table's own judge.
+# ---------------------------------------------------------------------------
+
+def _read_pin_candidate(path: Path) -> str | None:
+    """A candidate file's text, or None when it is unreadable or over its limit.
+
+    A lockfile is read up to MAX_LOCKFILE_BYTES and any other file up to
+    MAX_MANIFEST_BYTES, the pin table's limits, checked with stat() before the
+    read.
+    """
+    limit = MAX_LOCKFILE_BYTES if path.name.lower() in _LOCKFILES else MAX_MANIFEST_BYTES
+    try:
+        if path.stat().st_size > limit:
+            return None
+        return path.read_text(encoding="utf-8", errors="replace")
+    except OSError:
+        return None
+
+
+def _affected_pin(
+    path: Path,
+    text: str,
+    names: tuple[str, ...],
+    floor: tuple[int, int, int],
+    *,
+    requires_version: bool = False,
+) -> str | None:
+    """How `path` takes a release of `names` below `floor`, or None when it does not.
+
+    Args:
+        path: The candidate file; its name selects how it is read.
+        text: The file's contents.
+        names: The package's names, compared as its registry compares them.
+        floor: The first fixed release.
+        requires_version: Report only a declaration that states a version.
+
+    Returns:
+        The version as the file states it: a lockfile's resolved version, or a
+        declaration's specifier (`<0.6.1`, with a lone `==` dropped), "" for a
+        declaration that states none, and None when nothing in the file admits
+        a release below `floor`.
+    """
+    filename = path.name.lower()
+    if filename in _LOCKFILES:
+        affected = [v for v in _resolve_lockfile_versions(text, filename, names) if v < floor]
+        return ".".join(str(x) for x in affected[0]) if affected else None
+    # Imported here: the pin table imports this module's lockfile readers.
+    from agent_audit_kit.scanners.mcp_cve_pins_2026_07 import _Pin, _deciding_declaration
+
+    pin = _Pin(rule_id="", display=names[0], names=names, floor=floor,
+               requires_version=requires_version)
+    found = [_with_vcs_version(d) for d in declarations(path, text)]
+    declaration = _deciding_declaration(pin, found)
+    return None if declaration is None else _stated_version(declaration.version)
+
+
+def _with_vcs_version(declaration: Declaration) -> Declaration:
+    """A git requirement with the release its tag names, as `==<tag>`.
+
+    `git+https://github.com/oraios/serena@v1.5.2#egg=serena-agent` declares no
+    version, but its tag names the release it installs. Read as unversioned,
+    it made the gateway-registry and Serena checks, which report an unpinned
+    reference, report the patched tag, and the other three, which report only
+    a stated version, miss a tag below the fix. A branch, a commit or a tag
+    with no dot names no release, so such a requirement stays unversioned.
+    """
+    if declaration.version or declaration.dialect != "pep440":
+        return declaration
+    tag = _vcs_tag_version(declaration.text)
+    return declaration if tag is None else dataclasses.replace(declaration, version="==" + tag)
+
+
+# A release tag: dotted numbers after an optional `v` (`v1.5.2`, `1.83.7-stable`).
+_RELEASE_TAG_RE = re.compile(r"[vV]?[0-9]+(?:\.[0-9]+)+")
+# A commit id, short or full. It has no dot, so it is never a release tag, but
+# it can begin with digits.
+_COMMIT_ID_RE = re.compile(r"[0-9a-fA-F]{7,40}")
+
+
+def _vcs_tag_version(requirement: str) -> str | None:
+    """The version a VCS requirement's ref names, or None.
+
+    pip takes the ref after the last `@` of the URL's last path segment, so the
+    `git@` of an ssh URL is never read as one; the `#egg=` fragment and an
+    environment marker are not part of it. Only a dotted release tag names a
+    version: the version parser alone read a commit id that begins with digits
+    as a release (`@1a2b3c4` as 1.0.0, `@0e1f2a3` as 0.0.0), so a pin reported
+    a commit-pinned requirement as below its fix. A tag with no dot (`@v2`)
+    names no release either.
+    """
+    url = requirement.split(";", 1)[0].partition("#")[0].strip()
+    if "://" not in url:
+        return None
+    segment = url.rsplit("/", 1)[-1]
+    if "@" not in segment:
+        return None
+    ref = segment.rsplit("@", 1)[1]
+    if _COMMIT_ID_RE.fullmatch(ref) or not _RELEASE_TAG_RE.match(ref):
+        return None
+    ref = ref[1:] if ref[:1] in ("v", "V") else ref
+    return ref if parse_version(ref) is not None else None
+
+
+def _stated_version(spec: str) -> str:
+    """A specifier as the evidence quotes it: `==0.5.0` as `0.5.0`, any other as written."""
+    text = spec.strip()
+    exact = text[2:].strip()
+    if text.startswith("==") and not text.startswith("===") and exact and not any(
+        c in exact for c in " ,;<>=!~^*|"
+    ):
+        return exact
+    return text
+
+
 def _check_doris_mcp_pin(project_root: Path, scanned_files: set[str]) -> list[Finding]:
     findings: list[Finding] = []
 
@@ -704,19 +1144,15 @@ def _check_doris_mcp_pin(project_root: Path, scanned_files: set[str]) -> list[Fi
             candidates.append(p)
 
     for path in candidates:
-        try:
-            if _lockfile_over_limit(path):
-                continue
-            text = path.read_text(encoding="utf-8", errors="replace")
-        except OSError:
+        text = _read_pin_candidate(path)
+        if text is None:
             continue
-        for m in _DORIS_VERSION_RE.finditer(text):
-            version = _semver3(m.group(1))
-            if version is None or version < _DORIS_PATCHED:
-                rel = str(path.relative_to(project_root))
-                scanned_files.add(rel)
-                _fire(rel, m.group(1))
-                break  # one finding per file is enough
+        raw = _affected_pin(path, text, ("apache-doris-mcp-server",), _DORIS_PATCHED,
+                            requires_version=True)
+        if raw is not None:
+            rel = str(path.relative_to(project_root))
+            scanned_files.add(rel)
+            _fire(rel, raw)
     return findings
 
 
@@ -728,11 +1164,59 @@ def _check_doris_mcp_pin(project_root: Path, scanned_files: set[str]) -> list[Fi
 # ---------------------------------------------------------------------------
 
 _MCP_GATEWAY_REGISTRY_PATCHED = (1, 0, 13)
-_MCP_GATEWAY_REGISTRY_RE = re.compile(
-    r"mcp-gateway-registry"
-    r"\s*(?:==|>=|~=|<=|<|>|@|:|\"?\s*version\"?\s*[:=])?\s*v?([0-9][\w.\-]*)?",
-    re.IGNORECASE,
+_MCP_GATEWAY_REGISTRY_NAMES = ("mcp-gateway-registry",)
+# The project's repository, read as Serena's is (`_SERENA_REPO_RE`): a git URL
+# or an image under it carries its version in its tag.
+_MCP_GATEWAY_REGISTRY_REPO_RE = re.compile(
+    r"(?<![\w-])agentic-community/mcp-gateway-registry(?![\w-])", re.IGNORECASE
 )
+
+
+def _command_lines(path: Path, text: str) -> list[list[str]]:
+    """The command lines an MCP config's entries or a package.json's scripts run."""
+    name = path.name.lower()
+    try:
+        if name == "package.json":
+            data = json.loads(text)
+            scripts = data.get("scripts") if isinstance(data, dict) else None
+            if not isinstance(scripts, dict):
+                return []
+            return [shell_tokens(line) for line in scripts.values() if isinstance(line, str)]
+        if name.endswith((".yaml", ".yml")):
+            data = yaml.safe_load(text)
+        elif name.endswith(".json"):
+            data = loads_jsonc(text)
+        else:
+            return []
+    except (ValueError, yaml.YAMLError, RecursionError):
+        return []
+    return [_argv(entry)[0] for entry, _where in _command_entries(data)]
+
+
+def _runs_unversioned(path: Path, text: str, names: tuple[str, ...]) -> bool:
+    """Does `path` run one of `names` that no launcher fetches, so at a version
+    nothing in the file states?
+
+    `uv run --directory ../serena serena-mcp-server` runs the entry point of a
+    checkout of unknown version, and a declaration cannot see it: `uv run`
+    fetches nothing. A command line that fetches the package it runs is
+    skipped, because the command it then runs is that package's (`uvx --from
+    <spec> serena`), and the declarations judge `<spec>`. A package `--with`
+    adds is not the one that runs, so `uv run --with requests --directory
+    ../serena serena-mcp-server`, skipped for fetching `requests`, is read
+    again. This replaces reading every mention of the name in the text, which
+    would report the command of a patched `uvx --from x==1.0.13 x` as
+    unpinned, and a server merely named `x`.
+    """
+    wanted = {n.lower() for n in names}
+    for argv in _command_lines(path, text):
+        if any(not launched.extra for launched in launched_packages(argv)):
+            continue
+        words = [w for token in argv
+                 for w in (shell_tokens(token) if any(c.isspace() for c in token) else [token])]
+        if any(basename(word).lower() in wanted for word in words):
+            return True
+    return False
 
 
 def _check_mcp_gateway_registry_pin(project_root: Path, scanned_files: set[str]) -> list[Finding]:
@@ -763,18 +1247,17 @@ def _check_mcp_gateway_registry_pin(project_root: Path, scanned_files: set[str])
     candidates.extend(project_root.glob("*.mcp.yml"))
 
     for path in candidates:
-        try:
-            if _lockfile_over_limit(path):
-                continue
-            text = path.read_text(encoding="utf-8", errors="replace")
-        except OSError:
+        text = _read_pin_candidate(path)
+        if text is None:
             continue
-        m = _MCP_GATEWAY_REGISTRY_RE.search(text)
-        if not m:
-            continue
-        raw = m.group(1)
-        version = _semver3(raw) if raw else None
-        if version is None or version < _MCP_GATEWAY_REGISTRY_PATCHED:
+        raw = _affected_pin(path, text, _MCP_GATEWAY_REGISTRY_NAMES, _MCP_GATEWAY_REGISTRY_PATCHED)
+        if raw is None and path.name.lower() not in _LOCKFILES:
+            raw = _repository_reference_below(
+                text, _MCP_GATEWAY_REGISTRY_REPO_RE, _MCP_GATEWAY_REGISTRY_PATCHED
+            )
+            if raw is None and _runs_unversioned(path, text, _MCP_GATEWAY_REGISTRY_NAMES):
+                raw = ""
+        if raw is not None:
             rel = str(path.relative_to(project_root))
             scanned_files.add(rel)
             _fire(rel, raw)
@@ -788,11 +1271,31 @@ def _check_mcp_gateway_registry_pin(project_root: Path, scanned_files: set[str])
 # ---------------------------------------------------------------------------
 
 _SERENA_PATCHED = (1, 5, 2)
-_SERENA_RE = re.compile(
-    r"(?:serena-agent|serena-mcp-server|oraios/serena)"
-    r"\s*(?:==|>=|~=|<=|<|>|@|:|\"?\s*version\"?\s*[:=])?\s*v?([0-9][\w.\-]*)?",
-    re.IGNORECASE,
-)
+_SERENA_NAMES = ("serena-agent", "serena-mcp-server")
+# Serena's repository, which uvx, pip and docker take it from
+# (`uvx --from git+https://github.com/oraios/serena serena`,
+# `ghcr.io/oraios/serena`). Such a reference declares no package, so the text is
+# read for it, every reference and not the first: its tag is its version, and
+# one with no tag is unpinned. Bounded, so `oraios/serena-x` is another repo.
+_SERENA_REPO_RE = re.compile(r"(?<![\w-])oraios/serena(?![\w-])", re.IGNORECASE)
+# A reference's version, `@v1.5.2` or `:1.5.2`, read in a fixed window after it.
+# A git URL may end the repository in `.git` before its tag (`serena.git@v1.5.2`),
+# which read as a reference with no tag.
+_REFERENCE_VERSION_RE = re.compile(r"(?:\.git)?\s*(?:[@:]\s*)?v?([0-9][\w.\-]*)?")
+
+
+def _repository_reference_below(
+    text: str, pattern: re.Pattern[str], floor: tuple[int, int, int]
+) -> str | None:
+    """The version of the first reference that is unpinned or below `floor`
+    ("" when it carries none), or None when every reference is patched."""
+    for m in pattern.finditer(text):
+        after = _REFERENCE_VERSION_RE.match(text, m.end(), m.end() + 64)
+        raw = after.group(1) if after else None
+        version = _semver3(raw) if raw else None
+        if version is None or version < floor:
+            return raw or ""
+    return None
 
 
 def _check_serena_pin(project_root: Path, scanned_files: set[str]) -> list[Finding]:
@@ -823,29 +1326,19 @@ def _check_serena_pin(project_root: Path, scanned_files: set[str]) -> list[Findi
     candidates.extend(project_root.glob("*.mcp.yml"))
 
     for path in candidates:
-        try:
-            if _lockfile_over_limit(path):
-                continue
-            text = path.read_text(encoding="utf-8", errors="replace")
-        except OSError:
+        text = _read_pin_candidate(path)
+        if text is None:
             continue
-        rel = str(path.relative_to(project_root))
-        if path.name.lower() in _LOCKFILES:
-            # Resolve the locked version; fire only when it is below the fix
-            # floor, so a correct upgrade + re-lock clears the finding.
-            resolved = _resolve_lockfile_version(
-                text, path.name.lower(), ("serena-agent", "serena-mcp-server")
-            )
-            if resolved is not None and resolved < _SERENA_PATCHED:
-                scanned_files.add(rel)
-                _fire(rel, ".".join(str(x) for x in resolved))
-            continue
-        m = _SERENA_RE.search(text)
-        if not m:
-            continue
-        raw = m.group(1)
-        version = _semver3(raw) if raw else None
-        if version is None or version < _SERENA_PATCHED:
+        # A lockfile resolves a version, so a correct upgrade and re-lock clears
+        # the finding; elsewhere the repository and a checkout's entry point
+        # count as references too.
+        raw = _affected_pin(path, text, _SERENA_NAMES, _SERENA_PATCHED)
+        if raw is None and path.name.lower() not in _LOCKFILES:
+            raw = _repository_reference_below(text, _SERENA_REPO_RE, _SERENA_PATCHED)
+            if raw is None and _runs_unversioned(path, text, _SERENA_NAMES):
+                raw = ""
+        if raw is not None:
+            rel = str(path.relative_to(project_root))
             scanned_files.add(rel)
             _fire(rel, raw)
     return findings
@@ -857,10 +1350,6 @@ def _check_serena_pin(project_root: Path, scanned_files: set[str]) -> list[Findi
 # ---------------------------------------------------------------------------
 
 _EXCEL_FIRST_PATCHED = (0, 1, 8)
-_EXCEL_VERSION_RE = re.compile(
-    r"excel-mcp-server" + _PY_VERSION_TAIL,
-    re.IGNORECASE,
-)
 
 
 def _check_excel_mcp_pin(project_root: Path, scanned_files: set[str]) -> list[Finding]:
@@ -882,19 +1371,15 @@ def _check_excel_mcp_pin(project_root: Path, scanned_files: set[str]) -> list[Fi
             candidates.append(p)
 
     for path in candidates:
-        try:
-            if _lockfile_over_limit(path):
-                continue
-            text = path.read_text(encoding="utf-8", errors="replace")
-        except OSError:
+        text = _read_pin_candidate(path)
+        if text is None:
             continue
-        for m in _EXCEL_VERSION_RE.finditer(text):
-            version = _semver3(m.group(1))
-            if version is None or version < _EXCEL_FIRST_PATCHED:
-                rel = str(path.relative_to(project_root))
-                scanned_files.add(rel)
-                _fire(rel, m.group(1))
-                break
+        raw = _affected_pin(path, text, ("excel-mcp-server",), _EXCEL_FIRST_PATCHED,
+                            requires_version=True)
+        if raw is not None:
+            rel = str(path.relative_to(project_root))
+            scanned_files.add(rel)
+            _fire(rel, raw)
     return findings
 
 
@@ -982,15 +1467,12 @@ def _check_azure_mcp_auth(
     return findings
 
 
-# The configs AAK-SUPPLY-006 reads: the root .mcp.json, and VS Code's
-# .vscode/mcp.json, which keeps its servers under `servers`. Until both maps were
-# read through `iter_mcp_servers` the rule saw only `mcpServers` in .mcp.json, so
-# a vulnerable package launched from VS Code was never looked up.
-_SUPPLY_006_CONFIGS = (".mcp.json", ".vscode/mcp.json")
-
-
 def _check_mcp_specific_vulns(project_root: Path) -> list[Finding]:
-    """AAK-SUPPLY-006: Check MCP server packages against vuln DB."""
+    """AAK-SUPPLY-006: Check MCP server packages against vuln DB.
+
+    Reads the configs AAK-SUPPLY-001 reads (`_MCP_CONFIGS`), both server maps of
+    each through `iter_mcp_servers`: VS Code keeps its servers under `servers`.
+    """
     findings: list[Finding] = []
     try:
         from agent_audit_kit.vuln_db import load_database
@@ -999,7 +1481,7 @@ def _check_mcp_specific_vulns(project_root: Path) -> list[Finding]:
         return findings
 
     npm_vulns = db.get("npm", {})
-    for name in _SUPPLY_006_CONFIGS:
+    for name in _MCP_CONFIGS:
         mcp_path = project_root / name
         if not mcp_path.is_file():
             continue
@@ -1203,10 +1685,6 @@ def _scan_astro_mcp_query_concat(
 # ---------------------------------------------------------------------------
 
 _LITELLM_PATCHED = (1, 83, 7)
-_LITELLM_VERSION_RE = re.compile(
-    r"(?<![\w-])litellm" + _PY_VERSION_TAIL,
-    re.IGNORECASE,
-)
 
 
 # ---------------------------------------------------------------------------
@@ -1902,17 +2380,12 @@ def _check_litellm_pin(project_root: Path, scanned_files: set[str]) -> list[Find
             candidates.append(p)
 
     for path in candidates:
-        try:
-            if _lockfile_over_limit(path):
-                continue
-            text = path.read_text(encoding="utf-8", errors="replace")
-        except OSError:
+        text = _read_pin_candidate(path)
+        if text is None:
             continue
-        for m in _LITELLM_VERSION_RE.finditer(text):
-            version = _semver3(m.group(1))
-            if version is None or version < _LITELLM_PATCHED:
-                rel = str(path.relative_to(project_root))
-                scanned_files.add(rel)
-                _fire(rel, m.group(1))
-                break  # one finding per file is enough
+        raw = _affected_pin(path, text, ("litellm",), _LITELLM_PATCHED, requires_version=True)
+        if raw is not None:
+            rel = str(path.relative_to(project_root))
+            scanned_files.add(rel)
+            _fire(rel, raw)
     return findings

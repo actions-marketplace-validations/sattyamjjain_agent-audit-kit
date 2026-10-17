@@ -1956,9 +1956,15 @@ _r(
     adversa_references=["ADV-SUPPLY-04"],
     limitations=(
         "Reads the root package-lock.json against a fixed table of one npm package, "
-        "`axios` 1.7.0 to 1.7.3, plus three typosquat name patterns, so a vulnerable "
-        "version of any other package (`lodash` 4.17.15 in a lockfile) is not "
-        "reported. OpenClaw is not in it: it publishes calendar versions, which its "
+        "`axios` 1.7.0 to 1.7.3, and two misspellings of the MCP scope "
+        "(`@modlecontextprotocol`, `modelcontextprotocal`), so a vulnerable version of "
+        "any other package (`lodash` 4.17.15 in a lockfile) is not reported, and "
+        "neither is any other lookalike name, such as an unscoped copy of an official "
+        "server's (`mcp-server-sequential-thinking` for "
+        "`@modelcontextprotocol/server-sequential-thinking`, which npm has since "
+        "replaced with a security holding package). The rule used to report every "
+        "`mcp-server-<word>-<word>` name, a shape real servers share. "
+        "OpenClaw is not in it: it publishes calendar versions, which its "
         "own CVE pins read, and the only `openclaw` below 2.1.0, where the table used "
         "to place it, is the empty placeholder 0.0.1. The table lists no PyPI package or "
         "crate (the PyPI `openclaw` is an unrelated installer for the cmdop CLI), so "
@@ -1983,14 +1989,35 @@ _r(
     limitations=(
         "Reads the `preinstall`, `install`, `postinstall` and `prepare` scripts of "
         "the root package.json only, and reports one that names the whole word "
-        "curl, wget, fetch, nc, ncat, ssh, http, axios or request, or that does not "
-        "start with a known build tool. A script that starts with `node`, `npx`, "
-        "`tsc`, `webpack`, `rollup`, `esbuild` or `vite` is treated as safe, so "
-        "`npx --yes some-unreviewed-package` passes, and so does `node -e "
-        "\"require('https').get(...)\"`, because `https` is not the word `http`. The "
-        "install scripts of dependencies (a lockfile entry marked "
-        "`hasInstallScript`) and of a workspace package.json in a sub-directory are "
-        "not read."
+        "curl, wget, fetch, nc, ncat, ssh, http, https, axios or request, or that "
+        "runs a command, anywhere in a chain or in a command substitution (`$(...)`, "
+        "backticks), whose program, after any variable assignments, is not `node`, "
+        "`node-gyp`, `node-gyp-build`, `ts-node`, `tsx`, `vite-node`, `tsc`, `webpack`, "
+        "`rollup`, `esbuild` or `vite` "
+        "(by name, so `node_modules/.bin/tsc` passes), unless the command is `npm run "
+        "build` or `npm run build:<name>` (not `npm run build-and-setup`). "
+        "`node-pre-gyp` and `prebuild-install` are reported: "
+        "they download a prebuilt binary from a host the package.json names. A "
+        "command after the first that runs nothing (`|| true`, `&& "
+        "echo done`) is not judged unless it redirects into a file, though a "
+        "substitution in its arguments is. A launcher is judged by the package it "
+        "runs: `npx`, `npm exec` and `bunx` pass one the package.json declares, or a "
+        "build tool from that list, named bare or with a registry version, because "
+        "they run it from node_modules; anything else is reported as fetched at "
+        "install time, including a git, alias or tag spec of a declared package "
+        "(`husky@github:org/repo`, `husky@npm:other`, `husky@latest`) and a declared "
+        "package's command under another name (`npx playwright` with only "
+        "`@playwright/test` declared). When an option names the package (`npx -p pkg "
+        "cmd`), the command it runs is judged too, unless it is the package's own. "
+        "Neither the code a `node`, `ts-node`, `tsx` or `vite-node` command runs nor the script "
+        "`npm run build` or `npm run build:<name>` runs is looked into, so `node -e "
+        "\"require('child_process').execSync('sh ./scripts/setup.sh')\"` passes, and "
+        "so does `npm run build:css` whatever that script runs. An arithmetic expansion "
+        "(`$((1+2))`) is read as a command substitution, so its expression is judged "
+        "as a command. A substitution nested more than four deep, and a script over "
+        "4,096 characters, is reported without being read. The install scripts of "
+        "dependencies (a lockfile entry marked `hasInstallScript`) and of a "
+        "workspace package.json in a sub-directory are not read."
     ),
 )
 
@@ -2002,15 +2029,15 @@ _r(
     Severity.MEDIUM,
     Category.SUPPLY_CHAIN,
     "Generate the lockfile for the manifest named in the finding and commit it: `npm "
-    "install` (`package-lock.json`), `yarn` or `pnpm install`, `uv lock`, `poetry "
-    "lock`, `pdm lock`, `pipenv lock` or `cargo generate-lockfile`.",
+    "install` (`package-lock.json`), `yarn`, `pnpm install` or `bun install`, `uv "
+    "lock`, `poetry lock`, `pdm lock`, `pipenv lock` or `cargo generate-lockfile`.",
     sarif_name="NoLockfilePresent",
     owasp_mcp_references=["MCP04:2025"],
     owasp_agentic_references=["ASI04"],
     adversa_references=["ADV-SUPPLY-06"],
     limitations=(
         "Checks the project root only: a package.json needs a package-lock.json, "
-        "yarn.lock, pnpm-lock.yaml or bun.lockb, a pyproject.toml needs a "
+        "yarn.lock, pnpm-lock.yaml, bun.lock or bun.lockb, a pyproject.toml needs a "
         "poetry.lock, uv.lock, Pipfile.lock or pdm.lock, a Pipfile needs a "
         "Pipfile.lock and a Cargo.toml needs a Cargo.lock. A lockfile only has to "
         "exist, so an empty one passes, a Python project that declares its "
@@ -2027,17 +2054,22 @@ _r(
     Severity.LOW,
     Category.SUPPLY_CHAIN,
     "Remove unused dependencies, or swap heavy ones for lighter ones, until the "
-    "lockfile lists 200 or fewer packages. The rule counts every entry in "
-    "`package-lock.json` or `Cargo.lock`, transitive dependencies included.",
+    "lockfile lists 200 or fewer dependencies. The rule counts every package "
+    "`package-lock.json` installs under node_modules and every crate `Cargo.lock` "
+    "takes from a registry or a git repository, transitive dependencies included. "
+    "The project's own packages (the root, workspace members, path crates) are not "
+    "counted.",
     sarif_name="ExcessiveDependencyCount",
     owasp_mcp_references=["MCP04:2025"],
     owasp_agentic_references=["ASI04"],
     adversa_references=["ADV-SUPPLY-07"],
     limitations=(
-        "Counts the entries of the root package-lock.json, the root package itself "
-        "included, and the packages of the root Cargo.lock, and reports more than "
-        "200. A uv.lock or yarn.lock of any size and a package-lock.json in a "
-        "sub-directory are not counted. A lockfile over 32 MiB is not counted."
+        "Counts the packages the root package-lock.json installs under node_modules "
+        "and the crates of the root Cargo.lock that have a `source`, and reports more "
+        "than 200. A lockfileVersion 1 package-lock.json is counted by its top-level "
+        "`dependencies` only, so a package nested under another is not counted. A "
+        "uv.lock or yarn.lock of any size and a package-lock.json in a sub-directory "
+        "are not counted. A lockfile over 32 MiB is not counted."
     ),
 )
 
@@ -2055,14 +2087,16 @@ _r(
     owasp_agentic_references=["ASI04"],
     adversa_references=["ADV-SUPPLY-08"],
     limitations=(
-        "Reads the `args` of the servers in the root .mcp.json and in .vscode/mcp.json, "
-        "under `mcpServers` or VS Code's `servers`, and looks each `package@version` "
-        "up in the npm section of the vulnerability database, which bundles one "
-        "package, `axios` 1.7.0 to 1.7.3. OpenClaw is not in it: it publishes "
-        "calendar versions, which its own CVE pins read, and the only `openclaw` "
-        "below 2.1.0, where the database used to place it, is the empty placeholder "
-        "0.0.1. The same package in package.json or in an MCP config under `.cursor/` "
-        "is not read, and neither is a package that states no version."
+        "Reads the `args` of the servers in the MCP configs AAK-SUPPLY-001 reads at "
+        "the project root (.mcp.json, .cursor/mcp.json, .vscode/mcp.json, "
+        ".amazonq/mcp.json and mcp.json), under `mcpServers` or VS Code's `servers`, "
+        "and looks each `package@version` up in the npm section of the vulnerability "
+        "database, which bundles one package, `axios` 1.7.0 to 1.7.3. OpenClaw is not "
+        "in it: it publishes calendar versions, which its own CVE pins read, and the "
+        "only `openclaw` below 2.1.0, where the database used to place it, is the "
+        "empty placeholder 0.0.1. The same package in package.json, in "
+        "claude_desktop_config.json or in a sub-project's .mcp.json is not reported, "
+        "and neither is a package that states no version."
     ),
 )
 
@@ -6085,16 +6119,17 @@ _r(
     adversa_references=["ADV-INJECT-02"],
     aicm_references=["AIS-07", "DSP-07"],
     limitations=(
-        "Matches `apache-doris-mcp-server` followed directly by a version "
-        "(`apache-doris-mcp-server==0.5.0`) in requirements*.txt at the project "
-        "root and in a dependency string of the root pyproject.toml. A name with no "
-        "version, a git URL, the table form that Poetry and Pipfile use "
-        "(`apache-doris-mcp-server = \"^0.5.0\"`), a requirements file in a "
-        "sub-directory and an `.mcp.json` launcher are not reported. Pipfile.lock, "
-        "poetry.lock and uv.lock are opened but never match, because the name and "
-        "the version sit on separate lines, so a version that reaches the project "
-        "only through a lockfile is not reported."
-        " A lockfile over 32 MiB is not read."
+        "Reads the dependency declarations of the root requirements*.txt, "
+        "pyproject.toml and Pipfile in their own formats, and reports one whose "
+        "range admits a release below 0.6.1 (`apache-doris-mcp-server<0.6.1` included), and the "
+        "version the root Pipfile.lock, poetry.lock or uv.lock resolves when it is "
+        "below 0.6.1. A git requirement's dotted release tag is read as its "
+        "version (`@v0.5.0`); a commit, a branch or a tag with no dot (`@v2`) "
+        "states none. A declaration that states no version, such as "
+        "`apache-doris-mcp-server` alone or a git URL without a release tag, is not reported, "
+        "and neither is a "
+        "requirements file in a sub-directory or an `.mcp.json` launcher. A "
+        "manifest over 2 MB is not read. A lockfile over 32 MiB is not read."
     ),
 )
 
@@ -6357,16 +6392,17 @@ _r(
     owasp_agentic_references=["ASI02", "ASI04"],
     adversa_references=["ADV-INJECT-03"],
     limitations=(
-        "Matches `excel-mcp-server` followed directly by a version "
-        "(`excel-mcp-server==0.1.7`) in requirements*.txt at the project root and "
-        "in a dependency string of the root pyproject.toml. A name with no version, "
-        "a git URL, the table form that Poetry and Pipfile use (`excel-mcp-server = "
-        "\"^0.1.7\"`), a requirements file in a sub-directory and an `.mcp.json` "
-        "launcher are not reported. Pipfile.lock, poetry.lock and uv.lock are "
-        "opened but never match, because the name and the version sit on separate "
-        "lines, so a version that reaches the project only through a lockfile is "
-        "not reported."
-        " A lockfile over 32 MiB is not read."
+        "Reads the dependency declarations of the root requirements*.txt, "
+        "pyproject.toml and Pipfile in their own formats, and reports one whose "
+        "range admits a release below 0.1.8 (`excel-mcp-server<0.1.8` included), and the "
+        "version the root Pipfile.lock, poetry.lock or uv.lock resolves when it is "
+        "below 0.1.8. A git requirement's dotted release tag is read as its "
+        "version (`@v0.1.7`); a commit, a branch or a tag with no dot (`@v2`) "
+        "states none. A declaration that states no version, such as "
+        "`excel-mcp-server` alone or a git URL without a release tag, is not reported, "
+        "and neither is a "
+        "requirements file in a sub-directory or an `.mcp.json` launcher. A "
+        "manifest over 2 MB is not read. A lockfile over 32 MiB is not read."
     ),
 )
 
@@ -8254,17 +8290,17 @@ _r(
     incident_references=["BERRIAI-LITELLM-2026-04-30"],
     auto_fixable=True,
     limitations=(
-        "Matches `litellm` followed directly by a version (`litellm==1.83.0`) in "
-        "requirements*.txt at the project root and in a dependency string of the "
-        "root pyproject.toml. A name with no version, a name with extras "
-        "(`litellm[all]==1.83.0`), a git URL, the table form that Poetry and "
-        "Pipfile use (`litellm = \"^1.83.0\"`), a requirements file in a "
-        "sub-directory and an `.mcp.json` launcher are not reported. Pipfile.lock, "
-        "poetry.lock and uv.lock are opened but never match, because the name and "
-        "the version sit on separate lines, so a version that reaches the project "
-        "only through a lockfile is not reported. A compose file's "
-        "`ghcr.io/berriai/litellm` image tag is not read."
-        " A lockfile over 32 MiB is not read."
+        "Reads the dependency declarations of the root requirements*.txt, "
+        "pyproject.toml and Pipfile in their own formats, and reports one whose "
+        "range admits a release below 1.83.7 (`litellm<1.83.7` included), and the "
+        "version the root Pipfile.lock, poetry.lock or uv.lock resolves when it is "
+        "below 1.83.7. A git requirement's dotted release tag is read as its "
+        "version (`@v1.83.0`); a commit, a branch or a tag with no dot (`@v2`) "
+        "states none. A declaration that states no version, such as "
+        "`litellm` alone or a git URL without a release tag, is not reported, "
+        "and neither is a "
+        "requirements file in a sub-directory or an `.mcp.json` launcher. A compose file's `ghcr.io/berriai/litellm` image tag is not read. A "
+        "manifest over 2 MB is not read. A lockfile over 32 MiB is not read."
     ),
 )
 
@@ -9014,14 +9050,22 @@ _r(
     owasp_agentic_references=["ASI02", "ASI04"],
     adversa_references=["ADV-SUPPLY-01"],
     limitations=(
-        "Reads `mcp-gateway-registry` as text in the project root's "
-        "requirements*.txt, pyproject.toml, Pipfile, Pipfile.lock, poetry.lock, "
-        "uv.lock, package.json, package-lock.json, .mcp.json, mcp.json, "
-        "claude_desktop_config.json and *.mcp.yaml/.yml files, and reports a file "
-        "whose first mention has a version below 1.0.13 or none. It does not read a "
+        "Reads the dependency declarations and launchers of the project root's "
+        "requirements*.txt, pyproject.toml, Pipfile, package.json, .mcp.json, "
+        "mcp.json, claude_desktop_config.json and *.mcp.yaml/.yml files, and reports "
+        "one whose range admits a release below 1.0.13 or that states no version (a "
+        "git requirement's dotted release tag is its version; a commit, a branch or a "
+        "tag with no dot, `@v2`, states none), every "
+        "`agentic-community/mcp-gateway-registry` git or image reference whose tag is "
+        "below 1.0.13 or missing, a command line that runs `mcp-gateway-registry` "
+        "without fetching it, and the version the root Pipfile.lock, poetry.lock, "
+        "uv.lock or package-lock.json resolves when it is below 1.0.13. A mention of "
+        "the name that is none of these, such as a server's name or a URL, is not "
+        "read, and neither is an image published under another name, such as the "
+        "project's own `public.ecr.aws/p3v1o3c6/registry`. It does not read a "
         "sub-directory, including a requirements file there, `.cursor/mcp.json` or "
-        "`.vscode/mcp.json`, or a `pdm.lock`, `yarn.lock` or `pnpm-lock.yaml`."
-        " A lockfile over 32 MiB is not read."
+        "`.vscode/mcp.json`, or a `pdm.lock`, `yarn.lock` or `pnpm-lock.yaml`. A file "
+        "over 2 MB is not read. A lockfile over 32 MiB is not read."
     ),
 )
 
@@ -9118,12 +9162,21 @@ _r(
     owasp_agentic_references=["ASI04", "ASI05"],
     adversa_references=["ADV-AUTH-01"],
     limitations=(
-        "Looks for `serena-agent`, `serena-mcp-server` or `oraios/serena`, unpinned or "
-        "below 1.5.2, in the root dependency manifests and lockfiles and in the root "
+        "Reads the declarations and launchers of `serena-agent` and "
+        "`serena-mcp-server` in the root dependency manifests and in the root "
         "`.mcp.json`, `mcp.json`, `claude_desktop_config.json` and `*.mcp.yaml` or "
-        "`*.mcp.yml` files. Only these root-level files are read, so the same server "
-        "launched from `.cursor/mcp.json` is missed."
-        " A lockfile over 32 MiB is not read."
+        "`*.mcp.yml` files, and reports one whose range admits a release below 1.5.2 "
+        "or that states no version (a git requirement's dotted release tag is its "
+        "version; a commit, a branch or a tag with no dot, `@v2`, states none), the "
+        "version a root lockfile resolves when it is below 1.5.2, every "
+        "`oraios/serena` git or image reference whose tag is below 1.5.2 or missing, "
+        "and a command line that runs `serena-mcp-server` without fetching it (`uv "
+        "run --directory ../serena serena-mcp-server`, with or without a `--with` "
+        "package). A mention of "
+        "the names that is none of these, such as a server's name, is not read. Only "
+        "these root-level files are read, so the same server launched from "
+        "`.cursor/mcp.json` is missed. A file over 2 MB is not read. A "
+        "lockfile over 32 MiB is not read."
     ),
 )
 
