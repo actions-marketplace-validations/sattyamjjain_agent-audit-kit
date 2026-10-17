@@ -2505,6 +2505,20 @@ _r(
 # Taint Analysis (8 rules)
 # ---------------------------------------------------------------------------
 
+# The TypeScript/JavaScript pattern scanner skips a JavaScript file it takes for
+# a bundle (`typescript_pattern_scan._is_bundle`). Each rule it reports in
+# JavaScript states the test, and the two ways it misjudges a file.
+_JS_BUNDLE_LIMITATION = (
+    " A JavaScript file is skipped as a bundle when its name holds `.min.`, or when "
+    "it is over 10,000 characters and its median non-blank line (the longer of the "
+    "middle two, for an even number) is over 500 characters long or most of it is "
+    "lines over 5,000 characters in which `(` and "
+    "`;` make up at least 1%. So a one-line bundle of 10,000 characters or fewer is "
+    "read, and a hand-written file most of whose text is one long line of inlined "
+    "data with `;` in it, such as a stylesheet or an SVG, is skipped, and its "
+    "findings with it."
+)
+
 _r(
     "AAK-TAINT-001",
     "Tool parameter flows to shell command",
@@ -2548,10 +2562,33 @@ _r(
         "function's parameter included (`def run(self)` in an unrelated class), is "
         "matched by its spelling only, so a call through that name is not reported. "
         "A file with a star import reads no name through its imports, so "
-        "`from subprocess import *` never resolves `run`. The TypeScript arm reads `.ts` and "
-        "`.tsx` files only and "
-        "matches `exec`, `execSync`, `spawn` and `spawnSync`: the same call in a "
-        "`.js` file, or `execFile`, is not reported."
+        "`from subprocess import *` never resolves `run`. "
+        "The TypeScript and JavaScript arm reports `exec`, "
+        "`execSync`, `spawn` and `spawnSync` called on `child_process` or on "
+        "`require(\"child_process\")`, on a name bound to the module, or under a "
+        "name imported from it, also when the call is split across two lines at "
+        "its dot. A name is bound by an assignment of `require(...)` or "
+        "`import(...)`, awaited or in parentheses (a second declarator, and a name "
+        "declared first and assigned later, included), by an import (`import cp "
+        "from`, `import * as cp from`, TypeScript's `import cp = require(...)`, a "
+        "`default` item), by a `.then` callback, or as `this.cp`; it is imported by "
+        "an import or destructuring list, from the module or from a name bound to "
+        "it (`const { exec } = cp`). So `execFile`, a wrapper (`promisify(exec)`, "
+        "execa, cross-spawn) and a process API outside `child_process` "
+        "(`Bun.spawn`, node-pty, an SSH client's `exec`) are not reported. Nor is a "
+        "binding written another way: a typed `const cp: typeof "
+        "import(\"child_process\") = require(...)`, a backtick `require(`...`)`, "
+        "`module.require(...)`, a list with a comment in it or an item with a "
+        "default value (`{ exec = null }`), a method copied off a bound name "
+        "(`const run = cp.exec`), the property of an object other than `this` "
+        "(`deps.cp.exec(...)`), or an `exec` re-exported through a local module. "
+        "It reads a `.js`, `.jsx`, "
+        "`.mjs` or `.cjs` file only when the file imports the SDK's server modules "
+        "(`@modelcontextprotocol/sdk/server/...`), registers a tool "
+        "(`server.tool(`, `server.registerTool(`) or handles "
+        "`CallToolRequestSchema`, so a tool module that does none of these, or a "
+        "FastMCP server (`server.addTool`), is not reported."
+        + _JS_BUNDLE_LIMITATION
     ),
 )
 
@@ -2606,8 +2643,11 @@ _r(
         "an ASCII digit, punctuation other than `_`, or whitespace. Such a call "
         "still evaluates the caller's arithmetic, which can hold the process "
         "(`9**9**9`). The "
-        "TypeScript arm reads `.ts` and `.tsx` files only: "
-        "the same `eval(...)` in a `.js` file is not read."
+        "TypeScript arm reads `.ts`, `.tsx`, `.mts` and `.cts` files only: "
+        "the same `eval(...)` in a `.js` file is not read. JavaScript is read for "
+        "the other rules but not for this one: in JavaScript MCP servers from code "
+        "search, 1 of 12 `eval(` matches was an eval call, the rest strings, "
+        "regular expressions or methods named `eval`."
     ),
 )
 
@@ -2639,8 +2679,13 @@ _r(
         "way anywhere, a method or another function's parameter included "
         "(`def describe(Path)`), or has a star import: the call is then matched by "
         "its spelling only. The "
-        "TypeScript arm looks at `fs.writeFile` and `appendFile` calls only: a tool "
-        "that reads a path with `fs.readFileSync(path)` is not reported."
+        "TypeScript and JavaScript arm looks at `fs.writeFile` and `appendFile` "
+        "calls only: a tool that reads a path with `fs.readFileSync(path)` is not "
+        "reported. It reads a `.js`, `.jsx`, `.mjs` or `.cjs` file only when the "
+        "file imports the SDK's server modules, registers a tool or handles "
+        "`CallToolRequestSchema`, so a FastMCP server (`server.addTool`) is not "
+        "reported."
+        + _JS_BUNDLE_LIMITATION
     ),
 )
 
@@ -2684,8 +2729,9 @@ _r(
     "Tool parameter flows to SQL query",
     "In Python, a @tool function parameter, or an item read from one, is passed as the "
     "whole query to cursor.execute(), connection.execute() or session.execute(), so the "
-    "caller chooses the SQL that runs. The TypeScript arm reports a template literal "
-    "with an interpolation passed to .query(), .execute() or .raw(), a string literal "
+    "caller chooses the SQL that runs. The TypeScript and JavaScript arm reports a "
+    "template literal with an interpolation passed to .query(), .execute() or "
+    ".raw(), a string literal "
     "concatenated into .query() or .execute(), and Prisma's $queryRawUnsafe and "
     "$executeRawUnsafe; the Rust arm, a sql!, query! or query_as! macro given a "
     "format! string or a concatenation that starts with a bare name "
@@ -2710,7 +2756,13 @@ _r(
         "(`cursor.execute(f\"SELECT * FROM notes WHERE title = '{title}'\")`), "
         "`.format()`, `%` or `+`, the usual shape of SQL injection, is not reported, "
         "and neither is the same call on a variable under another name "
-        "(`conn.execute(query)`)."
+        "(`conn.execute(query)`). The TypeScript and JavaScript arm reads the "
+        "template literal or the concatenation on the call's own line, so a query "
+        "built into a variable first (`db.query(sql)`), or one whose `${` falls on a "
+        "later line, is not reported. It reads a `.js`, `.jsx`, `.mjs` or `.cjs` file "
+        "only when the file imports the SDK's server modules, registers a tool or "
+        "handles `CallToolRequestSchema`."
+        + _JS_BUNDLE_LIMITATION
     ),
 )
 
@@ -5095,10 +5147,12 @@ _r(
     limitations=(
         "Reads `.ts`, `.tsx`, `.js`, `.jsx`, `.mjs`, `.cjs`, `.html`, `.htm`, "
         "`.vue` and `.svelte` files that carry an MCP Apps marker (`ui://`, "
-        "`@mcp-ui/`, `createUIResource` and similar). An `<iframe>` tag is judged "
-        "by the value of its `sandbox`, but an iframe created in script is judged "
-        "only by whether a sandbox is set at all: `frame.setAttribute(\"sandbox\", "
-        "\"allow-scripts allow-same-origin\")` is not reported."
+        "`@mcp-ui/`, `createUIResource` and similar). A sandbox value is judged "
+        "where it is written as a literal: in an `<iframe>` tag, in "
+        "`setAttribute(\"sandbox\", ...)` or in `frame.sandbox = ...`. A value held "
+        "in a variable, or added with `frame.sandbox.add(...)`, counts as a sandbox "
+        "whatever it grants, and a sandbox set anywhere in a file counts for every "
+        "iframe the file creates in script."
     ),
 )
 
@@ -6061,24 +6115,48 @@ _r(
     "print / sys.stdout.write / console.log without stripping control "
     "characters (\\r, \\n, \\x1b) first. CVE-2026-6494 (AAP MCP, CVSS 5.3 "
     "MEDIUM, CWE-117) lets an attacker forge log entries and inject "
-    "ANSI escape sequences to socially engineer an operator.",
+    "ANSI escape sequences to socially engineer an operator. A write to "
+    "stdout (`print` without `file=`, `sys.stdout`, `console.log`) does more "
+    "harm in a STDIO server: stdout carries the JSON-RPC stream, which the "
+    "MCP stdio transport says must hold nothing but valid MCP messages, so "
+    "caller input written there corrupts it and a whole JSON-RPC line can "
+    "inject a message. Stripping control characters does not stop that; "
+    "diagnostics belong on stderr.",
     Severity.MEDIUM,
     Category.TAINT_ANALYSIS,
-    "Strip \\r\\n\\x1b (or accept only printable ASCII) before "
-    "logging anything derived from tool input. Prefer structured "
-    "logging (JSON/logfmt) so log consumers aren't confused by forged "
-    "lines.",
+    "Write diagnostics to stderr (`print(..., file=sys.stderr)` or a logger "
+    "that writes there), never to stdout: stdout carries the protocol in a "
+    "STDIO server, so caller input there can inject messages. Strip "
+    "\\r\\n\\x1b (or accept only printable ASCII) before logging anything "
+    "derived from tool input. Prefer structured logging (JSON/logfmt) so "
+    "log consumers aren't confused by forged lines.",
     sarif_name="McpLogInjection",
     cve_references=["CVE-2026-6494"],
     owasp_mcp_references=["MCP08:2025"],
     owasp_agentic_references=["ASI09"],
     adversa_references=["ADV-LOG-01"],
     limitations=(
-        "Reads the arguments of calls spelled `logger.<level>`, `log.<level>`, "
-        "`console.<level>` and `sys.stdout.write` in functions whose decorator name "
-        "ends in `tool`. `logging.info(...)`, `self.logger.info(...)` and "
-        "`print(...)` are not matched, and a `.replace(\"\\n\", ...)` or a `sanitize` "
-        "call anywhere in the function clears it, whichever value that touches."
+        "Reads the arguments of `print` (to stdout, or with `file=` set to "
+        "`sys.stdout`, `sys.stderr`, a bare `stdout` or `stderr` or `None`), of a level "
+        "method (`info`, `exception` and the rest) of `logger`, `log` or the `logging` "
+        "module, of any `sys.stdout` or `sys.stderr` method and of "
+        "`console.<log|info|warn|error>`, in functions whose decorator name ends in "
+        "`tool` and the functions nested in them. A call inside a tool function nested "
+        "in another is read for the innermost one only, with its parameters, so a "
+        "nested tool that logs a parameter of the tool around it is not reported. A "
+        "logger held as an attribute "
+        "(`self.logger.info(...)`) is not read: measured on 9,137 Python files from "
+        "GitHub code searches for MCP servers, it would add 69 findings, only 44 of "
+        "them (64%) a "
+        "raw string parameter. Nor is a logger under another name "
+        "(`_logger.info(...)`). A call to a function whose name contains "
+        "`sanitize`, `strip_control` or `escape_controls` anywhere in the function "
+        "clears it, whichever value that touches, and so does sanitising code "
+        "written anywhere in it, a comment included: `.replace(\"\\r\"` or "
+        "`.replace(\"\\n\"`, `.encode(\"ascii\", \"ignore\")`, or an `re.sub(` whose "
+        "pattern begins with an escape such as `\\r` or `\\x1b`. The word "
+        "`sanitize` in a docstring, a comment or a name that is not called does "
+        "not."
     ),
 )
 
@@ -6927,11 +7005,23 @@ _r(
     Category.TOOL_POISONING,
     "Add the source/sink pair to `.aak-toxic-flow-trust.yml` with a "
     "`justification:` field, scope the source tool to a directory the "
-    "sink cannot reach, or remove one side of the pair. Run "
-    "`agent-audit-kit toxic-flow --explain` to see the full graph.",
+    "sink cannot reach, or remove one side of the pair. The finding's "
+    "evidence names the families and the tools on each side.",
     sarif_name="ToxicFlowSourceSink",
     owasp_agentic_references=["ASI02"],
     adversa_references=["ADV-CHAIN-01"],
+    limitations=(
+        "Off unless `AAK_TOXIC_FLOW=1` is in the environment. It reads the server "
+        "names and `args` strings of `.mcp.json`, `.cursor/mcp.json`, "
+        "`.vscode/mcp.json`, `.amazonq/mcp.json` and `mcp.json` at the scan root, and "
+        "the names of Python functions decorated `@tool`, `@mcp.tool` or "
+        "`@server.tool` with no arguments, and matches each against the names in "
+        "`toxic_flow_pairs.yml`. A server is judged by its name and arguments, not by "
+        "the tools it lists at run time, so `@modelcontextprotocol/server-filesystem`, "
+        "whose read tool is `read_text_file`, is no source. A decorator with arguments "
+        "(`@tool(\"read_file\")`, `@mcp.tool(name=...)`), a TypeScript "
+        "`server.tool(...)` and a skill under `.claude/skills/` declare no tool."
+    ),
 )
 
 
@@ -7317,13 +7407,18 @@ _r(
     incident_references=["COMMENT-AND-CONTROL-2026-04-25"],
     limitations=(
         "Needs, in one Python function (or one TS/JS file), a title source, an LLM "
-        "client call and no sanitiser. A source is an attribute path "
-        "(`pull_request.title`, `issue.title`), so `event[\"pull_request\"][\"title\"]` "
-        "and `pull_request.body` are not sources; a sink is one of the listed "
+        "client call and no sanitiser. An event read is a source when it reads the PR "
+        "or issue title or the PR head ref as an attribute, a subscript or a `.get()` "
+        "(`pull_request.title`, `event[\"pull_request\"][\"title\"]`, "
+        "`event.get(\"issue\", {}).get(\"title\")`), so `pull_request.body` is not a "
+        "source, and neither is TypeScript's optional chaining "
+        "(`payload.pull_request?.title`) or a `.get()` whose default is itself a call "
+        "(`event.get(\"pull_request\", dict())`); a sink is one of the listed "
         "spellings (`client.messages.create`, `openai.chat.completions.create`), so "
         "`client.chat.completions.create` is not one. Any `json.dumps(`, "
         "`re.escape(`, `hashlib.*(` or `html.escape(` in the function counts as a "
-        "sanitiser, including a `json.dumps` that only builds the prompt."
+        "sanitiser, including a `json.dumps` that only builds the prompt. A file over "
+        "512 KB is not read."
     ),
 )
 
@@ -7579,11 +7674,10 @@ _r(
     Severity.MEDIUM,
     Category.AGENT_CONFIG,
     "Switch every `ToolNode([t1, t2, ...])` to `ToolNode(tools=[t1, t2, "
-    "...])`. The codemod at "
-    "`agent_audit_kit/autofix/langgraph_toolnode.py` rewrites the trivial "
-    "shape; `aak suggest --apply-trivial --rule "
-    "AAK-LANGGRAPH-TOOLNODE-LIST-REGRESSION-001` will run it (queued for "
-    "v0.4.0).",
+    "...])`. `aak fix` rewrites the list-literal form in place, through the "
+    "codemod at `agent_audit_kit/autofix/langgraph_toolnode.py` "
+    "(`aak fix --dry-run` lists the change first); a bare name, "
+    "`ToolNode(tools_list)`, is left for you to change.",
     sarif_name="LangGraphToolNodePositionalList",
     auto_fixable=True,
     limitations=(
@@ -7625,8 +7719,35 @@ _r(
         "import: a URL held in a constant is not seen. An untrusted source is "
         "recognised only from a short list (`request.json`, `request.args`, "
         "`pdfplumber.open`, `unstructured.partition`, `open(...).read()`), so a "
-        "page fetched with `requests.get(url).text` is not one, and any `re.sub(` "
-        "call in the function counts as sanitising."
+        "page fetched with `requests.get(url).text` is not one. A call to "
+        "`sanitize_tool_description` counts anywhere in the function, whichever value "
+        "it cleans. A substitution (`re.sub`, `re.subn`, or `.sub` or `.subn` on a "
+        "compiled pattern, held by a name or compiled in place) counts only when its "
+        "pattern is a string literal, or a name bound to one (by an assignment in the "
+        "function, in a function around it or in the module, a module-level block "
+        "included, directly or through `re.compile`), that names `route` or `expert` (in "
+        "any case), the words in the routing tokens `[ROUTE: ...]`, `<|route_id|>`, "
+        "`__route__=` and `{{expert: ...}}`, and its result is a description built in "
+        "the same function (a `\"description\"` dict value, a `description=` keyword or "
+        "a `[\"description\"]` assignment) or is assigned to the variable a name in "
+        "one stands for: by `=`, `+=` or `:=`, or as the first name a `subn(...)` "
+        "unpacks into (`clean, n = re.subn(...)`). The substitution counts anywhere "
+        "inside that value, so `doc + re.sub(ROUTE, \"\", suffix)` clears the "
+        "function although `doc` goes out raw. A name, a pattern's included, is the "
+        "variable Python resolves it to: that of the nearest function, this one or one "
+        "around it, that binds it (a parameter, an assignment, an import), which a "
+        "function nested in that one can also assign through `nonlocal`; a name a "
+        "class body, a comprehension or a lambda inside the function binds counts as "
+        "the function's own. The function is judged "
+        "as a whole, the functions nested in it included, so one of them that cleans "
+        "its description clears it too; a nested function is also judged on its own. "
+        "One cleaned description clears a function, even when another tool's "
+        "description goes out raw, the cleaned name is rebound to the raw text, or the "
+        "keyword belongs to something else "
+        "(`argparse.ArgumentParser(description=re.sub(...))`). What the pattern removes "
+        "is not checked, so `re.sub(r\"route\", \"path\", doc)` counts, and a pattern "
+        "built at run time or held on a class never does. A file over 512 KB is not "
+        "read."
     ),
 )
 
@@ -8002,9 +8123,11 @@ _r(
     "No action required for the rule fire itself — this is a lineage "
     "data point. For SBOM / supply-chain attestation, record the "
     "Stainless lineage alongside the package's own version metadata. "
-    "If you'd prefer to suppress the rule in your project, add the "
-    "rule ID to your `aak ignore` config — `INFO` rules are silent "
-    "by default in `aak scan` unless `--severity info` is passed.",
+    "`INFO` findings are not shown by default, since `aak scan` "
+    "reports from `low` up; `aak scan --severity info` shows them. To "
+    "suppress the rule even then, list its id under `exclude-rules` in "
+    "`.agent-audit-kit.yml`, or run "
+    "`aak scan --exclude-rules AAK-MCP-LINEAGE-STAINLESS-001`.",
     sarif_name="StainlessLineageProvenance",
     incident_references=["ANTHROPIC-STAINLESS-2026-05-18"],
     limitations=(
@@ -8164,13 +8287,21 @@ _r(
     owasp_agentic_references=["ASI05"],
     adversa_references=["ADV-INJECT-04"],
     limitations=(
-        "Reads `.ts` and `.tsx` files that carry a tool-call marker "
+        "Reads `.ts`, `.tsx`, `.mts` and `.cts` files that carry a tool-call marker "
         "(`handleToolCall`, `CallToolRequestSchema`, `setRequestHandler`, "
-        "`server.tool`, `tools/call`) and reports `exec` or `execSync` whose first "
-        "argument is a template literal with `${}` or a concatenation written "
-        "inside the call. A command built into a variable first and then passed as "
-        "`exec(command)` is not reported, and neither is the same code in a `.js` "
-        "file."
+        "`server.tool`, `tools/call`), and `.js`, `.jsx`, `.mjs` and `.cjs` files "
+        "that call `setRequestHandler(CallToolRequestSchema, ...)` or carry "
+        "`handleToolCall`, `server.tool` or `@tool`: in JavaScript a client sends "
+        "`tools/call`, registers handlers of its own with `setRequestHandler` and "
+        "imports `CallToolRequestSchema` to build a request, so none of these alone "
+        "makes a tool handler. It reports `exec` or `execSync` whose first argument "
+        "is a template literal with `${}` or a concatenation written inside the "
+        "call. A command built into a variable first and then passed as "
+        "`exec(command)` is not reported, and neither is a JavaScript dispatcher "
+        "whose only marker is the `tools/call` string, nor a server whose only tool "
+        "registration is `server.registerTool(`, which is a marker in neither "
+        "language."
+        + _JS_BUNDLE_LIMITATION
     ),
 )
 
