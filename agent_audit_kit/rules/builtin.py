@@ -1731,7 +1731,10 @@ _r(
     limitations=(
         "Looks for `sk-ant-` followed by 20 or more key characters in files whose "
         "extension is on a fixed list (`.json`, `.yml`, `.toml`, `.py`, `.ts`, `.sh` "
-        "and similar, plus `.env` files and Dockerfiles). A key in any other kind of "
+        "and similar, plus `.env` files, Dockerfiles and Markdown). In Markdown, a key "
+        "shaped like a documentation stand-in (one repeated character after the prefix, a "
+        "run of `x`, or REPLACE, YOUR, EXAMPLE, PLACEHOLDER or CHANGEME in it) is skipped. "
+        "A key in any other kind of "
         "file is not reported: one pasted into a Jupyter notebook (`.ipynb`) is "
         "missed, although the same content in a `.json` file is found."
     ),
@@ -1753,7 +1756,8 @@ _r(
         "Looks for the `sk-` shapes OpenAI issues: legacy user keys and the "
         "`sk-proj-`, `sk-svcacct-` and `sk-admin-` families. A key with no such prefix "
         "is not recognised, so an Azure OpenAI key, which is 32 hexadecimal "
-        "characters, is not reported, although an `sk-proj-` key in the same place is."
+        "characters, is not reported, although an `sk-proj-` key in the same place is. "
+        "In Markdown, a key shaped like a documentation stand-in (one repeated character after the prefix, a run of `x`, or REPLACE, YOUR, EXAMPLE, PLACEHOLDER or CHANGEME in it) is skipped."
     ),
 )
 
@@ -1775,7 +1779,9 @@ _r(
         "lower-case assignment `aws_secret_access_key = <40 characters>`. The same "
         "secret as the upper-case environment variable, `AWS_SECRET_ACCESS_KEY=<40 "
         "characters>`, is not reported, so a file that holds the secret without its "
-        "key ID is missed."
+        "key ID is missed. In Markdown, a key shaped like a documentation stand-in (one "
+        "repeated character after the prefix, a run of `x`, REPLACE, YOUR, EXAMPLE, "
+        "PLACEHOLDER or CHANGEME in it, or the AWS IAM User Guide's example key) is skipped."
     ),
 )
 
@@ -1797,7 +1803,9 @@ _r(
         "16 or more characters whose Shannon entropy exceeds 4.5 bits per character. A "
         "secret drawn from a small alphabet cannot reach that: a 64-digit hexadecimal "
         "secret, such as the output of `openssl rand -hex 32`, tops out at 4 bits per "
-        "character and is never reported."
+        "character and is never reported. An unquoted YAML value (`SECRET_KEY: value` in a "
+        "compose file) is not read, and neither is Markdown: read, they gave 23% and at most "
+        "56% precision on 1,527 YAML and 1,909 Markdown files from public MCP repositories."
     ),
 )
 
@@ -1813,17 +1821,29 @@ _r(
     owasp_agentic_references=["ASI03"],
     adversa_references=["ADV-TOKEN-07"],
     limitations=(
-        "Reports a private key by its file name (a `.pem`, `.key`, `.p12` or `.pfx` "
-        "extension, or exactly `id_rsa`, `id_ed25519`, `id_ecdsa` or `id_dsa`) or by a "
-        "PEM private-key header at the top of a `.crt` or `.cer` file. The same key "
-        "pasted into any other file, such as a YAML deploy config, is not reported."
+        "Reports a keystore (`.p12`, `.pfx`, `.jks`, `.keystore`, `.jceks` or `.ppk`) or "
+        "an ssh-keygen default name (`id_rsa`, `id_ed25519` and the like) by its name, a "
+        "private-key header in a `.pem`, `.key`, `.p8`, `.crt` or `.cer` file, and, in "
+        "any other file under 1 MB, Markdown included, a PEM private key written out whole: "
+        "its header, its base64 lines and its END marker. There a block whose body is a "
+        "documentation stand-in is skipped: a line that is not standard base64 (`...`, "
+        "`<paste your key here>`, `PRIVATE_KEY_CONTENT_GOES_HERE`), fewer than 16 base64 "
+        "characters, one repeated character, or, in a body shorter than 64 characters "
+        "(the shortest real key), a run of `x` or REPLACE, YOUR, EXAMPLE, PLACEHOLDER or "
+        "CHANGEME in it. "
+        "A key assembled from several quoted strings in "
+        "code is not reported: a Python module that writes the header, each base64 line "
+        "and the END marker as separate string literals is missed, although the same key "
+        "in one triple-quoted string is found."
     ),
 )
 
 _r(
     "AAK-SECRET-006",
     ".env file not in .gitignore",
-    "A .env file exists but .gitignore does not contain a .env exclusion pattern.",
+    "A .env file exists in the project root and the root .gitignore does not ignore it. "
+    "Env templates meant to be committed (`.env.example`, `.env.sample`, "
+    "`.env.template`, `.env.dist`) are not reported.",
     Severity.MEDIUM,
     Category.SECRET_EXPOSURE,
     "Add .env* to .gitignore.",
@@ -1833,9 +1853,14 @@ _r(
     adversa_references=["ADV-TOKEN-08"],
     auto_fixable=True,
     limitations=(
-        "Looks for `.env` and `.env.*` files in the project root only. An env file in "
-        "a subdirectory, such as `services/api/.env.example` in a monorepo, is not "
-        "examined, even when the project has no `.gitignore` at all."
+        "Looks for `.env` and `.env.*` files in the project root only, and reads only the "
+        "root `.gitignore`. An env file in a subdirectory, such as `services/api/.env.test` "
+        "in a monorepo, is not examined, even when the project has no `.gitignore` at all. "
+        "The `.gitignore` is read up to the last line that ends within its first 1,000,000 "
+        "bytes, so an env file ignored only by a line past that point is reported. Patterns "
+        "match case-sensitively, as git does by default on Linux: where core.ignorecase is "
+        "set, the default on macOS and Windows, a `.ENV` line also ignores `.env`, which this "
+        "rule still reports."
     ),
 )
 
@@ -1889,7 +1914,7 @@ _r(
         "Reads GitHub personal access tokens (`ghp_` classic, `github_pat_` "
         "fine-grained) and GitLab `glpat-` tokens. GitHub's other token types are not "
         "reported: OAuth (`gho_`), GitHub App user (`ghu_`) and installation (`ghs_`), "
-        "and refresh (`ghr_`) tokens."
+        "and refresh (`ghr_`) tokens. " + "In Markdown, a key shaped like a documentation stand-in (one repeated character after the prefix, a run of `x`, or REPLACE, YOUR, EXAMPLE, PLACEHOLDER or CHANGEME in it) is skipped."
     ),
 )
 
@@ -1905,7 +1930,7 @@ _r(
     owasp_agentic_references=["ASI03"],
     adversa_references=["ADV-TOKEN-11"],
     limitations=(
-        "Reports a file with a `.json` extension that contains `\"type\": "
+        "Reports a file with a `.json` extension, in any case, that contains `\"type\": "
         "\"service_account\"`. The same key saved under another extension, such as "
         "`.yml`, is not reported."
     ),
@@ -5075,7 +5100,8 @@ _r(
     owasp_mcp_references=["MCP10:2025"],
     limitations=(
         "Reads source, config and text files by extension (`.py`, `.ts`, `.json`, "
-        "`.yaml`, `.toml`, `.txt`, `.md` and a few more) for a Verhoeff-valid Aadhaar "
+        "`.yaml`, `.toml`, `.ini`, `.txt`, `.md` and a few more) and env files (`.env`, "
+        "`.env.local`) for a Verhoeff-valid Aadhaar "
         "number. Any other extension is never opened: the rows of a customer export "
         "saved as `.csv` are not reported, while the same rows in a `.txt` file are."
     ),
@@ -6316,12 +6342,18 @@ _r(
     adversa_references=["ADV-LEAK-01"],
     incident_references=["SVD-2026-0405"],
     limitations=(
-        "The log-call check reads calls on a receiver named `logger`, `logging`, "
-        "`LOGGER` or `log` (and `print`, `console.*` and `System.out`) whose arguments "
-        "carry a token-shaped literal or a variable named like `access_token`, "
-        "`session_token`, `api_key` or `bearer`. A logger held under any other name is "
-        "not recognised: the same call on `_logger`, `self._logger` or `LOG` is not "
-        "reported."
+        "The log-call check reads calls on a logger (`logger`, `_logger`, `self.log`, "
+        "`LOG`, `app_logger`, `logging.getLogger(...)` and the like), `print`, "
+        "`console.*` and `System.out` that write a token-shaped literal or the value of a "
+        "credential-named variable, attribute or key (`access_token`, `github_token`, "
+        "`client_secret`, `password`, `headers[\"Authorization\"]`). It judges the name, "
+        "not where the value came from: `value = access_token` and then "
+        "`logger.info(\"auth %s\", value)` is not reported, while the same call with "
+        "`access_token` is. A value named only `token` counts when the message also names a "
+        "credential (`\"auth %s\"`, `\"token=%s\"`), so `logger.debug(\"%s\", token)` is "
+        "not reported. A call whose arguments run past 4,000 characters is not read, and a "
+        "call is read only if its arguments end within the file's first 2,000,000 characters "
+        "of call arguments, so a crafted file cannot stall the scan."
     ),
 )
 
@@ -6924,7 +6956,8 @@ _r(
     "AAK-SPLUNK-MCP-TOKEN-LEAK-001",
     "splunk-mcp-server configured to write tokens to _internal / _audit",
     "A splunk-mcp-server configuration (`inputs.conf`, "
-    "`splunk-mcp.yaml`, or any file under `splunk-mcp/`) routes a "
+    "`splunk-mcp.yaml`, or any file under `splunk-mcp/`, `splunk-mcp-server/` "
+    "or another directory named for both) routes a "
     "token-bearing source into the `_internal` or `_audit` index, "
     "or names a sourcetype known to carry session tokens "
     "(`splunk_session`, `mcp_auth`, `bearer`). Distinct from "
@@ -6944,7 +6977,8 @@ _r(
     incident_references=["SVD-2026-0405"],
     limitations=(
         "Reads a Splunk MCP config: `inputs.conf`, `splunk-mcp.yaml` or any file under "
-        "a `splunk-mcp` directory. A YAML file is read as structure only when `inputs` "
+        "a directory whose name holds both `splunk` and `mcp` (`splunk-mcp`, "
+        "`splunk-mcp-server`). A YAML file is read as structure only when `inputs` "
         "or `sourcetypes` is a top-level list, so the same entries nested under "
         "another key, such as `splunk:`, are not reported."
     ),
@@ -8535,9 +8569,12 @@ _r(
     owasp_agentic_references=["ASI03"],
     limitations=(
         "Reads Python and JavaScript/TypeScript files that mention MCP, and matches "
-        "three resolver shapes: `os.path.expandvars(...)` and `.format(**os.environ)` "
-        "or `.format_map(os.environ)` in Python, and a `.replace(...)` whose `${...}` "
-        "replacer reads `process.env` in JavaScript or TypeScript. A resolver written "
+        "these resolver shapes: `os.path.expandvars(...)`, `.format(**os.environ)`, "
+        "`.format_map(os.environ)` and `string.Template`'s `substitute(os.environ)` in "
+        "Python, each also under an imported name (`from os.path import expandvars`, "
+        "`from os import environ`), and a `.replace(...)` or `.replaceAll(...)` whose "
+        "`${...}` replacer reads `process.env`, or a local name bound to it, in "
+        "JavaScript or TypeScript. A resolver written "
         "another way is not reported: a Python `re.sub` that looks each `${NAME}` up "
         "in `os.environ` is missed."
     ),

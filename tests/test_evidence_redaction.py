@@ -42,6 +42,12 @@ from agent_audit_kit.verification import _EVIDENCE_PREFIX_RE
 
 # A value no provider issues, long and varied enough to read as generated.
 CANARY = "QZX" + "CANARY" + "9f3a7b21"
+# Upper-case stand-ins in the two shapes AAK-INDIA-PII-004 (IFSC) and -006 (vehicle
+# registration) match, which the mixed-case canary never does: an env file's key or PIN
+# can take either shape, and both rules once copied the whole match into evidence.
+IFSC_SHAPED = "QWTZ" + "0" + "K7P2M9"
+VEHICLE_SHAPED = "KA" + "07" + "XQ" + "5821"
+CANARIES = (CANARY, IFSC_SHAPED, VEHICLE_SHAPED)
 
 
 def _body(length: int) -> str:
@@ -374,12 +380,45 @@ def canary_project(tmp_path: Path) -> Path:
         },
     }), encoding="utf-8")
     (root / ".env").write_text(
-        f"OPENAI_API_KEY={SK_PROJ}\nSLACK_TOKEN={XOXB}\nSECRET={CANARY}e3\n", encoding="utf-8")
+        f"OPENAI_API_KEY={SK_PROJ}\nSLACK_TOKEN={XOXB}\nSECRET={CANARY}e3\n"
+        f"SMS_GATEWAY_KEY={IFSC_SHAPED}\nADMIN_PIN={VEHICLE_SHAPED}\n", encoding="utf-8")
     (root / "src" / "server.py").write_text(
         f'api_key = "{CANARY}p1"\nclient = Client(token="{CANARY}p2")\n'
         f'requests.get("https://api.example.com/?key={CANARY}p3")\n', encoding="utf-8")
     (root / "CLAUDE.md").write_text(f"Use the token {CANARY}m1 to call the API.\n", encoding="utf-8")
+    # The file types and shapes the secret rules began to read in the batch that
+    # added them: each must be reported (see NEWLY_READ) and carry no credential.
+    (root / "app").mkdir()
+    (root / "keys").mkdir()
+    (root / "src" / "config.mjs").write_text(f'export const OPENAI_API_KEY = "{SK_PROJ}";\n', encoding="utf-8")
+    (root / "src" / "legacy.cjs").write_text(f'module.exports = {{ token: "{GHP}" }};\n', encoding="utf-8")
+    (root / "app" / "page.tsx").write_text(f'const key = "{SK_ANT}";\n', encoding="utf-8")
+    (root / "src" / "widget.jsx").write_text(f'const gitlab = "{GLPAT}";\n', encoding="utf-8")
+    (root / "keys" / "deploy_key").write_text(
+        "-----BEGIN " + "OPENSSH PRIVATE KEY-----\n" + (CANARY + _body(48)) * 2 + "\n"
+        "-----END " + "OPENSSH PRIVATE KEY-----\n", encoding="utf-8")
+    (root / "docs").mkdir()
+    (root / "docs" / "setup.md").write_text(
+        f"## Setup\n\n```sh\nexport GITHUB_TOKEN={GHP}\nexport OPENAI_API_KEY={SK_PROJ}\n```\n", encoding="utf-8")
+    (root / "src" / "auth.py").write_text(
+        f'import logging\n_logger = logging.getLogger(__name__)\n_logger.info("auth %s", "{GHP}")\n'
+        f'_logger.info("auth %s", github_token)\n', encoding="utf-8")
     return root
+
+
+# Each newly read file type, and the rule that must report it from the canary project.
+NEWLY_READ = {
+    ("src/config.mjs", "AAK-SECRET-002"),
+    ("src/legacy.cjs", "AAK-SECRET-008"),
+    ("app/page.tsx", "AAK-SECRET-001"),
+    ("src/widget.jsx", "AAK-SECRET-008"),
+    ("keys/deploy_key", "AAK-SECRET-005"),
+    ("src/auth.py", "AAK-SPLUNK-TOKLOG-001"),
+    ("docs/setup.md", "AAK-SECRET-008"),
+    ("docs/setup.md", "AAK-SECRET-002"),
+    (".env", "AAK-INDIA-PII-004"),
+    (".env", "AAK-INDIA-PII-006"),
+}
 
 
 def _finding_text(finding: Finding) -> str:
@@ -391,7 +430,9 @@ def _finding_text(finding: Finding) -> str:
 def test_no_finding_carries_the_canary(canary_project: Path) -> None:
     findings = run_scan(canary_project).findings
     assert LEAKING_RULES <= {f.rule_id for f in findings}, "a rule this test guards stopped firing"
-    leaks = sorted({f.rule_id for f in findings if CANARY in _finding_text(f)})
+    missing = NEWLY_READ - {(f.file_path, f.rule_id) for f in findings}
+    assert not missing, f"a newly read file type stopped being reported: {sorted(missing)}"
+    leaks = sorted({f.rule_id for f in findings if any(c in _finding_text(f) for c in CANARIES)})
     assert not leaks, f"credential copied into the findings of {leaks}"
 
 
@@ -406,7 +447,8 @@ def test_no_output_format_carries_the_canary(canary_project: Path, tmp_path: Pat
     assert result.exit_code == 0, result.output
     written = out.read_text(encoding="utf-8")
     for text in (result.output, written, summary.read_text(encoding="utf-8")):
-        assert CANARY not in text
+        for canary in CANARIES:
+            assert canary not in text
     if fmt == "sarif":
         messages = [r["message"]["text"] for run in json.loads(written)["runs"] for r in run["results"]]
         assert any(m.endswith("?token=***") for m in messages)  # still reported, value masked
@@ -420,4 +462,4 @@ def test_the_vscode_extension_input_carries_no_canary(canary_project: Path) -> N
     assert result.exit_code == 0, result.output
     findings = json.loads(result.output)["findings"]
     assert findings and all("evidence" in f for f in findings)
-    assert not [f["ruleId"] for f in findings if CANARY in json.dumps(f)]
+    assert not [f["ruleId"] for f in findings if any(c in json.dumps(f) for c in CANARIES)]

@@ -22,9 +22,19 @@ from agent_audit_kit.scanners._helpers import find_line_number, make_finding, in
 _SCAN_EXTS = {
     ".py", ".ts", ".tsx", ".js", ".jsx", ".mjs",
     ".json", ".yaml", ".yml", ".toml", ".env", ".txt", ".md",
+    ".cfg", ".ini", ".conf",
     ".go", ".rs", ".java", ".rb",
 }
 _MAX_FILE_BYTES = 512_000
+
+
+def _is_env_file(name: str) -> bool:
+    """`.env`, `.env.local`, `.env.production`, `prod.env`: what the secret walker reads.
+
+    The extension test alone never opened `.env` itself, whose suffix is empty, nor
+    `.env.local`, whose suffix is `.local`.
+    """
+    return name.startswith(".env") or name.endswith(".env")
 
 # Aadhaar: 12 digits formatted as XXXX XXXX XXXX or XXXX-XXXX-XXXX or bare
 # First digit cannot be 0 or 1 (UIDAI spec).
@@ -95,7 +105,7 @@ def _verhoeff_check(digits: str) -> bool:
 def _iter_source(project_root: Path) -> list[Path]:
     out: list[Path] = []
     for path in project_root.rglob("*"):
-        if not path.is_file() or path.suffix.lower() not in _SCAN_EXTS:
+        if not path.is_file() or not (path.suffix.lower() in _SCAN_EXTS or _is_env_file(path.name)):
             continue
         if in_skip_dir(path, project_root):
             continue
@@ -106,6 +116,17 @@ def _iter_source(project_root: Path) -> list[Path]:
             continue
         out.append(path)
     return out
+
+
+def _masked(value: str) -> str:
+    """The first three characters and the last of a matched identifier, the rest masked.
+
+    The IFSC and vehicle-registration evidence used to quote the whole match. Since env
+    files are read, a match there can be a credential in the same shape (an 11-character
+    upper-case key with a 0 in the fifth place reads as an IFSC code), so every one of
+    these identifiers is shown the way PAN always was.
+    """
+    return f"{value[:3]}****{value[-1]}"
 
 
 def _check_file(path: Path, project_root: Path) -> list[Finding]:
@@ -143,7 +164,7 @@ def _check_file(path: Path, project_root: Path) -> list[Finding]:
             make_finding(
                 "AAK-INDIA-PII-002",
                 rel,
-                f"PAN detected: {m.group(0)[:3]}****{m.group(0)[-1]}",
+                f"PAN detected: {_masked(m.group(0))}",
                 line_number=find_line_number(text, m.group(0)),
             )
         )
@@ -163,7 +184,7 @@ def _check_file(path: Path, project_root: Path) -> list[Finding]:
             make_finding(
                 "AAK-INDIA-PII-004",
                 rel,
-                f"IFSC code detected: {m.group(0)}",
+                f"IFSC code detected: {_masked(m.group(0))}",
                 line_number=find_line_number(text, m.group(0)),
             )
         )
@@ -184,7 +205,7 @@ def _check_file(path: Path, project_root: Path) -> list[Finding]:
             make_finding(
                 "AAK-INDIA-PII-006",
                 rel,
-                f"Indian vehicle registration: {m.group(0)}",
+                f"Indian vehicle registration: {_masked(m.group(0))}",
                 line_number=find_line_number(text, m.group(0)),
             )
         )
