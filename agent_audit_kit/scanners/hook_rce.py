@@ -28,6 +28,7 @@ from agent_audit_kit.scanners._helpers import (
     find_line_number,
     make_finding,
     in_skip_dir,
+    placed,
 )
 
 
@@ -120,20 +121,21 @@ def _check_json_settings(path: Path, project_root: Path) -> list[Finding]:
     data = _load_json(path)
     if data is None:
         return []
-    findings: list[Finding] = []
+    unplaced: list[tuple[Finding, str]] = []
     rel = str(path.relative_to(project_root))
     raw = path.read_text(encoding="utf-8", errors="replace")
     for cmd in _walk_hook_commands(data):
         if _INTERPOLATION_RE.search(cmd):
-            findings.append(
+            unplaced.append((
                 make_finding(
                     "AAK-HOOK-RCE-001",
                     rel,
                     f"Hook command interpolates user-controlled variable: {cmd!r}",
-                    line_number=find_line_number(raw, cmd[:60]),
-                )
-            )
-    return findings
+                ),
+                cmd[:60],
+            ))
+    # Every reported command's line in one pass over the file, not one search of it per command.
+    return placed(raw, unplaced)
 
 
 def _check_hook_script(path: Path, project_root: Path) -> list[Finding]:

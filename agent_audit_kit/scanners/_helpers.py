@@ -1,11 +1,18 @@
 from __future__ import annotations
 
+import ast
 import bisect
 import ipaddress
 import json
 import os
 import re
+import sys
+import threading
 import unicodedata
+from array import array
+from bisect import bisect_right
+from collections import OrderedDict
+from itertools import accumulate, chain
 from pathlib import Path
 from typing import AbstractSet, Any, Callable, Iterable, Iterator, NamedTuple
 from urllib.parse import unquote
@@ -258,8 +265,152 @@ def _parts_below(path: Path, root: Path) -> tuple[str, ...]:
         return ()
 
 
+# ---- Line and source lookups -------------------------------------------------
+#
+# A scanner that reports one finding per server, task, tool or workflow step looks
+# up one line per item, and every lookup used to split the whole text into lines
+# again: N items in a file of S characters cost N x S, so 10,000 VS Code tasks
+# (1.8 MB) took 48 seconds and 20,000 more than three minutes. What a lookup needs
+# from its text (where each line ends, its `splitlines()`, the lines
+# `ast.get_source_segment` cuts from) is now worked out once per text and kept
+# for the few texts most recently looked up in, so a lookup is a `str.find` and a
+# bisect, or a slice.
+#
+# That still leaves each `find_line_number` call paying the distance to its key's
+# first occurrence, and a loop whose keys are each item's own name or URL pays
+# N x S / 2 that way: 20,000 tasks spent 23 seconds in `str.find` alone.
+# `find_line_numbers` takes the keys such a loop will look up and finds them all
+# in one pass; the loop's own `find_line_number` calls are then answered from
+# what it found. Both return exactly what one `find_line_number` call returns.
+
+
+class _TextLookups:
+    """What the line and source lookups have worked out about one text."""
+
+    __slots__ = ("line_ends", "past_newlines", "lines", "py_source", "found", "long_lines")
+
+    def __init__(self) -> None:
+        self.line_ends: array[int] | None = None
+        self.past_newlines: array[int] | None = None
+        self.lines: tuple[str, ...] | None = None
+        self.py_source: PySource | None = None
+        self.found: dict[str, int | None] = {}
+        self.long_lines: list[tuple[int, int]] | None = None
+
+
+# A scanner works through its files one at a time, so a handful of texts is all
+# it ever looks up in at once; keeping more would only hold dead files in memory.
+_TEXT_LOOKUPS: OrderedDict[str, _TextLookups] = OrderedDict()
+_TEXT_LOOKUPS_KEPT = 4
+# Scans can run in threads at once, and they share the memo. Finding a text's
+# entry and moving it to the end are two steps, and without the lock another
+# thread could evict the entry between them, which raised KeyError. What an entry
+# keeps is filled in without it: two threads that work out the same answer for
+# one text store the same value. The lock is reentrant because the memo's own
+# dict lookup hashes and compares the text, which a `str` subclass does in Python
+# and can do through another lookup on the same thread.
+_TEXT_LOOKUPS_LOCK = threading.RLock()
+
+
+def _lookups(text: str) -> _TextLookups:
+    with _TEXT_LOOKUPS_LOCK:
+        entry = _TEXT_LOOKUPS.get(text)
+        if entry is None:
+            entry = _TEXT_LOOKUPS[text] = _TextLookups()
+            if len(_TEXT_LOOKUPS) > _TEXT_LOOKUPS_KEPT:
+                _TEXT_LOOKUPS.popitem(last=False)
+        else:
+            _TEXT_LOOKUPS.move_to_end(text)
+        return entry
+
+
+def _line_ends(text: str, entry: _TextLookups) -> array[int]:
+    """The offset just past each line break in `text`, as `splitlines` breaks it."""
+    if entry.line_ends is None:
+        lines = text.splitlines(True)
+        ends = array("q", accumulate(map(len, lines)))
+        if lines and lines[-1].splitlines()[0] == lines[-1]:
+            ends.pop()  # the last line runs to the end of the text, not to a break
+        entry.line_ends = ends
+    return entry.line_ends
+
+
+def _holds_line_break(key: str) -> bool:
+    return key.splitlines() != [key]
+
+
+# Before Python 3.10, `str.find` had no linear worst case. Where the text is long
+# runs of the key's own characters it compared up to a line's length at every
+# offset, so a lookup of a key longer than the text's lines cost the text times
+# the line: 120 task labels of 4,097 characters, looked up in a 1 MB tasks.json
+# after lines of 4,000 `a`s, took 22.8 seconds there, where the old search line by
+# line, which fails a line shorter than the key at once, took 0.12. 3.10 searches
+# with the Two-Way algorithm, which is linear.
+_LINEAR_FIND = sys.version_info >= (3, 10)
+
+
+def linear_find(text: str, key: str, start: int = 0) -> int:
+    """`text.find(key, start)`, in time linear in the text on every Python this runs on.
+
+    Before 3.10, a key is compiled into a pattern that matches it literally, which
+    `re` searches for with a table of the key's own overlaps (Knuth-Morris-Pratt),
+    reading each character of the text once. The pattern is compiled outside
+    `re`'s cache, which keeps 512 patterns and would push the scanners' own out.
+    Compiling costs about a microsecond and 110 to 170 bytes a character, so only
+    a key up to `_LITERAL_LONGEST` characters is compiled; a longer key is searched
+    for only in the lines at least as long as itself, the way every key was
+    searched for line by line through 0.6.22: text of shorter lines costs nothing,
+    and a line that can hold the key is read with `str.find`, which keeps its
+    pre-3.10 worst case there. A long line made of the key's own filler costs up to
+    the key's length at every offset of the line, as it did through 0.6.22: 20 task
+    labels of 4,097 characters against one 500,000-character line took 10 s on
+    3.9, on 0.6.22 and here, and what bounds it is how much of a file the scanner
+    reads. A key holding a line break, which no line lookup searches for, is read
+    with `str.find` too, as is the empty key. `start` is read as `str.find` reads
+    it, a negative one counted from the end.
+    """
+    if _LINEAR_FIND or not key:
+        return text.find(key, start)
+    start = slice(start, None).indices(len(text))[0]
+    if len(key) <= _LITERAL_LONGEST:
+        found = _literal(key).search(text, start)
+        return found.start() if found else -1
+    if _holds_line_break(key):
+        return text.find(key, start)
+    for line_start, line_end in _long_lines(text):
+        line_start = max(line_start, start)
+        if line_end - line_start >= len(key):
+            offset = text.find(key, line_start, line_end)
+            if offset >= 0:
+                return offset
+    return -1
+
+
+def _literal(key: str) -> re.Pattern[str]:
+    """A pattern that matches `key` and nothing else, compiled outside `re`'s cache."""
+    if sys.version_info < (3, 10):
+        import sre_compile
+
+        return sre_compile.compile(re.escape(key))
+    return re.compile(re.escape(key))  # only a test forces the old search on 3.10 or later
+
+
+def _long_lines(text: str) -> list[tuple[int, int]]:
+    """Where each line of `text` longer than `_LITERAL_LONGEST` starts and ends, found once."""
+    entry = _lookups(text)
+    if entry.long_lines is None:
+        ends = _line_ends(text, entry)
+        bounds = zip(chain((0,), ends), chain(ends, (len(text),)))
+        entry.long_lines = [(a, b) for a, b in bounds if b - a > _LITERAL_LONGEST]
+    return entry.long_lines
+
+
 def find_line_number(raw: str, key: object) -> int | None:
-    """Locate `key` in `raw`, tolerating a non-string key.
+    """The first line of `raw` that contains `key`, tolerating a non-string key.
+
+    A line is what `raw.splitlines()` yields, so it breaks at `\\r`, `\\v`,
+    `\\f`, `\\x1c`-`\\x1e`, `\\x85`, U+2028 and U+2029 as well as `\\n`, and a
+    key that holds a line break is on no line.
 
     Callers pass a value straight out of parsed JSON, and a malformed config can
     put an int or a list where the MCP schema says string. Substring search then
@@ -267,15 +418,362 @@ def find_line_number(raw: str, key: object) -> int | None:
     only ever used to point a finding at a line, so coercing is the right
     trade: a wrong-typed key simply fails to match and the finding carries no
     line number, which is what a missing match already did.
+
+    A key with no line break in it lies inside one line wherever it occurs, so
+    the first line holding it is the line of its first occurrence: one search
+    (`linear_find`) and a bisect over where the lines end, both kept per text
+    (see the comment above `_TextLookups`).
     """
     if not isinstance(key, str):
         key = str(key)
     if not key:
         return None
-    for i, line in enumerate(raw.splitlines(), 1):
-        if key in line:
-            return i
-    return None
+    entry = _lookups(raw)
+    found = entry.found
+    if key in found:
+        return found[key]
+    line = None
+    if not _holds_line_break(key):
+        offset = linear_find(raw, key)
+        if offset >= 0:
+            line = bisect_right(_line_ends(raw, entry), offset) + 1
+    found[key] = line
+    return line
+
+
+# `find_line_numbers` searches key by key while that costs less than one
+# Aho-Corasick pass, whose Python loop is several hundred times slower per
+# character than `str.find` but reads the text once for every key. Measured on a
+# loaded machine: `str.find` 0.6 ns a character, up to 4 ns on text built to
+# defeat it; building the automaton about 0.5 us a key character, scanning
+# 0.05 us a text character. A pass is chosen once the keys outnumber
+# `12 + 150 x key characters / text characters`, which keeps either path within
+# about one pass of the other on any input. Before Python 3.10 a key of up to
+# `_LITERAL_LONGEST` characters searched for on its own is compiled first (see
+# `linear_find`), at about 1 us a key character, near what the automaton costs to
+# build, so the choice stands.
+_ONE_PASS_KEYS = 12
+_ONE_PASS_KEY_CHARS = 150
+# A pass holds about 30 bytes a node of the automaton for keys in Latin-1
+# (arrays for a node's only child, a dict only where it branches, then a failure
+# link, an output link and a queue slot), and 90 to 110 for keys beyond it,
+# whose every character is an object of its own: a full batch peaks near 63 MB,
+# or up to 230 MB. So it is built from as many keys as fit in this many nodes,
+# with one pass over the text per batch; keys that share a prefix share its
+# nodes. A key longer than `_ONE_PASS_LONGEST` is searched for on its own
+# instead: a text holds few of them, and one could fill a batch alone.
+_ONE_PASS_NODES = 1 << 21
+_ONE_PASS_LONGEST = 4096
+# Before 3.10 `linear_find` compiles only a key the automaton would also take:
+# compiling every key up to 1 MiB made eight quiet task labels of that size take
+# 9.25 s and 136 MB on 3.9.
+_LITERAL_LONGEST = _ONE_PASS_LONGEST
+
+
+def find_line_numbers(raw: str, keys: Iterable[object]) -> dict[str, int | None]:
+    """`find_line_number(raw, key)` for every key, the new ones found in one pass.
+
+    Call it before a loop that looks up one key per item, with the keys the loop
+    will ask for: each later `find_line_number(raw, key)` is then answered from
+    what this found, so N items cost one pass over `raw` instead of N searches
+    of it. A key the loop asks for that is not passed here is still found
+    exactly, by its own search, so the keys only decide how fast the loop runs.
+    """
+    entry = _lookups(raw)
+    found = entry.found
+    asked: dict[str, None] = {}
+    for key in keys:
+        asked[key if isinstance(key, str) else str(key)] = None
+    new: list[str] = []
+    for key in asked:
+        if key in found:
+            continue
+        if not key or _holds_line_break(key):
+            found[key] = None
+        else:
+            new.append(key)
+    if new:
+        ends = _line_ends(raw, entry)
+        for key, offset in zip(new, first_offsets(raw, new)):
+            found[key] = bisect_right(ends, offset) + 1 if offset >= 0 else None
+    return {key: found[key] for key in asked}
+
+
+def placed(raw: str, unplaced: Iterable[tuple[Finding, object]]) -> list[Finding]:
+    """The findings, each given the line `find_line_number(raw, key)` gives its key.
+
+    A loop that reports one finding per item makes each without a line and keeps
+    the key it is placed by (a server's URL, a tool's name); this then looks those
+    keys up together, in one pass over `raw` (`find_line_numbers`). The keys are
+    exactly those of the findings made, so a key no finding needs, such as an
+    argument of a server no rule reports, is never searched for.
+    """
+    pending = list(unplaced)
+    if not pending:
+        return []
+    lines = find_line_numbers(raw, (key for _, key in pending))
+    for finding, key in pending:
+        finding.line_number = lines[key if isinstance(key, str) else str(key)]
+    return [finding for finding, _ in pending]
+
+
+def first_offsets(text: str, keys: list[str]) -> list[int]:
+    """`[text.find(key) for key in keys]`, the keys searched for together when that costs less.
+
+    Key by key (`linear_find`) while that is cheaper than one Aho-Corasick pass
+    (see the constants above), otherwise in passes over batches of keys, with
+    any key longer than `_ONE_PASS_LONGEST` searched for on its own.
+    """
+    distinct = list(dict.fromkeys(key for key in keys if key))
+    key_chars = sum(map(len, distinct))
+    if len(distinct) <= _ONE_PASS_KEYS + _ONE_PASS_KEY_CHARS * key_chars // max(len(text), 1):
+        found = {key: linear_find(text, key) for key in distinct}
+    else:
+        short = [key for key in distinct if len(key) <= _ONE_PASS_LONGEST]
+        found = dict(zip(short, _first_offsets(text, short)))
+        for key in distinct:
+            if len(key) > _ONE_PASS_LONGEST:
+                found[key] = linear_find(text, key)
+    return [found[key] if key else 0 for key in keys]
+
+
+def _first_offsets(text: str, keys: list[str]) -> list[int]:
+    """Where each of `keys` first occurs in `text`, or -1: one pass per batch of keys."""
+    offsets: list[int] = []
+    start = 0
+    while start < len(keys):
+        trie = _Trie()
+        stop = start
+        while stop < len(keys) and trie.size() < _ONE_PASS_NODES:
+            trie.add(keys[stop], stop - start)
+            stop += 1
+        offsets.extend(trie.first_offsets(text, [len(key) for key in keys[start:stop]]))
+        start = stop
+    return offsets
+
+
+# A node's character when it has more than one child: two characters, so it never
+# equals the one being looked for.
+_BRANCHES = "\0\0"
+
+
+class _Trie:
+    """The keys of one Aho-Corasick batch, a node's only child kept in arrays.
+
+    Most nodes of a trie built from file contents have one child, a run of a
+    key no other key shares, so a dict per node would cost eight times the
+    memory (273 MB against 34 MB for a million such nodes) and an eighth of
+    the keys per pass.
+    """
+
+    def __init__(self) -> None:
+        self.char = [""]  # the only child's character, "" for none, _BRANCHES for several
+        self.child = array("i", [0])  # the only child
+        self.branches: dict[int, dict[str, int]] = {}
+        self.key_at = array("i", [-1])  # the key that ends at a node, or -1
+
+    def size(self) -> int:
+        return len(self.char)
+
+    def step(self, node: int, char: str) -> int:
+        """The child of `node` along `char`, or 0 (the root is no one's child)."""
+        mine = self.char[node]
+        if mine == char:
+            return self.child[node]
+        if mine is _BRANCHES:
+            return self.branches[node].get(char, 0)
+        return 0
+
+    def children(self, node: int) -> Iterable[tuple[str, int]]:
+        mine = self.char[node]
+        if not mine:
+            return ()
+        if mine is _BRANCHES:
+            return self.branches[node].items()
+        return ((mine, self.child[node]),)
+
+    def add(self, key: str, index: int) -> None:
+        char_of, child_of, branches, key_at = self.char, self.child, self.branches, self.key_at
+        node = 0
+        for char in key:
+            mine = char_of[node]
+            if mine == char:
+                node = child_of[node]
+                continue
+            if mine is _BRANCHES:
+                nxt = branches[node].get(char)
+                if nxt is not None:
+                    node = nxt
+                    continue
+            nxt = len(char_of)
+            char_of.append("")
+            child_of.append(0)
+            key_at.append(-1)
+            if not mine:
+                char_of[node] = char
+                child_of[node] = nxt
+            elif mine is _BRANCHES:
+                branches[node][char] = nxt
+            else:
+                branches[node] = {mine: child_of[node], char: nxt}
+                char_of[node] = _BRANCHES
+            node = nxt
+        key_at[node] = index
+
+    def first_offsets(self, text: str, lengths: list[int]) -> list[int]:
+        """Aho-Corasick: where each key first occurs in `text`, or -1.
+
+        `lengths[i]` is the length of the key whose index is i. A key is
+        reported where it first ends, which for a key of fixed length is also
+        where it first starts, and the scan stops once every key has been seen.
+        Reaching a key already seen ends the walk along the suffix links, since
+        every shorter key on that walk is a suffix of it and was seen where it
+        was.
+        """
+        size = len(self.char)
+        fail = array("i", bytes(4 * size))
+        # The nearest node on the fail chain that ends a key (0: none).
+        next_key = array("i", bytes(4 * size))
+        key_at = self.key_at
+        queue = array("i", (child for _, child in self.children(0)))
+        head = 0
+        while head < len(queue):
+            node = queue[head]
+            head += 1
+            for char, child in self.children(node):
+                back = fail[node]
+                target = self.step(back, char)
+                while back and not target:
+                    back = fail[back]
+                    target = self.step(back, char)
+                fail[child] = target
+                next_key[child] = target if key_at[target] >= 0 else next_key[target]
+                queue.append(child)
+
+        char_of, child_of, branches = self.char, self.child, self.branches
+        # Most characters start no key, so the root's step is one dict lookup and
+        # a character that leaves the scan at the root cannot end a key.
+        root = dict(self.children(0))
+        offsets = [-1] * len(lengths)
+        left = len(lengths)
+        node = 0
+        for end, char in enumerate(text):
+            if not node:
+                node = root.get(char, 0)
+                if not node:
+                    continue
+            else:
+                while True:
+                    mine = char_of[node]
+                    if mine == char:
+                        node = child_of[node]
+                        break
+                    if mine is _BRANCHES:
+                        nxt = branches[node].get(char)
+                        if nxt is not None:
+                            node = nxt
+                            break
+                    node = fail[node]
+                    if not node:
+                        node = root.get(char, 0)
+                        break
+            hit = node if key_at[node] >= 0 else next_key[node]
+            while hit:
+                index = key_at[hit]
+                if offsets[index] >= 0:
+                    break
+                offsets[index] = end - lengths[index] + 1
+                left -= 1
+                hit = next_key[hit]
+            if not left:
+                break
+        return offsets
+
+
+def line_at(text: str, offset: int) -> int:
+    """The line `offset` falls on, counted as `splitlines` counts them.
+
+    It is the number of lines `splitlines` makes of `text[:offset]` with one
+    more character after it, which is how `agent_config` placed a regex match
+    by its offset: `len((text[:offset] + "\\0").splitlines())`. That rebuilt
+    the prefix for every match, so a file of N matches cost N x its size.
+    """
+    line = bisect_right(_line_ends(text, _lookups(text)), offset) + 1
+    if 0 < offset < len(text) and text[offset - 1] == "\r" and text[offset] == "\n":
+        line += 1  # `text[:offset]` ends in a lone `\r`, a line break of its own
+    return line
+
+
+def newline_line(text: str, offset: int) -> int:
+    """`text.count("\\n", 0, offset) + 1`, from where the text's newlines are, found once.
+
+    Counting from the top of the file for every match made a file of N matches
+    cost N times its size.
+    """
+    entry = _lookups(text)
+    if entry.past_newlines is None:
+        entry.past_newlines = array("q", accumulate(len(part) + 1 for part in text.split("\n")[:-1]))
+    return bisect_right(entry.past_newlines, offset) + 1
+
+
+def source_lines(text: str) -> tuple[str, ...]:
+    """`text.splitlines()`, split once per text however often a scanner asks.
+
+    A scanner that cuts each function's source out of its file by line number
+    used to split the whole file once per function, so N functions cost N x the
+    file. The lines are a tuple because they are shared between callers.
+    """
+    entry = _lookups(text)
+    if entry.lines is None:
+        entry.lines = tuple(text.splitlines())
+    return entry.lines
+
+
+# A source line as `ast.get_source_segment` splits them: up to `\r\n`, `\n` or `\r`.
+_PY_LINE_RE = re.compile(r".*?(?:\r\n|\n|\r|$)")
+
+
+class PySource:
+    """`ast.get_source_segment` for many nodes of one file, its lines split once.
+
+    `get_source_segment` splits the whole source into lines on every call, and
+    `quoted_shell_interp` asks it for every tool function and for every template
+    it cannot rebuild: 227 KB of tool functions took 7.6 seconds, growing with
+    the square of the file. The lines are split where it splits them, and a
+    segment is cut from them the way it cuts one, from each line encoded once.
+    """
+
+    def __init__(self, text: str) -> None:
+        self._lines = [m.group() for m in _PY_LINE_RE.finditer(text)]
+        self._encoded: dict[int, bytes] = {}
+
+    def _line(self, i: int) -> bytes:
+        line = self._encoded.get(i)
+        if line is None:
+            line = self._encoded[i] = self._lines[i].encode()
+        return line
+
+    def segment(self, node: ast.AST) -> str | None:
+        lineno, end_lineno = getattr(node, "lineno", None), getattr(node, "end_lineno", None)
+        col, end_col = getattr(node, "col_offset", None), getattr(node, "end_col_offset", None)
+        if lineno is None or end_lineno is None or col is None or end_col is None:
+            return None
+        first, last = lineno - 1, end_lineno - 1
+        if first == last:
+            return self._line(first)[col:end_col].decode()
+        return (
+            self._line(first)[col:].decode()
+            + "".join(self._lines[first + 1 : last])
+            + self._line(last)[:end_col].decode()
+        )
+
+
+def source_segment(text: str, node: ast.AST) -> str | None:
+    """`ast.get_source_segment(text, node)`, from lines split once per text."""
+    entry = _lookups(text)
+    if entry.py_source is None:
+        entry.py_source = PySource(text)
+    return entry.py_source.segment(node)
 
 
 def make_finding(

@@ -6,7 +6,13 @@ from pathlib import Path
 from typing import Any
 
 from agent_audit_kit.models import Finding
-from agent_audit_kit.scanners._helpers import find_line_number, make_finding, in_skip_dir, url_readings
+from agent_audit_kit.scanners._helpers import (
+    find_line_number,
+    in_skip_dir,
+    make_finding,
+    placed,
+    url_readings,
+)
 
 # ---- Known file names and patterns for A2A Agent Cards ----
 _AGENT_CARD_FILES: list[str] = [
@@ -59,29 +65,27 @@ def _find_agent_cards(project_root: Path) -> list[Path]:
 def _check_capabilities(
     data: dict[str, Any],
     rel_path: str,
-    raw_text: str,
-) -> list[Finding]:
-    """AAK-A2A-001: Check capabilities for internal / admin keywords."""
-    findings: list[Finding] = []
+) -> list[tuple[Finding, str]]:
+    """AAK-A2A-001: Check capabilities for internal / admin keywords; each finding
+    comes with the key its line is found by (see `placed`)."""
+    findings: list[tuple[Finding, str]] = []
     capabilities = data.get("capabilities", [])
     if isinstance(capabilities, list):
         for cap in capabilities:
             if isinstance(cap, str) and _INTERNAL_CAPABILITIES.search(cap):
-                findings.append(make_finding(
+                findings.append((make_finding(
                     "AAK-A2A-001",
                     rel_path,
                     f"Internal capability exposed: {cap}",
-                    find_line_number(raw_text, cap),
-                ))
+                ), cap))
     elif isinstance(capabilities, dict):
         for cap_name in capabilities:
             if isinstance(cap_name, str) and _INTERNAL_CAPABILITIES.search(cap_name):
-                findings.append(make_finding(
+                findings.append((make_finding(
                     "AAK-A2A-001",
                     rel_path,
                     f"Internal capability exposed: {cap_name}",
-                    find_line_number(raw_text, cap_name),
-                ))
+                ), cap_name))
     return findings
 
 
@@ -125,10 +129,10 @@ def _check_authentication(
 def _check_skills(
     data: dict[str, Any],
     rel_path: str,
-    raw_text: str,
-) -> list[Finding]:
-    """AAK-A2A-003: Check for missing inputSchema in skill definitions."""
-    findings: list[Finding] = []
+) -> list[tuple[Finding, str]]:
+    """AAK-A2A-003: Check for missing inputSchema in skill definitions; each finding
+    comes with the key its line is found by (see `placed`)."""
+    findings: list[tuple[Finding, str]] = []
     skills = data.get("skills", [])
     if not isinstance(skills, list):
         return findings
@@ -139,19 +143,17 @@ def _check_skills(
         skill_name = skill.get("name", skill.get("id", "<unnamed>"))
         input_schema = skill.get("inputSchema")
         if input_schema is None:
-            findings.append(make_finding(
+            findings.append((make_finding(
                 "AAK-A2A-003",
                 rel_path,
                 f"Skill '{skill_name}' has no inputSchema",
-                find_line_number(raw_text, str(skill_name)),
-            ))
+            ), str(skill_name)))
         elif isinstance(input_schema, dict) and not input_schema:
-            findings.append(make_finding(
+            findings.append((make_finding(
                 "AAK-A2A-003",
                 rel_path,
                 f"Skill '{skill_name}' has empty inputSchema",
-                find_line_number(raw_text, str(skill_name)),
-            ))
+            ), str(skill_name)))
 
     return findings
 
@@ -159,21 +161,20 @@ def _check_skills(
 def _check_endpoints(
     data: dict[str, Any],
     rel_path: str,
-    raw_text: str,
-) -> list[Finding]:
-    """AAK-A2A-004: Check url/endpoint fields for HTTP (not HTTPS)."""
-    findings: list[Finding] = []
+) -> list[tuple[Finding, str]]:
+    """AAK-A2A-004: Check url/endpoint fields for HTTP (not HTTPS); each finding
+    comes with the key its line is found by (see `placed`)."""
+    findings: list[tuple[Finding, str]] = []
 
     # Check top-level url/endpoint fields
     for key in ("url", "endpoint", "baseUrl", "base_url"):
         val = data.get(key, "")
         if isinstance(val, str) and _is_http(val):
-            findings.append(make_finding(
+            findings.append((make_finding(
                 "AAK-A2A-004",
                 rel_path,
                 f"Field '{key}' uses HTTP: {val}",
-                find_line_number(raw_text, val),
-            ))
+            ), val))
 
     # Check nested skills for endpoints
     skills = data.get("skills", [])
@@ -185,12 +186,11 @@ def _check_endpoints(
             for key in ("url", "endpoint"):
                 val = skill.get(key, "")
                 if isinstance(val, str) and _is_http(val):
-                    findings.append(make_finding(
+                    findings.append((make_finding(
                         "AAK-A2A-004",
                         rel_path,
                         f"Skill '{skill_name}' {key} uses HTTP: {val}",
-                        find_line_number(raw_text, val),
-                    ))
+                    ), val))
 
     return findings
 
@@ -365,10 +365,12 @@ def scan(project_root: Path) -> tuple[list[Finding], set[str]]:
         )
         scanned_files.add(rel_path)
 
-        findings.extend(_check_capabilities(data, rel_path, raw_text))
+        # The checks that report one finding per capability or skill find their
+        # lines in one pass over the card each, not one search of it per finding.
+        findings.extend(placed(raw_text, _check_capabilities(data, rel_path)))
         findings.extend(_check_authentication(data, rel_path, raw_text))
-        findings.extend(_check_skills(data, rel_path, raw_text))
-        findings.extend(_check_endpoints(data, rel_path, raw_text))
+        findings.extend(placed(raw_text, _check_skills(data, rel_path)))
+        findings.extend(placed(raw_text, _check_endpoints(data, rel_path)))
         findings.extend(_check_jwt_lifetime(data, rel_path, raw_text))
         findings.extend(_check_jwt_validation(data, rel_path, raw_text))
         findings.extend(_check_impersonation(data, rel_path, raw_text))

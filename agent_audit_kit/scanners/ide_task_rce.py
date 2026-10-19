@@ -36,9 +36,10 @@ from agent_audit_kit.models import Finding, Severity
 from agent_audit_kit.scanners._helpers import (
     INTERPOLATION_RE,
     in_skip_dir,
-    find_line_number,
+    find_line_numbers,
     loads_jsonc,
     make_finding,
+    placed,
 )
 
 _VSCODE_DIR = ".vscode"
@@ -137,6 +138,15 @@ def _flatten_strings(value: object) -> list[str]:
     return out
 
 
+def _anchor(task: dict) -> str:
+    """What a task's findings are placed by: its label, else its command line."""
+    label = task.get("label")
+    if isinstance(label, str) and label:
+        return label
+    joined = " ".join(_flatten_strings(task.get("command")) + _flatten_strings(task.get("args")))
+    return joined.strip()[:60]
+
+
 def _iter_config_files(project_root: Path, name: str) -> Iterable[Path]:
     for path in project_root.rglob(name):
         if path.parent.name != _VSCODE_DIR:
@@ -183,7 +193,7 @@ def _scan_tasks(path: Path, rel: str) -> tuple[list[Finding], set[str]]:
     if not isinstance(data, dict):
         return [], set()
     raw = path.read_text(encoding="utf-8", errors="replace")
-    findings: list[Finding] = []
+    unplaced: list[tuple[Finding, str]] = []
     flagged: set[str] = set()
     tasks = data.get("tasks")
     if not isinstance(tasks, list):
@@ -196,8 +206,7 @@ def _scan_tasks(path: Path, rel: str) -> tuple[list[Finding], set[str]]:
         joined = " ".join(
             _flatten_strings(task.get("command")) + _flatten_strings(task.get("args"))
         ).strip()
-        anchor = label_str or joined[:60]
-        line = find_line_number(raw, anchor) if anchor else 1
+        anchor = _anchor(task)
 
         run_on = ""
         run_options = task.get("runOptions")
@@ -212,16 +221,16 @@ def _scan_tasks(path: Path, rel: str) -> tuple[list[Finding], set[str]]:
                 if critical
                 else "runs on folder open"
             )
-            findings.append(
+            unplaced.append((
                 _finding(
                     "AAK-IDE-TASK-001",
                     rel,
                     f"task {label_str or '(unlabelled)'!r} auto-executes on folderOpen "
                     f"and {why}: {joined!r}",
-                    line_number=line,
                     severity=sev,
-                )
-            )
+                ),
+                anchor,
+            ))
             if label_str:
                 flagged.add(label_str)
 
@@ -230,19 +239,25 @@ def _scan_tasks(path: Path, rel: str) -> tuple[list[Finding], set[str]]:
             or _INTERP_REPO_PATH_RE.search(_workspace_relative(joined))
             or INTERPOLATION_RE.search(joined)
         ):
-            findings.append(
+            unplaced.append((
                 _finding(
                     "AAK-IDE-TASK-002",
                     rel,
                     f"task {label_str or '(unlabelled)'!r} command/args reach a shell: "
                     f"{joined!r}",
-                    line_number=line,
-                )
-            )
+                ),
+                anchor,
+            ))
             if label_str:
                 flagged.add(label_str)
 
-    return findings, flagged
+    # Every reported task's line in one pass over the file, not one search of it per
+    # task: a quiet task is never looked up. A task with nothing to place it by goes
+    # on the first line, as before.
+    lines = find_line_numbers(raw, (anchor for _, anchor in unplaced if anchor))
+    for finding, anchor in unplaced:
+        finding.line_number = lines[anchor] if anchor else 1
+    return [finding for finding, _ in unplaced], flagged
 
 
 def _scan_launch(
@@ -258,6 +273,7 @@ def _scan_launch(
     configs = data.get("configurations")
     if not isinstance(configs, list):
         return []
+    unplaced: list[tuple[Finding, str]] = []
     for cfg in configs:
         if not isinstance(cfg, dict):
             continue
@@ -266,15 +282,19 @@ def _scan_launch(
             name = cfg.get("name")
             name_str = name if isinstance(name, str) else "(unnamed)"
             where = f" (flagged in {tasks_rel})" if tasks_rel else ""
-            findings.append(
+            unplaced.append((
                 _finding(
                     "AAK-IDE-TASK-003",
                     rel,
                     f"launch config {name_str!r} preLaunchTask {pre!r} chains to a "
                     f"flagged auto-exec task{where}",
-                    line_number=find_line_number(raw, pre) or 1,
-                )
-            )
+                ),
+                pre,
+            ))
+    # Every chained task's line in one pass over the file, not one search of it per config.
+    for finding in placed(raw, unplaced):
+        finding.line_number = finding.line_number or 1  # not found: the file's first line
+        findings.append(finding)
     return findings
 
 

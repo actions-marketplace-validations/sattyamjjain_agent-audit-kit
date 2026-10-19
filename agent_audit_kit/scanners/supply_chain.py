@@ -11,6 +11,7 @@ import yaml
 from agent_audit_kit.models import Finding
 from agent_audit_kit.scanners._helpers import (
     find_line_number,
+    find_line_numbers,
     in_skip_dir,
     iter_mcp_servers,
     loads_jsonc,
@@ -182,6 +183,7 @@ def _scan_mcp_configs_for_supply_chain(project_root: Path) -> list[Finding]:
             continue
 
         rel_path = str(mcp_path.relative_to(project_root))
+        unplaced: list[tuple[Finding, str]] = []
         # Both server maps: VS Code keeps its servers under `servers` in
         # .vscode/mcp.json, and reading `mcpServers` alone never judged one.
         for server_name, server_cfg in iter_mcp_servers(data):
@@ -210,11 +212,15 @@ def _scan_mcp_configs_for_supply_chain(project_root: Path) -> list[Finding]:
             for launched in invocation_packages(argv):
                 problem = pin_problem(launched)
                 if problem is not None:
-                    findings.append(_make_finding(
+                    unplaced.append((_make_finding(
                         "AAK-SUPPLY-001", rel_path,
                         launch_evidence(server_name, launched.spec, problem),
-                        _find_line_number(raw, launched.spec),
-                    ))
+                    ), launched.spec))
+        # Every launch's line in one pass over the file, not one search of it per launch.
+        lines = find_line_numbers(raw, (spec for _, spec in unplaced))
+        for finding, spec in unplaced:
+            finding.line_number = lines[spec]
+            findings.append(finding)
     return findings
 
 
@@ -243,6 +249,10 @@ def _scan_npm_lockfile(project_root: Path) -> list[Finding]:
         # Try lockfile v1 format, which has no entry for the root package
         packages = data.get("dependencies", {})
         dep_count = len(packages)
+    # Every typosquat's line in one pass over the file, not one search of it per
+    # package: a lockfile may name thousands of packages under a misspelt scope.
+    names = (p.split("node_modules/")[-1] if "node_modules/" in p else p for p in packages if isinstance(p, str))
+    find_line_numbers(raw, (name for name in names if any(p.search(name) for p in TYPOSQUAT_PATTERNS)))
 
     for pkg_path, pkg_info in packages.items():
         if not isinstance(pkg_info, dict):

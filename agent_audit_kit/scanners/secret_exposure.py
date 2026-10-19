@@ -13,6 +13,7 @@ from agent_audit_kit.scanners._helpers import (
     iter_mcp_servers,
     loads_jsonc,
     make_finding,
+    placed,
 )
 
 # API key patterns
@@ -445,6 +446,7 @@ def _scan_file_for_secrets(file_path: Path, project_root: Path) -> list[Finding]
             data = loads_jsonc(content)
         except json.JSONDecodeError:
             data = None
+        unplaced: list[tuple[Finding, str]] = []
         for server_name, server_cfg in iter_mcp_servers(data):
             env = server_cfg.get("env", {})
             if not isinstance(env, dict):
@@ -452,11 +454,12 @@ def _scan_file_for_secrets(file_path: Path, project_root: Path) -> list[Finding]
             for key, value in env.items():
                 if MCP_ENV_SECRET_KEYS.search(key) and isinstance(value, str):
                     if not re.match(r"^\$\{.+\}$", value) and value:
-                        findings.append(_make_finding(
+                        unplaced.append((_make_finding(
                             "AAK-SECRET-007", rel_path,
                             f"Server '{server_name}' env.{key} = (hardcoded value)",
-                            _find_line_number(content, key),
-                        ))
+                        ), key))
+        # Every reported variable's line in one pass over the file, not one search of it per variable.
+        findings.extend(placed(content, unplaced))
 
     return findings
 
