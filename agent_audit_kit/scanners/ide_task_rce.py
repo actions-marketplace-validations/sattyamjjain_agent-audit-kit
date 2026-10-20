@@ -34,12 +34,14 @@ from typing import Iterable
 
 from agent_audit_kit.models import Finding, Severity
 from agent_audit_kit.scanners._helpers import (
+    CONFIG_MAX_BYTES,
     INTERPOLATION_RE,
-    in_skip_dir,
     find_line_numbers,
+    in_skip_dir,
     loads_jsonc,
     make_finding,
     placed,
+    read_text_capped,
 )
 
 _VSCODE_DIR = ".vscode"
@@ -125,16 +127,22 @@ def _flatten_strings(value: object) -> list[str]:
     VS Code allows `command` as a string or a platform object
     (`{"windows": ..., "linux": ...}`), and `args` as strings or
     `{"value": ..., "quoting": ...}` objects.
+
+    The strings come out depth first in document order, as they did when this
+    recursed, one frame per level: a task nested past the recursion limit,
+    which JSON's parser reads on Python 3.12 and later (about 10,000 levels),
+    took the whole scanner down. The walk keeps its own stack.
     """
     out: list[str] = []
-    if isinstance(value, str):
-        out.append(value)
-    elif isinstance(value, dict):
-        for v in value.values():
-            out.extend(_flatten_strings(v))
-    elif isinstance(value, list):
-        for v in value:
-            out.extend(_flatten_strings(v))
+    stack: list[object] = [value]
+    while stack:
+        node = stack.pop()
+        if isinstance(node, str):
+            out.append(node)
+        elif isinstance(node, dict):
+            stack.extend(reversed(node.values()))
+        elif isinstance(node, list):
+            stack.extend(reversed(node))
     return out
 
 
@@ -160,11 +168,11 @@ def _iter_config_files(project_root: Path, name: str) -> Iterable[Path]:
 def _parse(path: Path, rel: str) -> tuple[object | None, Finding | None]:
     """Return (data, None) on success, or (None, parse-failure finding)."""
     try:
-        raw = path.read_text(encoding="utf-8", errors="replace")
+        raw = read_text_capped(path, CONFIG_MAX_BYTES, errors="replace")
     except OSError:
         return None, None
     try:
-        return loads_jsonc(raw), None
+        return loads_jsonc(raw, path), None
     except (json.JSONDecodeError, ValueError) as exc:
         return None, _finding(
             "AAK-IDE-TASK-004",

@@ -28,11 +28,13 @@ bind).
 from __future__ import annotations
 
 import ast
+import copy
 import re
 from pathlib import Path
+from typing import Any, Callable
 
 from agent_audit_kit.models import Finding
-from agent_audit_kit.scanners._helpers import make_finding, in_skip_dir
+from agent_audit_kit.scanners._helpers import in_skip_dir, make_finding, parse_python, refusing_overflow, unparse
 
 _RULE_ID = "AAK-MCP-NOAUTH-DEFAULT"
 
@@ -135,19 +137,145 @@ def _call_stops(name: str) -> bool:
     return method == "fail" and ("ctx" in receiver or "context" in receiver)
 
 
+# The words `_call_stops` looks for in the receiver of a `.error` or `.fail` call.
+_RECEIVER_WORDS = {"error": ("parser",), "fail": ("ctx", "context")}
+
+# Callees whose source ends in a bracket, a quote or a digit, never in a name.
+_ENDS_IN_NO_NAME = (
+    ast.Call, ast.Subscript, ast.Constant, ast.JoinedStr, ast.List, ast.Tuple, ast.Set, ast.Dict,
+    ast.ListComp, ast.SetComp, ast.DictComp, ast.GeneratorExp,
+)
+
+# For each kind of expression whose source can end in a name, the child the
+# unparser writes last: the source ends as that child's does, unless the child,
+# or the expression itself, is put in brackets.
+_LAST_CHILD: dict[type, Callable[[Any], Any]] = {
+    ast.IfExp: lambda node: node.orelse,
+    ast.BoolOp: lambda node: node.values[-1],
+    ast.BinOp: lambda node: node.right,
+    ast.UnaryOp: lambda node: node.operand,
+    ast.Compare: lambda node: node.comparators[-1],
+    ast.Lambda: lambda node: node.body,
+    ast.Await: lambda node: node.value,
+    ast.NamedExpr: lambda node: node.value,
+    ast.Yield: lambda node: node.value,
+    ast.YieldFrom: lambda node: node.value,
+    ast.Starred: lambda node: node.value,
+}
+
+_NO_ARGUMENTS = ast.arguments(posonlyargs=[], args=[], vararg=None, kwonlyargs=[], kw_defaults=[], kwarg=None,
+                              defaults=[])
+
+
+def _callee_stops(func: ast.expr, plain: dict[str, set[int]]) -> bool:
+    """`_call_stops` on the source of `func`, reading no more of it than the
+    answer needs (see `_body_is_warn_only`).
+
+    A name is judged as it is, and an attribute by its own name, with its
+    receiver read only for `.error` and `.fail`, and not at all inside a callee
+    already read without the words they look for (`plain`, by the method's
+    name). Any other callee can end in a stop name too, the way the source it
+    was judged by did: `(logging.warning if dev else sys.exit)(...)` ends in
+    `sys.exit`, and so does `(lambda: sys.exit)()`, which returns the function
+    without calling it but was read as a stop all the same. Reading such a
+    source whole at every call made a callee nested n calls deep cost the
+    square of n, so only the path of children it ends with is followed (no
+    callee's path enters a call inside it, so each node is followed once), and
+    when that path ends in an attribute with a stop name, it alone is rendered
+    to see whether the unparser brackets any of it. The whole source is read
+    only for the receiver of a `.error` or `.fail` it ends in.
+    """
+    if isinstance(func, ast.Name):
+        return _call_stops(func.id)
+    if isinstance(func, ast.Attribute):
+        if func.attr in _STOP_CALLS:
+            return True
+        words = _RECEIVER_WORDS.get(func.attr)
+        if words is None or id(func.value) in plain[func.attr]:
+            return False
+        receiver = unparse(func.value).lower()
+        if any(word in receiver for word in words):
+            return True
+        if receiver:
+            plain[func.attr].update(id(node) for node in ast.walk(func.value))
+        return False
+    if isinstance(func, _ENDS_IN_NO_NAME):
+        return False
+    if type(func) not in _LAST_CHILD:  # a kind of expression this does not know: read it whole
+        return _call_stops(unparse(func))
+    path: list[Any] = [func]
+    while type(path[-1]) in _LAST_CHILD:
+        path.append(_LAST_CHILD[type(path[-1])](path[-1]))
+    leaf = path[-1]
+    if not isinstance(leaf, ast.Attribute) or (leaf.attr not in _STOP_CALLS and leaf.attr not in _RECEIVER_WORDS):
+        return False
+    if not unparse(_last_path_alone(path)).endswith("." + leaf.attr):
+        return False  # a bracket closes the source
+    if leaf.attr in _STOP_CALLS:
+        return True
+    if id(func) in plain[leaf.attr]:
+        return False
+    source = unparse(func)
+    receiver = source[: -len(leaf.attr) - 1].lower()
+    if any(word in receiver for word in _RECEIVER_WORDS[leaf.attr]):
+        return True
+    if source:
+        plain[leaf.attr].update(id(node) for node in ast.walk(func))
+    return False
+
+
+def _last_path_alone(path: list[Any]) -> ast.expr:
+    """The expressions on `path` (each the child its parent writes last, down
+    to an attribute), every other child replaced by a bare name. The unparser
+    brackets an expression by its kind, its operator and its place under its
+    parent, never by its siblings, so this source ends as the whole one does."""
+    node: Any = ast.Attribute(value=ast.Name(id="_", ctx=ast.Load()), attr=path[-1].attr, ctx=ast.Load())
+    for parent, child in zip(reversed(path[:-1]), reversed(path[1:])):
+        alone = copy.copy(parent)
+        for field, value in ast.iter_fields(parent):
+            if value is child:
+                setattr(alone, field, node)
+            elif isinstance(value, ast.expr):
+                setattr(alone, field, ast.Name(id="_", ctx=ast.Load()))
+            elif isinstance(value, list):
+                setattr(alone, field, [node if item is child else ast.Name(id="_", ctx=ast.Load())
+                                       if isinstance(item, ast.expr) else item for item in value])
+            elif isinstance(value, ast.arguments):
+                setattr(alone, field, _NO_ARGUMENTS)
+        node = alone
+    return node
+
+
 def _body_is_warn_only(body: list[ast.stmt]) -> bool:
     """True if the branch warns/logs and then *continues* — no raise / return /
-    call that would stop unauthenticated execution (see `_call_stops`)."""
+    call that would stop unauthenticated execution (see `_call_stops`).
+
+    Each call is judged by its callee's source, and that used to be unparsed
+    for every call, so a callee nested n calls deep (`warn()()...()`) was
+    unparsed again at each of its n levels: 3,000 levels took 6 s once a walk
+    could reach the bottom (`walk_tree`), and a file could hold a hundred such
+    blocks. The source of a node inside a callee already read is part of that
+    source, and the words looked for are letters and dots, which the unparser
+    never spells two ways, so a callee inside one with no warn word has none,
+    and each node's source is read once. The calls are still judged in the
+    walk's order, so the same call ends the search.
+    """
     saw_warn = False
+    no_warn: set[int] = set()
+    plain: dict[str, set[int]] = {method: set() for method in _RECEIVER_WORDS}
     for stmt in ast.walk(ast.Module(body=body, type_ignores=[])):
         if isinstance(stmt, (ast.Raise, ast.Return)):
             return False
         if isinstance(stmt, ast.Call):
-            name = ast.unparse(stmt.func) if hasattr(ast, "unparse") else ""
-            if _call_stops(name):
+            if _callee_stops(stmt.func, plain):
                 return False
+            if saw_warn or id(stmt.func) in no_warn:
+                continue
+            name = unparse(stmt.func)
             if _WARN_CALL_RE.search(name):
                 saw_warn = True
+            elif name:
+                no_warn.update(id(node) for node in ast.walk(stmt.func))
     return saw_warn
 
 
@@ -166,11 +294,11 @@ def _env_default(call: ast.Call) -> ast.expr | None:
     return None
 
 
-def _scan_python(text: str) -> list[tuple[int, str]]:
+def _scan_python(text: str, path: Path) -> list[tuple[int, str]]:
     if not _MCP_HINT_RE.search(text):
         return []
     try:
-        tree = ast.parse(text)
+        tree = parse_python(text, path)
     except SyntaxError:
         return []
 
@@ -203,7 +331,7 @@ def _scan_python(text: str) -> list[tuple[int, str]]:
             if value.value.strip().lower() in _WEAK_SECRET_VALUES:
                 hits.append((lineno, "placeholder-secret"))
         elif isinstance(value, ast.Call):
-            fn = ast.unparse(value.func) if hasattr(ast, "unparse") else ""
+            fn = unparse(value.func)
             if fn in ("os.environ.get", "os.getenv"):
                 default = _env_default(value)
                 if isinstance(default, ast.Constant) and default.value == "":
@@ -390,10 +518,12 @@ def scan(project_root: Path) -> tuple[list[Finding], set[str]]:
         except OSError:
             continue
 
-        hits = (
-            _scan_python(text) if path.suffix in _PY_SUFFIXES
-            else _scan_config(text)
-        )
+        hits: list[tuple[int, str]] = []
+        if path.suffix in _PY_SUFFIXES:
+            with refusing_overflow(path):
+                hits = _scan_python(text, path)
+        else:
+            hits = _scan_config(text)
         if not hits:
             continue
 

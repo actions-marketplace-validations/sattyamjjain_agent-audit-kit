@@ -2,19 +2,27 @@ from __future__ import annotations
 
 import ast
 import bisect
+import errno
+import hashlib
+import io
 import ipaddress
 import json
 import os
 import re
+import stat
 import sys
 import threading
 import unicodedata
+import warnings
 from array import array
 from bisect import bisect_right
 from collections import OrderedDict
+from concurrent.futures import ThreadPoolExecutor
+from contextlib import contextmanager
+from contextvars import Context, ContextVar, copy_context
 from itertools import accumulate, chain
 from pathlib import Path
-from typing import AbstractSet, Any, Callable, Iterable, Iterator, NamedTuple
+from typing import AbstractSet, Any, Callable, Iterable, Iterator, NamedTuple, TypeVar
 from urllib.parse import unquote
 
 try:
@@ -22,8 +30,14 @@ try:
 except ImportError:  # Python 3.9 and 3.10
     import tomli as tomllib  # type: ignore[no-redef,import-not-found]
 
+import yaml
+from yaml.nodes import MappingNode, Node, ScalarNode, SequenceNode
+from yaml.scanner import ScannerError
+
 from agent_audit_kit.models import Finding
 from agent_audit_kit.rules.builtin import get_rule
+
+_T = TypeVar("_T")
 
 # Interpolation of a caller-controlled variable into a command / shell string.
 # Shared by hook_rce and ide_task_rce so there is exactly ONE definition of the
@@ -1304,7 +1318,139 @@ def strip_jsonc(text: str) -> str:
     return "".join(parts)
 
 
-def loads_jsonc(text: str) -> Any:
+# The deepest a JSON or JSONC text may nest its arrays and objects. Python's
+# parser stops at a depth that differs by version (about 990 levels on 3.9 to
+# 3.11, about 9,970 on 3.12 and 3.13, and on 3.14 whatever the thread's stack
+# holds: about 116,000 on macOS's main thread, under 58,000 on an 8 MB stack),
+# and a reader that recursed over what it parsed met its own limit at 1,000
+# frames, so one file was read on one version and took a scanner down on
+# another. Every version now refuses JSON nested past this depth (see
+# `_parse_json`); real configs nest under 20.
+JSON_MAX_NESTING = 500
+
+# What the depth count keeps of a text, as ASCII bytes: quotes and brackets,
+# and how each bracket moves the depth. It reads the text this many characters
+# at a time.
+_JSON_NOT_MARKS = bytes(b for b in range(256) if b not in b'"[]{}')
+_JSON_BRACKET_STEP = tuple(1 if b in b"[{" else -1 if b in b"]}" else 0 for b in range(256))
+_JSON_COUNT_CHUNK = 1 << 16
+
+
+def _json_nesting(text: str) -> int:
+    """The deepest nesting of `[` and `{` in `text` outside strings. On JSON, and
+    on the part of a text `json.loads` read before an error, it is the depth the
+    parser descended to.
+
+    The text is read a chunk at a time. In each, escaped backslashes and then
+    escaped quotes are dropped, pairing backslashes from the left as JSON
+    does, so every quote left opens or closes a string; then everything but
+    quotes and brackets, and the brackets outside strings, those after an
+    even number of quotes, are summed. An escape cut by the end of a chunk and
+    the parity of the quotes carry over to the next, so an unterminated
+    string runs to the end and no bracket after it counts. Each step is a C
+    pass over one chunk, so the count takes time linear in the text and
+    memory for a chunk: a regex that skipped strings kept a backtracking
+    record of about 140 bytes for every escape, so 30 MB of JSON whose one
+    string held 15 million `\\n` took 2.1 GB to count.
+    """
+    best = depth = 0
+    inside = escaped = False
+    for start in range(0, len(text), _JSON_COUNT_CHUNK):
+        chunk = text[start:start + _JSON_COUNT_CHUNK]
+        if escaped and chunk[0] in '\\"':
+            chunk = chunk[1:]  # the second half of an escape the last chunk began
+        chunk = chunk.replace("\\\\", "")
+        escaped = chunk.endswith("\\")
+        marks = chunk.replace('\\"', "").encode("ascii", "ignore").translate(None, _JSON_NOT_MARKS)
+        parts = marks.split(b'"')
+        brackets = b"".join(parts[1::2] if inside else parts[0::2])
+        if brackets:
+            best = max(best, max(accumulate(map(_JSON_BRACKET_STEP.__getitem__, brackets), initial=depth)))
+            depth += brackets.count(b"[") + brackets.count(b"{") - brackets.count(b"]") - brackets.count(b"}")
+        inside ^= len(parts) % 2 == 0
+    return best
+
+
+# Python's limit on the digits `int()` converts from text: 4,300 by default since
+# 3.9.14, 3.10.7 and 3.11, and none before (0 also means none). `json.loads`
+# converts each integer with `int()`, so one longer than the limit raised a plain
+# ValueError, which no reader catches as a parse error: a 5,000-digit number in
+# one file took 29 scanners down, with their findings on every other file.
+_INT_MAX_STR_DIGITS: Callable[[], int] | None = getattr(sys, "get_int_max_str_digits", None)
+
+
+def _json_int(digits: str) -> int | float:
+    """An integer of a JSON text: `int(digits)` where Python converts it, as
+    `json.loads` does, and otherwise `float(digits)`, the nearest value a reader
+    can still compare (inf past 309 digits) where `int()` would raise."""
+    limit = _INT_MAX_STR_DIGITS() if _INT_MAX_STR_DIGITS is not None else 0
+    if limit and len(digits) - digits.startswith("-") > limit:
+        return float(digits)
+    return int(digits)
+
+
+def _json_loads(text: str) -> Any:
+    """`json.loads(text)`, an integer past Python's digit limit read by
+    `_json_int`. The hook is a Python call for every integer, which made a text
+    of a million integers four times as slow to parse, so it is used only in a
+    second parse, after the first raised a ValueError that is no
+    JSONDecodeError: only such an integer raises one."""
+    try:
+        return json.loads(text)
+    except json.JSONDecodeError:
+        raise
+    except ValueError:
+        return json.loads(text, parse_int=_json_int)
+
+
+def _json_past_limit(text: str) -> bool:
+    """Whether `text` nests past `JSON_MAX_NESTING`. A text with no more opening
+    brackets than the limit cannot, so most texts are not counted at all."""
+    return text.count("[") + text.count("{") > JSON_MAX_NESTING and _json_nesting(text) > JSON_MAX_NESTING
+
+
+def _too_deep(text: str, path: Path | str | None) -> Exception:
+    """The refusal of JSON nested past `JSON_MAX_NESTING`: recorded against
+    `path` and returned as a `RefusedJSON`, or, without a path, a RecursionError
+    (`_TooDeepToParse`, whose message is the reason), as the parser's own
+    overflow propagates."""
+    reason = f"JSON nested deeper than {JSON_MAX_NESTING} levels"
+    if path is None:
+        return _TooDeepToParse(reason)
+    refuse(path, reason)
+    return RefusedJSON(reason, text, 0)
+
+
+def _parse_json(text: str, path: Path | str | None) -> Any:
+    """`json.loads(text)`, refused when it nests past `JSON_MAX_NESTING`.
+
+    The parser reads first, and then how deep it went is counted: the whole
+    text when it read it, the part before the error when it stopped at one,
+    and the whole text when it ran out of stack. So every version refuses the
+    same texts, and a text that stops being JSON before the limit raises its
+    JSONDecodeError as before, however many brackets follow: 60,000
+    `capabilities: {` are no JSON from the first character, not JSON nested
+    60,000 deep. Without a path, an overflow the count does not explain (the
+    caller's own stack was deep) propagates as it did.
+    """
+    try:
+        data = _json_loads(text)
+    except json.JSONDecodeError as exc:
+        if _json_past_limit(text[: exc.pos]):
+            raise _too_deep(text, path) from None
+        raise
+    except _OVERFLOW as exc:
+        if _json_past_limit(text):
+            raise _too_deep(text, path) from None
+        if path is None:
+            raise
+        raise _refused_json(text, path, exc) from None
+    if _json_past_limit(text):
+        raise _too_deep(text, path)
+    return data
+
+
+def loads_jsonc(text: str, path: Path | str | None = None) -> Any:
     """Parse `text` as JSON or, when that fails, as JSONC (see `strip_jsonc`).
 
     The one reader for MCP client configs and the VS Code files beside them.
@@ -1312,13 +1458,18 @@ def loads_jsonc(text: str) -> Any:
     this returns what it did for every file it could read before, and only
     stops skipping the ones with comments or trailing commas. A file that is
     invalid even as JSONC raises `json.JSONDecodeError` as before, with a
-    position that matches the raw text.
+    position that matches the raw text. One nested deeper than
+    `JSON_MAX_NESTING`, read either way, is refused against `path`, as
+    `loads_json` refuses it, and without a path a RecursionError propagates,
+    as it did.
     """
     try:
-        return json.loads(text)
+        return _parse_json(text, path)
+    except RefusedJSON:
+        raise
     except json.JSONDecodeError:
         pass
-    return json.loads(strip_jsonc(text))
+    return _parse_json(strip_jsonc(text), path)
 
 
 #: The keys an MCP client config keeps its server map under. `mcpServers` is the
@@ -1771,9 +1922,9 @@ def _pyproject_dependency_names(data: dict[str, Any]) -> set[str]:
     return names
 
 
-def _pyproject_declares_mcp(text: str) -> bool:
+def _pyproject_declares_mcp(text: str, path: Path) -> bool:
     try:
-        data = tomllib.loads(text)
+        data = loads_toml(text, path)
     except (tomllib.TOMLDecodeError, ValueError):
         data = None
     if isinstance(data, dict) and _pyproject_dependency_names(data) & MCP_PY_SDK_NAMES:
@@ -1795,7 +1946,7 @@ def _requirements_declare_mcp(text: str) -> bool:
 
 def _read_text(path: Path) -> str | None:
     try:
-        return path.read_text(encoding="utf-8", errors="replace")
+        return read_text_capped(path, MANIFEST_MAX_BYTES, errors="replace")
     except OSError:
         return None
 
@@ -1826,7 +1977,7 @@ def declares_mcp_sdk(project_root: Path) -> tuple[bool, list[str]]:
     pyproject = project_root / "pyproject.toml"
     if pyproject.is_file():
         text = _read_text(pyproject)
-        if text is not None and _pyproject_declares_mcp(text):
+        if text is not None and _pyproject_declares_mcp(text, pyproject):
             manifests.append("pyproject.toml")
 
     for req in sorted(project_root.glob("requirements*.txt")):
@@ -1838,7 +1989,7 @@ def declares_mcp_sdk(project_root: Path) -> tuple[bool, list[str]]:
     if pkg.is_file():
         text = _read_text(pkg)
         try:
-            data = json.loads(text) if text is not None else {}
+            data = loads_json(text, pkg) if text is not None else {}
         except json.JSONDecodeError:
             data = {}
         if isinstance(data, dict):
@@ -1862,3 +2013,1135 @@ def declares_mcp_sdk(project_root: Path) -> tuple[bool, list[str]]:
             manifests.append("Cargo.toml")
 
     return bool(manifests), manifests
+
+
+# ---- Reading a file the scanned repository chose -------------------------------
+#
+# A repository can commit a symlink, and a checkout makes it one: `SKILL.md ->
+# /dev/zero`, or a link to a FIFO. `Path.is_file()` follows it and says False for
+# both, but `stat().st_size` says 0, so the 31 scanners that compared the size
+# with a cap and then read, or only read, waited on the FIFO for a writer that
+# never came, or would read /dev/zero until memory ran out. A regular file can be
+# any size, and 20 scanners read it whole before comparing its length with their
+# cap: a 200 MB file cost each of them 200 MB of memory before it was skipped,
+# and two of them were still reading after 90 seconds.
+
+#: The cap a reader of an MCP or agent config uses.
+CONFIG_MAX_BYTES = 1_000_000
+#: The cap a reader of a source file uses.
+SOURCE_MAX_BYTES = 512_000
+#: The cap the pin table puts on a dependency manifest (`_manifest_deps`'s
+#: `MAX_MANIFEST_BYTES`, which imports this module).
+MANIFEST_MAX_BYTES = 2_000_000
+
+# Open without waiting, so a FIFO put in the file's place after the type check
+# cannot hold the open, and without taking a terminal as the controlling one.
+# Windows has neither flag, and neither applies there.
+_READ_FLAGS = (
+    os.O_RDONLY | getattr(os, "O_NONBLOCK", 0) | getattr(os, "O_NOCTTY", 0) | getattr(os, "O_BINARY", 0)
+)
+
+
+class FileNotRead(OSError):
+    """A path `read_bytes_capped` does not read: not a regular file, or over its cap."""
+
+
+def _check_readable(st: os.stat_result, path: Path | str, max_bytes: int) -> None:
+    if not stat.S_ISREG(st.st_mode):
+        raise FileNotRead(errno.EINVAL, "not a regular file", str(path))
+    if st.st_size > max_bytes:
+        raise FileNotRead(errno.EFBIG, f"larger than {max_bytes:,} bytes", str(path))
+
+
+def read_bytes_capped(path: Path | str, max_bytes: int) -> bytes:
+    """The bytes of `path`, when it is a regular file of at most `max_bytes`.
+
+    A symlink is followed and its target judged. A FIFO, a device, a socket or
+    a directory raises `FileNotRead`, an OSError, before it is opened, so a
+    reader's `except OSError` skips it as it skips a file it cannot open:
+    nothing can read one as a config, so the skip is silent. A file over
+    `max_bytes`, the reader's stated cap, raises the same before a byte of it
+    is read. Type and size are checked again on the open descriptor, and no
+    more than `max_bytes + 1` bytes are ever read, so a size the system
+    misreports, or a file that grows, still stops at the cap. Any other
+    OSError propagates, as it does from `Path.read_bytes`.
+    """
+    _check_readable(os.stat(path), path, max_bytes)
+    fd = os.open(path, _READ_FLAGS)
+    try:
+        st = os.fstat(fd)
+        _check_readable(st, path, max_bytes)
+        chunks: list[bytes] = []
+        left = max_bytes + 1
+        # The first read asks for the size `fstat` gives and one byte more, so
+        # a file that is what it says is read in one buffer, not joined from
+        # pieces: a 32 MB lockfile read in 1 MB pieces held them and their join
+        # at once, twice the file. Any later read stays inside the cap.
+        step = st.st_size + 1
+        while left > 0:
+            chunk = os.read(fd, min(left, step))
+            if not chunk:
+                break
+            chunks.append(chunk)
+            left -= len(chunk)
+            step = 1 << 20
+    finally:
+        os.close(fd)
+    data = chunks[0] if len(chunks) == 1 else b"".join(chunks)
+    if len(data) > max_bytes:
+        raise FileNotRead(errno.EFBIG, f"larger than {max_bytes:,} bytes", str(path))
+    return data
+
+
+def read_text_capped(
+    path: Path | str, max_bytes: int, encoding: str | None = "utf-8", errors: str | None = None
+) -> str:
+    """`Path(path).read_text(encoding, errors)` for a regular file of at most
+    `max_bytes` bytes, and `FileNotRead` for any other path (see
+    `read_bytes_capped`).
+
+    The text is decoded as `read_text` decodes it, line endings translated, so
+    a reader that switches to this sees the same text for every file it read
+    before, and a decoding error raises as it did.
+    """
+    data = read_bytes_capped(path, max_bytes)
+    return io.TextIOWrapper(io.BytesIO(data), encoding=encoding, errors=errors).read()
+
+
+# ---- A file the parsers refuse ---------------------------------------------------
+#
+# Python's JSON and TOML parsers, PyYAML's composer and `ast.parse` all recurse,
+# so a file nested a few thousand levels deep makes them raise RecursionError or
+# MemoryError, and the scanners caught neither: the scanner died, and every
+# finding it would have made on every other file died with it. One 200 KB
+# `.mcp.json` blinded 12 scanners at once, so a crafted file could hide a
+# CRITICAL finding in another, and `--allow-scanner-failure` then passed the
+# scan. A file refused now costs that file alone. The refusal is never silent:
+# a client may read what AAK refused (V8's JSON parser and Bun's YAML parser
+# take inputs Python's recursive parsers reject), and a file skipped without a
+# word would hide its servers and hooks from every rule. `run_scan` collects
+# each scanner's refusals through `collecting_refusals` and reports each one as
+# AAK-INTERNAL-SCANNER-FAIL against its file, so the scan is INCOMPLETE, as the
+# crash left it, without the crash's cost to every other file.
+
+_REFUSED: ContextVar[dict[str, str] | None] = ContextVar("aak_refused", default=None)
+_OVERFLOW = (RecursionError, MemoryError)
+
+
+@contextmanager
+def collecting_refusals() -> Iterator[dict[str, str]]:
+    """Collect `{path: reason}` for every file refused while the block runs."""
+    refused: dict[str, str] = {}
+    token = _REFUSED.set(refused)
+    try:
+        yield refused
+    finally:
+        _REFUSED.reset(token)
+
+
+def refuse(path: Path | str | None, reason: str) -> None:
+    """Record that the running scanner did not read `path`, and why.
+
+    Once per file, with its first reason. Nothing is recorded outside
+    `collecting_refusals`; the caller's own error handling then decides, as it
+    did for any file it could not parse. The parse helpers below take the
+    path, and without one let the RecursionError or MemoryError propagate, so
+    a refusal is never lost to a missing path: the caller contains it with
+    `refusing_overflow`, or the scanner fails as it did.
+    """
+    refused = _REFUSED.get()
+    if refused is not None and path is not None:
+        refused.setdefault(str(path), reason)
+
+
+
+@contextmanager
+def refusing_overflow(path: Path | str, what: str = "syntax tree") -> Iterator[None]:
+    """Contain a RecursionError or MemoryError from the block to `path`.
+
+    For a scanner's per-file analysis that recurses over what it parsed (an
+    `ast.NodeVisitor`, a helper that follows an attribute chain): a 3,000-term
+    expression parses, then takes the visitor past the recursion limit. The
+    file is refused, its findings so far are dropped with the block, and the
+    scanner goes on with the next file.
+    """
+    try:
+        yield
+    except _OVERFLOW as exc:
+        if isinstance(exc, _TooDeepToParse):
+            refuse(path, str(exc))
+        else:
+            refuse(path, f"{what} too deep for this scanner to walk ({type(exc).__name__})")
+
+
+class RefusedJSON(json.JSONDecodeError):
+    """A JSON text the parse helpers refused, raised as the error a reader catches."""
+
+
+class RefusedSource(SyntaxError):
+    """A Python source `parse_python` refused, raised as the error a reader catches."""
+
+
+class RefusedTOML(tomllib.TOMLDecodeError):
+    """A TOML text `loads_toml` refused, raised as the error a reader catches."""
+
+
+class RefusedYAML(yaml.YAMLError):
+    """A YAML text the YAML loaders refused, raised as the error a reader catches."""
+
+
+def _refused_json(text: str, path: Path | str, exc: BaseException) -> RefusedJSON:
+    reason = f"JSON nested too deep for Python's parser ({type(exc).__name__})"
+    refuse(path, reason)
+    return RefusedJSON(reason, text, 0)
+
+
+def loads_json(text: str | bytes, path: Path | str | None) -> Any:
+    """`json.loads(text)`, refusing a text nested deeper than
+    `JSON_MAX_NESTING` (see `_parse_json`), or too deep for Python's parser.
+
+    The refusal is recorded against `path` and raised as `RefusedJSON`, a
+    `json.JSONDecodeError`, so the reader skips the file as it skips invalid
+    JSON while `run_scan` reports it. Without a path a RecursionError
+    propagates (see `refuse`). Bytes are decoded as `json.loads` decodes them.
+    """
+    doc = text if isinstance(text, str) else text.decode(json.detect_encoding(text), "surrogatepass")
+    return _parse_json(doc, path)
+
+
+# A filename no file can have, for `ast.parse`. On a SyntaxError CPython reads
+# the offending line back from the file it was given, and 3.9 (3.9.6 and
+# 3.9.25, which CI installs) reads it into a 1,000-byte buffer, then decodes as
+# many bytes from that buffer as the error's column: an out-of-bounds read as
+# long as the line. A crafted `.py` parsed under its own path crashed the
+# process 1 run in 24 inside ssrf_toctou's 1 MB source cap, and every run at
+# 1.1 MB, whatever a caller caught. A relative name such as "<unknown>" is no
+# answer: a scan runs inside the repository, which can commit a file of that
+# name. `/dev/null` is not a directory, and `<` and `>` are not allowed in a
+# Windows file name.
+_PARSE_FILENAME = "/dev/null/<aak>"
+
+# Before 3.11 CPython parses and builds the syntax tree recursively in C with no
+# depth check, so a deep enough source overflows the C stack and the process
+# dies (exit 139), past any `except`: 3.9.6 on a 120,000-term `a**a**...` chain
+# or 42,000 nested lambda defaults, 3.10.19 on a flat 132,000-term `a+a+...`
+# chain (263 KB).
+# 3.9.25 and 3.10 refuse a deep recursive rule (MemoryError) but still build a
+# left-recursive chain's tree recursively. 3.11 checks the depth and raises
+# RecursionError or MemoryError instead. Before 3.11 a source therefore goes
+# through `python_nesting_bound` first, and one whose bound passes
+# `_PY_MAX_NESTING` is refused unparsed. The lowest crash measured, on 3.9.6,
+# 3.9.25 and 3.10.19 with the default 8 MB stack, came at a bound of 120,000
+# (that `a**a**...` chain; the lambda defaults, three levels each, came next at
+# 126,000); the highest bound in 100,303 real files was 4,585 (see
+# tests/test_refused_files.py). A source under the bound is parsed and walked
+# like any other, and costs what its size does rather than its depth: in `aak
+# scan` on 3.9.6, with every Python scanner's gate open (main's new gates
+# included), 480 to 500 KB of chains just under 10,000 levels took 10 to 31 s
+# of CPU and 508 KB of shallow chains, 100 terms each, 40 s; on 3.9.25, whose
+# parser refuses the unary chains, 8 to 25 s and 33 s. Measured on the head
+# rebased onto b189db60, best of two runs at a load average under 4. The same
+# file's CPU time has moved by up to 60% from run to run on the machine
+# measured, with its load and the cores a run landed on.
+_SCREEN_SOURCES = sys.version_info < (3, 11)
+_PY_MAX_NESTING = 10_000
+# Defense in depth for a shape the screen does not foresee: before 3.11 the
+# parse runs on a worker thread with 32 times the main thread's stack. The
+# deepest crafted 1 MB sources overflow 64 MB and parse in 256 MB; one of
+# 500 KB cost 0.2 to 0.35 s and 250 to 380 MB a parse on 3.9.6, once for each
+# scanner that parsed it, which the screen spares.
+_PARSE_STACK_BYTES = 256 * 1024 * 1024
+# The worker, as (process id, executor, worker thread id), or (process id, None,
+# 0) where no thread with that stack could start: a forked child has no threads
+# and starts its own. It is started under the lock, which a forked child
+# replaces, since a parent's thread may have held it at the fork.
+_parse_worker: tuple[int, ThreadPoolExecutor | None, int] | None = None
+_parse_worker_lock = threading.Lock()
+_PARSE_ON_WORKER = sys.version_info < (3, 11)
+
+
+def _new_parse_worker_lock() -> None:
+    global _parse_worker_lock
+    _parse_worker_lock = threading.Lock()
+
+
+if hasattr(os, "register_at_fork"):
+    os.register_at_fork(after_in_child=_new_parse_worker_lock)
+
+# One token of Python source, for the screen. A string is only opened here; its
+# end is found by `_py_string_end`. Numbers are spelled out so that `1..real`
+# leaves its attribute dots to be counted. Python reads a CR, an LF and a CRLF
+# alike as a line break, so a backslash before any of them joins the next line:
+# read as a stray character and a new line, a 900-term chain joined with `\`
+# and CR alone was bounded at 9 levels for its 905.
+_PY_TOKEN_RE = re.compile(
+    r"(?P<str>[rRbBuUfF]{0,2}(?:'''|\"\"\"|'|\"))"
+    r"|(?P<name>[^\W\d]\w*)"
+    r"|(?P<num>(?:0[xXoObB][0-9a-fA-F_]+|\d[\d_]*(?:\.[\d_]*)?(?:[eE][+-]?[\d_]+)?"
+    r"|\.\d[\d_]*(?:[eE][+-]?[\d_]+)?)[jJ]?)"
+    r"|(?P<comment>\#[^\r\n]*)"
+    r"|(?P<cont>\\(?:\r\n?|\n))"
+    r"|(?P<nl>\r?\n|\r)"
+    r"|(?P<blank>[ \t\f]+)"
+    r"|(?P<open>[(\[{])"
+    r"|(?P<close>[)\]}])"
+    r"|(?P<sep>[,;])"
+    r"|(?P<colon>:(?!=))"
+    r"|(?P<op>\*\*=?|//=?|>>=?|<<=?|->|:=|!=|[-+*/%@&|^=<>]=?|[~.!$?`])"
+    r"|(?P<other>.)",
+    re.DOTALL,
+)
+# Keywords that join or wrap an expression, each a level at most.
+_PY_CHAIN_WORDS = frozenset({"and", "or", "not", "if", "else", "in", "is", "lambda", "await", "yield", "for", "async"})
+_PY_STRING_END_RE = {
+    quote: re.compile(r"\\(?:\r\n|.)|" + re.escape(quote) + ("" if len(quote) == 3 else r"|\r|\n"), re.DOTALL)
+    for quote in ("'''", '"""', "'", '"')
+}
+_FSTRING_FIELD_RE = re.compile(r"\{\{|\}\}|\{")
+
+
+def _py_string_end(src: str, start: int, quote: str, end: int) -> int:
+    """Index past the string whose body starts at `start`. A backslash escapes
+    the next character, or the CRLF after it, raw or not; a one-line string
+    ends at a line break, CR or LF. Read as an escaped CR followed by a line
+    break, a backslash and CRLF ended the string early, so its closing quote
+    opened another and the rest of the line went uncounted: 905 levels of
+    chain after `'a\\<CRLF>'` were bounded at 7."""
+    pattern = _PY_STRING_END_RE[quote]
+    while True:
+        m = pattern.search(src, start, end)
+        if m is None:
+            return end
+        if m.group()[0] != "\\":
+            return m.end()
+        start = m.end()
+
+
+def _fstring_depth(src: str, start: int, end: int) -> int:
+    """A number no smaller than how deep the replacement fields of the f-string
+    body `src[start:end]` nest, nested f-strings included: two levels for each
+    f-string and one for each operator, keyword, bracket, colon or comma in a
+    field. Before 3.12 a field is one token to the tokenizer, but the parser
+    parses its expression, as deep as it is (131,000 terms crashed 3.9).
+    Iterative: a nested f-string's body goes on a work list."""
+    total = 0
+    bodies = [(start, end)]
+    while bodies:
+        pos, stop = bodies.pop()
+        total += 2
+        while True:
+            brace = _FSTRING_FIELD_RE.search(src, pos, stop)
+            if brace is None:
+                break
+            pos, depth = brace.end(), (1 if brace.group() == "{" else 0)
+            while pos < stop and depth:
+                m = _PY_TOKEN_RE.match(src, pos, stop)
+                assert m is not None  # `other` matches any character
+                kind, tok = m.lastgroup, m.group()
+                pos = m.end()
+                if kind == "open":
+                    depth += 1
+                    total += 1
+                elif kind == "close":
+                    depth -= 1
+                    total += 1 if depth else 0
+                elif kind in ("op", "colon", "sep") or (kind == "name" and tok in _PY_CHAIN_WORDS):
+                    total += 1
+                elif kind == "str":
+                    quote = tok.lstrip("rRbBuUfF")
+                    body_end = _py_string_end(src, pos, quote, stop)
+                    if "f" in tok[: len(tok) - len(quote)].lower():
+                        bodies.append((pos, max(pos, body_end - len(quote))))
+                    pos = body_end
+    return total
+
+
+def _indent_width(blank: str) -> int:
+    width = 0
+    for char in blank:
+        width = (width // 8 + 1) * 8 if char == "\t" else 0 if char == "\f" else width + 1
+    return width
+
+
+def _nesting_bound(src: str) -> int:
+    """A number no smaller than the depth of the tree `ast.parse(src)` would
+    build, read in one linear pass that never recurses.
+
+    Within a bracket each element, between commas, counts one level for every
+    operator, chaining keyword (`not`, `and`, `if` ... `else`, `lambda`, ...),
+    colon and call or subscript trailer, plus its deepest bracket; the elements
+    of a bracket are siblings, so the bracket counts its deepest element plus
+    one. Commas of a lambda's parameters (until its `:`) do not end the element,
+    because the body nests inside the lambda. A logical line adds the `elif`
+    ladders around it, two levels for each enclosing indentation and four for
+    the statement, and an f-string adds what its fields hold
+    (`_fstring_depth`). Every way a tree can nest one level deeper is counted,
+    and only siblings take the maximum rather than the sum, so the bound is
+    never below the tree's depth; it was not on any of 100,303 real files, where
+    it reached 4,585 at most and 65 at the 99.9th percentile (see
+    `_PY_MAX_NESTING`).
+    """
+    best = 1  # the module
+    frames = [[0, 0, 0, 0]]  # per open bracket: chain, deepest bracket, deepest element, lambdas awaiting `:`
+    ladders: list[list[int]] = []  # [indent, elifs] of each open if-elif ladder, outermost first
+    elifs = 0
+    indents: list[int] = []
+    at_line_start, line_indent, context = True, 0, 0
+    pos, n = 0, len(src)
+    while pos < n:
+        m = _PY_TOKEN_RE.match(src, pos)
+        assert m is not None  # `other` matches any character
+        kind, tok = m.lastgroup, m.group()
+        pos = m.end()
+        if kind in ("blank", "comment", "cont"):
+            if kind == "blank" and at_line_start and len(frames) == 1:
+                line_indent = _indent_width(tok)
+            continue
+        if kind == "nl":
+            if len(frames) == 1:
+                if not at_line_start:
+                    frame = frames[0]
+                    best = max(best, context + max(frame[2], frame[0] + frame[1]))
+                    frames[0] = [0, 0, 0, 0]
+                at_line_start, line_indent = True, 0
+            continue
+        if at_line_start and len(frames) == 1:
+            at_line_start = False
+            while indents and indents[-1] > line_indent:
+                indents.pop()
+            if not indents or indents[-1] < line_indent:
+                indents.append(line_indent)
+            while ladders and ladders[-1][0] > line_indent:
+                elifs -= ladders.pop()[1]
+            word = tok if kind == "name" else ""
+            if word == "elif":
+                if not ladders or ladders[-1][0] != line_indent:
+                    ladders.append([line_indent, 0])
+                ladders[-1][1] += 1
+                elifs += 1
+            elif word != "else" and ladders and ladders[-1][0] == line_indent:
+                elifs -= ladders.pop()[1]
+            context = elifs + 2 * len(indents) + 4
+        frame = frames[-1]
+        if kind == "name":
+            if tok in _PY_CHAIN_WORDS:
+                frame[0] += 1
+                if tok == "lambda":
+                    frame[3] += 1
+        elif kind == "op":
+            frame[0] += 1
+        elif kind == "str":
+            quote = tok.lstrip("rRbBuUfF")
+            end = _py_string_end(src, pos, quote, n)
+            if "f" in tok[: len(tok) - len(quote)].lower():
+                frame[0] += _fstring_depth(src, pos, max(pos, end - len(quote)))
+            pos = end
+        elif kind == "open":
+            frames.append([0, 0, 0, 0])
+        elif kind == "close":
+            if len(frames) > 1:
+                done = frames.pop()
+                frame = frames[-1]
+                frame[1] = max(frame[1], max(done[2], done[0] + done[1]) + 1)
+                frame[0] += 1
+        elif kind == "sep":
+            if frame[3]:
+                frame[0] += 1
+            else:
+                frame[2] = max(frame[2], frame[0] + frame[1])
+                frame[0] = frame[1] = 0
+        elif kind == "colon":
+            frame[0] += 1
+            if frame[3]:
+                frame[3] -= 1
+    while len(frames) > 1:  # brackets the text never closed
+        done = frames.pop()
+        frames[-1][1] = max(frames[-1][1], max(done[2], done[0] + done[1]) + 1)
+    frame = frames[0]
+    return max(best, context + max(frame[2], frame[0] + frame[1]))
+
+
+# Each source's bound, by a digest of its text. Scanners run one after another
+# over every file, so the screen is asked about a file once by each scanner that
+# parses it, 27 for a file that opens every gate: a cache of the last few
+# sources missed on any project with more files than it held. A 16-byte digest
+# and an int a file keep 65,536 files to about 6 MB, and the table is emptied
+# when full, so a long-lived process (`aak watch`, the language server) stays
+# bounded.
+_BOUNDS: dict[bytes, int] = {}
+_BOUNDS_MAX = 65_536
+
+
+def python_nesting_bound(src: str) -> int:
+    """`_nesting_bound(src)`, computed once for each distinct text."""
+    key = hashlib.blake2b(src.encode("utf-8", "surrogatepass"), digest_size=16).digest()
+    bound = _BOUNDS.get(key)
+    if bound is None:
+        bound = _nesting_bound(src)
+        if len(_BOUNDS) >= _BOUNDS_MAX:
+            _BOUNDS.clear()
+        _BOUNDS[key] = bound
+    return bound
+
+
+class _TooDeepToParse(RecursionError):
+    """The screen's refusal, for a caller that contains it with `refusing_overflow`."""
+
+
+def _parse_quietly(source: str | bytes, filename: str) -> ast.Module:
+    """`ast.parse` with the compiler's warnings about the source ignored.
+
+    A warning about the scanned code (an invalid escape sequence is a
+    SyntaxWarning on 3.12 and a DeprecationWarning before) is not AAK's to
+    show: every scanner that parsed the file printed it again, 21 lines for
+    one escape on 3.12, and under `-W error` it turned a file that parses into
+    one that does not, so the file's findings were dropped without a word.
+    """
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore")
+        return ast.parse(source, filename)
+
+
+def _large_stack_worker() -> ThreadPoolExecutor | None:
+    """The worker thread with `_PARSE_STACK_BYTES` of stack, started on first
+    use; None where a thread's stack size cannot be set or no such thread can
+    start (an address-space or process limit), and the caller works in place
+    with the default recursion limit, as `_ast_parse` and `walk_tree` do. A
+    thread that could not start made every parse raise RuntimeError, and with
+    it every Python scanner.
+
+    The stack size is the process's while it is set, so the worker starts
+    under a lock. Two threads parsing for the first time at once could each
+    start one, the one kept having started under the size the other had
+    already put back, and leave 256 MB as the size of every later thread.
+    """
+    global _parse_worker
+    pid = os.getpid()
+    worker = _parse_worker
+    if worker is None or worker[0] != pid:
+        with _parse_worker_lock:
+            worker = _parse_worker
+            if worker is None or worker[0] != pid:
+                executor, thread_id = _start_parse_worker()
+                worker = _parse_worker = (pid, executor, thread_id)
+    return worker[1]
+
+
+def _start_parse_worker() -> tuple[ThreadPoolExecutor | None, int]:
+    try:
+        previous = threading.stack_size(_PARSE_STACK_BYTES)
+    except (ValueError, RuntimeError):
+        return None, 0
+    executor = ThreadPoolExecutor(max_workers=1, thread_name_prefix="aak-parse")
+    try:
+        thread_id = executor.submit(threading.get_ident).result()  # start the thread now, with the large stack
+    except RuntimeError:  # "can't start new thread"
+        executor.shutdown(wait=False, cancel_futures=True)
+        return None, 0
+    finally:
+        threading.stack_size(previous)
+    return executor, thread_id
+
+
+def _on_large_stack() -> bool:
+    """True on the worker thread itself, where a parse or a walk runs in place:
+    handed to the worker, it would wait behind the task that handed it over."""
+    worker = _parse_worker
+    return worker is not None and worker[0] == os.getpid() and worker[2] == threading.get_ident()
+
+
+def _ast_parse(source: str | bytes, filename: str) -> ast.Module:
+    if not _PARSE_ON_WORKER or _on_large_stack():
+        return _parse_quietly(source, filename)
+    worker = _large_stack_worker()
+    if worker is None:
+        return _parse_quietly(source, filename)
+    return worker.submit(_parse_quietly, source, filename).result()
+
+
+def parse_python(source: str | bytes, path: Path | str | None) -> ast.Module:
+    """`ast.parse(source)`, refusing a source the interpreter cannot parse safely.
+
+    CPython's parser raises RecursionError on deep nesting (`"--a" * 12000` on
+    3.11 and later) and MemoryError on a long run of unary operators (`"+" *
+    36000` on 3.10 and later). Before 3.11 it can segfault instead, so a
+    source whose `python_nesting_bound` passes `_PY_MAX_NESTING` is refused
+    before it is parsed, and the parse runs where it cannot take the process
+    down (see `_ast_parse`). The parse is given a filename no file has
+    (`_PARSE_FILENAME`), never `path`. The refusal is recorded against `path`
+    and raised as `RefusedSource`, a SyntaxError. A caller without the path
+    passes None and contains the overflow, which then propagates, with
+    `refusing_overflow` where it has the path.
+    """
+    if _SCREEN_SOURCES:
+        text = source if isinstance(source, str) else source.decode("utf-8", errors="replace")
+        bound = python_nesting_bound(text)
+        if bound > _PY_MAX_NESTING:
+            version = f"{sys.version_info[0]}.{sys.version_info[1]}"
+            reason = (
+                f"Python source nests deeper than Python {version}'s parser handles safely "
+                f"(a bound of {bound:,} levels, over its {_PY_MAX_NESTING:,})"
+            )
+            if path is None:
+                raise _TooDeepToParse(reason)
+            refuse(path, reason)
+            raise RefusedSource(reason)
+    try:
+        return _ast_parse(source, _PARSE_FILENAME)
+    except _OVERFLOW as exc:
+        if path is None:
+            raise
+        reason = f"Python source nested too deep to parse ({type(exc).__name__})"
+        refuse(path, reason)
+        raise RefusedSource(reason) from None
+
+
+# ---- Walking a parsed tree ----------------------------------------------------
+#
+# A recursive walk takes a Python frame or more for each level of the tree it
+# walks, an `ast.NodeVisitor` two (`visit` and `generic_visit`) and
+# `ast.unparse` three, and the interpreter stops at 1,000 frames, which real code
+# reaches. sympy's generated table of Galois resolvents (sympy/polys/
+# numberfields/resolvent_lookup.py) holds a 562-term polynomial whose tree is 569
+# levels deep: five scanners that walk every Python file could not walk it, nine
+# once a header opened their gates, and DeepSeek's walker, which had no
+# containment, took its scanner down. Of 100,303 real files (eight interpreters'
+# standard libraries and the 2,000 packages installed beside them) it is the
+# deepest: the next has 230 levels, and the 99.9th percentile 30.
+
+#: The recursion limit a walk of a parsed tree runs under (see `walk_tree`): about
+#: 3,300 levels of `ast.unparse`, the walk with the most frames a level.
+WALK_RECURSION_LIMIT = 10_000
+_WALK_ON_WORKER = sys.version_info < (3, 11)
+_headroom_lock = threading.Lock()
+# The walks in progress, by the thread that runs them.
+_headroom_walks: dict[int, int] = {}
+_headroom_restore = 0
+
+
+@contextmanager
+def _recursion_headroom() -> Iterator[None]:
+    """The recursion limit at `WALK_RECURSION_LIMIT` for the block, or at the
+    limit already set where that is higher. Walks in progress at once share one
+    raise, and the limit goes back to what it was when the first began once the
+    last ends, so one finishing never lowers it under another."""
+    global _headroom_restore
+    me = threading.get_ident()
+    with _headroom_lock:
+        if not _headroom_walks:
+            _headroom_restore = sys.getrecursionlimit()
+            sys.setrecursionlimit(max(_headroom_restore, WALK_RECURSION_LIMIT))
+        _headroom_walks[me] = _headroom_walks.get(me, 0) + 1
+    try:
+        yield
+    finally:
+        with _headroom_lock:
+            if _headroom_walks[me] == 1:
+                del _headroom_walks[me]
+            else:
+                _headroom_walks[me] -= 1
+            if not _headroom_walks:
+                sys.setrecursionlimit(_headroom_restore)
+
+
+def _headroom_after_fork() -> None:
+    """A forked child runs only the thread that forked. A walk another thread
+    had in progress never ends there, so the raised limit would stay for good,
+    and a lock it held at the fork is never released, so the child's first
+    walk would wait on it for ever. The child takes a fresh lock and keeps only
+    its own thread's walks, putting the limit back if none is left.
+
+    A child forked from inside a walk keeps that walk and its limit. Before
+    3.11 a walk runs on the parse worker, so such a child is a copy of the
+    worker thread: the walk's caller is not in it, and the walk never returns
+    there. Fork outside a walk to go on with the caller's work.
+    """
+    global _headroom_lock, _headroom_walks
+    _headroom_lock = threading.Lock()
+    me = threading.get_ident()
+    mine = _headroom_walks.get(me, 0)
+    if _headroom_walks and not mine:
+        sys.setrecursionlimit(_headroom_restore)
+    _headroom_walks = {me: mine} if mine else {}
+
+
+if hasattr(os, "register_at_fork"):
+    os.register_at_fork(after_in_child=_headroom_after_fork)
+
+
+def _walk_with_headroom(
+    context: Context, walk: Callable[..., _T], args: tuple[Any, ...], kwargs: dict[str, Any]
+) -> _T:
+    with _recursion_headroom():
+        return context.run(walk, *args, **kwargs)
+
+
+def walk_tree(walk: Callable[..., _T], *args: Any, **kwargs: Any) -> _T:
+    """`walk(*args, **kwargs)`, a recursive walk of a parsed tree, with room to recurse.
+
+    For an `ast.NodeVisitor`'s `visit`, `ast.unparse` (see `unparse`) or a
+    scanner's own helper that follows an expression down: anything whose
+    recursion grows with the depth of the tree. The walk runs with the
+    recursion limit raised to `WALK_RECURSION_LIMIT` and put back afterwards.
+    From 3.11 a call from Python to Python takes no C stack, so the walk runs
+    where it is called. Before 3.11 every call does, and 10,000 frames can
+    overflow a thread's stack before the limit stops them, so the walk runs on
+    the worker that parses (`_ast_parse`), with 256 MB of stack, in a copy of
+    the caller's context, so that a refusal made inside it reaches the caller's
+    `collecting_refusals`. Whatever the walk raises, it raises in the caller. A
+    tree deeper than even the raised limit allows raises RecursionError, which
+    the caller contains with `refusing_overflow`, and that file alone is
+    refused.
+
+    The limit is the interpreter's, not the thread's. While a walk runs, every
+    other thread of the process may recurse as deep, so code recursing on
+    another thread at that moment can overflow its thread's stack where the
+    default limit would have stopped it: any recursion before 3.11, and from
+    3.11 a recursion through C (a recursive `__repr__`, or a parse: 3.11 lets
+    `ast.parse` build a tree three times as deep as the limit). `aak scan`
+    runs its scanners one at a time on one thread, so nothing else runs during
+    a walk; a host that scans, or recurses, on other threads at the same time
+    shares the raised limit while a walk is in progress. For the same reason a
+    walk does not parse.
+
+    A walk lets RecursionError out, to the caller's `refusing_overflow`, rather
+    than catching it and going on to the next node: after a RecursionError,
+    3.9.6 aborts the process (exit 134, "Cannot recover from stack overflow")
+    if the thread recurses more than 50 frames past the limit before its depth
+    falls back under it, whatever the code catches. 3.9.25 and later do not.
+    """
+    if not _WALK_ON_WORKER or _on_large_stack():
+        with _recursion_headroom():
+            return walk(*args, **kwargs)
+    worker = _large_stack_worker()
+    if worker is None:  # no stack to raise the limit on; the default limit stops the walk
+        return walk(*args, **kwargs)
+    return worker.submit(_walk_with_headroom, copy_context(), walk, args, kwargs).result()
+
+
+def unparse(node: ast.AST) -> str:
+    """`ast.unparse(node)`, run as a walk (see `walk_tree`), or "" where the
+    unparser cannot rebuild the node.
+
+    The scanners that unparsed an expression either let RecursionError take the
+    whole scanner down, or caught every exception and read the expression as
+    empty, without a word. A tree too deep even for the raised limit now raises
+    RecursionError, for the caller's `refusing_overflow`. Any other error is
+    the unparser's own, and reads as "", as it did.
+
+    Before 3.11 a walk is handed to the worker and waited on, which cost more
+    than unparsing the small expressions scanners mostly ask about, once for
+    every callee they judged. So outside a walk the unparse is tried first
+    where it is called, under the default limit, and only an expression too
+    deep for that is handed over. The RecursionError of that try is caught
+    back at the caller's depth, so the retry, on another thread, starts clean
+    (see `walk_tree` on what 3.9.6 does otherwise). On 3.9.6 that holds only
+    for a caller shallower than about 950 frames, 50 under the default limit:
+    caught deeper, the error leaves the thread's overflow state set, and the
+    process aborts if the caller then recurses 50 frames more. The scanners
+    call it from a few dozen frames down.
+    """
+    if _WALK_ON_WORKER and not _on_large_stack():
+        try:
+            return _unparse_or_empty(node)
+        except RecursionError:
+            pass
+    return walk_tree(_unparse_or_empty, node)
+
+
+def _unparse_or_empty(node: ast.AST) -> str:
+    try:
+        return ast.unparse(node)
+    except _OVERFLOW:
+        raise
+    except Exception:
+        return ""
+
+
+# Where `chain_ends` keeps a node's answer, on the node itself, so that it lives
+# and dies with the tree.
+_CHAIN_ENDS = "_aak_chain_ends"
+
+
+def chain_ends(node: ast.AST) -> tuple[int, str, str]:
+    """The dotted name an attribute chain spells, read through calls, as (how
+    many parts, the first, the last): `a.b().c` and `a.b.c()` give (3, "a",
+    "c"). A chain that does not start at a name has its attributes alone
+    (`x[0].a` gives (1, "a", "a")), and anything else gives (0, "", "").
+
+    These are the parts of the name the `_attr_chain` helpers of
+    mcp_stdio_params and mcp_marketplace_fetch build, and all their checks of a
+    callee need: its last part, its first, and the whole name only when it has
+    two parts or one. Building it for every call read each nested chain to the
+    bottom from each of its calls, the square of its depth, which a walk with
+    `walk_tree`'s room now reaches: 3,000 levels took 0.5 to 1 s a chain.
+    Each attribute and call keeps its answer as an attribute of its own, so a
+    node is read once, however many calls above it ask.
+    """
+    path: list[ast.AST] = []
+    cur = node
+    while True:
+        known: tuple[int, str, str] | None = getattr(cur, _CHAIN_ENDS, None)
+        if known is not None:
+            ends = known
+            break
+        if isinstance(cur, ast.Attribute):
+            path.append(cur)
+            cur = cur.value
+        elif isinstance(cur, ast.Call):
+            path.append(cur)
+            cur = cur.func
+        else:
+            ends = (1, cur.id, cur.id) if isinstance(cur, ast.Name) else (0, "", "")
+            break
+    for step in reversed(path):
+        if isinstance(step, ast.Attribute):
+            count, first, _ = ends
+            ends = (count + 1, first, step.attr) if count else (1, step.attr, step.attr)
+        setattr(step, _CHAIN_ENDS, ends)
+    return ends
+
+
+def chain_is(node: ast.AST, names: AbstractSet[str]) -> bool:
+    """`_attr_chain(node) in names`, for names of at most two parts, without
+    building the name (see `chain_ends`)."""
+    count, first, last = chain_ends(node)
+    if count == 1:
+        return first in names
+    return count == 2 and f"{first}.{last}" in names
+
+
+# How many dot-separated parts one TOML key may have. tomllib builds a dotted
+# key a tuple concatenation at a time, so its cost grows with the square of the
+# parts: 20,000 parts (129 KB) took 3.6 s on 3.12, and the 2 MB a manifest may
+# be would hold a key that takes hours. Real keys have a handful
+# (`[tool.hatch.build.targets.wheel.force-include]` has six).
+_TOML_MAX_KEY_PARTS = 64
+# A character that cannot continue a dotted key: anything but a bare-key
+# character, a blank, or (for the parsers that take TOML 1.1) a non-ASCII one.
+# The quotes, `#` and `.` that need handling of their own are in it too.
+_TOML_KEY_STOP_RE = re.compile("[^A-Za-z0-9_\\- \\t\u0080-\U0010ffff]")
+_TOML_BASIC_END_RE = re.compile(r'[\\"\n]')
+_TOML_ML_BASIC_END_RE = re.compile(r'\\|"""')
+
+
+def _toml_string_end(text: str, at: int) -> tuple[int, bool]:
+    """Index past the string opened at `at`, and whether it spans lines (so it
+    cannot be a key part). An unterminated string runs to the end of the text."""
+    quote = text[at]
+    if text.startswith(quote * 3, at):
+        if quote == "'":
+            close = text.find("'''", at + 3)
+        else:
+            pos = at + 3
+            while True:
+                m = _TOML_ML_BASIC_END_RE.search(text, pos)
+                if m is None or m.group() == '"""':
+                    break
+                pos = m.end() + 1
+            close = -1 if m is None else m.start()
+        if close < 0:
+            return len(text), True
+        end = close + 3
+        while end < len(text) and text[end] == quote and end - close < 5:
+            end += 1  # up to two quotes just inside the closing delimiter
+        return end, True
+    if quote == "'":
+        close = text.find("'", at + 1)
+        newline = text.find("\n", at + 1)
+        if close < 0 or 0 <= newline < close:
+            return (len(text) if newline < 0 else newline), False
+        return close + 1, False
+    pos = at + 1
+    while True:
+        m = _TOML_BASIC_END_RE.search(text, pos)
+        if m is None:
+            return len(text), False
+        if m.group() == "\\":
+            pos = m.end() + 1
+            continue
+        return (m.end() if m.group() == '"' else m.start()), False
+
+
+def _toml_longest_dotted_key(text: str) -> int:
+    """The most parts any dotted key in `text` has, in one linear pass.
+
+    Outside strings and comments a dot only ever joins two key parts (a float
+    or a date carries one, which never makes a long run), so the longest run of
+    dots separated only by key parts and blanks is the longest key, less one.
+    A single-line string is a quoted key part; a multi-line string, a comment
+    and any other character end the run.
+    """
+    best = run = 0
+    pos, n = 0, len(text)
+    while pos < n:
+        m = _TOML_KEY_STOP_RE.search(text, pos)
+        if m is None:
+            break
+        at, char = m.start(), m.group()
+        if char == ".":
+            run += 1
+            best = max(best, run)
+            pos = at + 1
+        elif char in "\"'":
+            pos, spans_lines = _toml_string_end(text, at)
+            if spans_lines:
+                run = 0
+        elif char == "#":
+            newline = text.find("\n", at)
+            pos, run = (n if newline < 0 else newline), 0
+        else:
+            pos, run = at + 1, 0
+    return best + 1
+
+
+def loads_toml(text: str, path: Path | str | None) -> dict[str, Any]:
+    """`tomllib.loads(text)`, refusing a text the parser cannot take.
+
+    Deeply nested inline tables and arrays take the parser past the recursion
+    limit, and a key of more than `_TOML_MAX_KEY_PARTS` dotted parts costs it
+    time that grows with the square of the parts, so either is refused. The
+    refusal is recorded against `path` and raised as `RefusedTOML`, a
+    `TOMLDecodeError`. Without a path the RecursionError propagates (see
+    `refuse`), and the key screen still refuses.
+    """
+    if _toml_longest_dotted_key(text) > _TOML_MAX_KEY_PARTS:
+        reason = f"TOML key of more than {_TOML_MAX_KEY_PARTS} dotted parts"
+        refuse(path, reason)
+        raise RefusedTOML(reason, text, 0)
+    try:
+        return tomllib.loads(text)
+    except _OVERFLOW as exc:
+        if path is None:
+            raise
+        reason = f"TOML nested too deep for Python's parser ({type(exc).__name__})"
+        refuse(path, reason)
+        raise RefusedTOML(reason, text, 0) from None
+    except tomllib.TOMLDecodeError:
+        raise
+    except ValueError as exc:
+        # tomllib converts an integer with `int()` and lets its ValueError out
+        # unwrapped, so one past Python's digit limit (see `_INT_MAX_STR_DIGITS`)
+        # was no TOMLDecodeError, and a reader catching only that lost the
+        # scanner. The value cannot be read, so the file is refused.
+        reason = f"TOML value Python cannot convert ({type(exc).__name__})"
+        refuse(path, reason)
+        raise RefusedTOML(reason, text, 0) from None
+
+
+# How deep block indentation, and separately flow collections (`[`, `{`), may
+# nest in a YAML file. The deepest of 3,272 real files measured on 2026-10-17
+# nests 37 block levels (cert-manager's Issuer CRD) and 5 flow levels: 1,523
+# from MCP repositories, and compose files, Kubernetes manifests and CRDs
+# (cert-manager, argo-cd, Gateway API, Crossplane and AWS controller CRDs), Helm
+# values, CloudFormation templates, workflows and OpenAPI specs from 50 other
+# projects. A second set, 11,640 files from 22 such projects, nests 38 block
+# levels (the same CRD in Bitnami's chart) and 31 flow levels, in an Envoy
+# config dump istio keeps as test data, which no scanner reads; the next
+# deepest nests 15. Brackets get about twice the deepest real nesting. PyYAML's
+# scanner revisits every open flow level on each token, so a flow structure
+# costs more the deeper it nests, though less than its size costs: 990 KB of
+# brackets in a workflow took 13.0 s to read 99 deep (the shared limit of 100
+# before), and take 10.2 s 64 deep, 8.6 s 32 deep and 2.4 s 1 deep, while a
+# scan of one nested past the limit ends in half a second. Its composer
+# recurses about twice per level, which meets the recursion limit near 300
+# levels, and the two limits together allow 164. Counting in the scanner,
+# rather than in the text, keeps a `]` inside a quoted scalar from hiding a
+# level.
+YAML_MAX_NESTING = 100
+YAML_MAX_FLOW_NESTING = 64
+# How far aliases may grow a YAML stream: twice its length plus 1,000, and at
+# least this many nodes. A node counts 1, a scalar 1 more per character, and a
+# node an alias reaches counts again each time. Every reader of the result
+# walks it with each alias expanded, and nothing else bounds that: a 6 KB
+# "billion laughs" file stood for 9 ** 8 nodes and held `gha_hardening` past
+# 15 s, and one level more past 300 s. No alias-free document comes near the
+# bound, since each node and each scalar character takes at least a character
+# of text. Compose files reuse an `x-` block in every service, so a small one
+# grows most: 20 services merging 40 shared variables is 1,689 characters that
+# read as 13,417 nodes. The largest real expansion measured, 67,929 nodes, and
+# the largest ratio, 2.08, both sit inside the bound (getsentry/self-hosted's
+# compose file, 32,323 characters read as 64,325, is the nearest to 2 x len).
+_YAML_ALIAS_FLOOR = 200_000
+
+
+class _NestedTooDeep(ScannerError):
+    def __init__(self, reason: str, mark: Any) -> None:
+        super().__init__(problem=reason, problem_mark=mark)
+        self.reason = reason
+
+
+class _BoundedLoader(yaml.SafeLoader):
+    """`yaml.SafeLoader` that refuses nesting past `YAML_MAX_NESTING` block
+    levels or `YAML_MAX_FLOW_NESTING` flow levels as it scans."""
+
+    def fetch_flow_collection_start(self, TokenClass: type) -> None:
+        if self.flow_level >= YAML_MAX_FLOW_NESTING:
+            raise _NestedTooDeep(
+                f"YAML [ ] or {{ }} nested deeper than {YAML_MAX_FLOW_NESTING} levels", self.get_mark()
+            )
+        super().fetch_flow_collection_start(TokenClass)
+
+    def add_indent(self, column: int) -> bool:
+        if self.indent < column and len(self.indents) >= YAML_MAX_NESTING:
+            raise _NestedTooDeep(f"YAML nested deeper than {YAML_MAX_NESTING} levels", self.get_mark())
+        return super().add_indent(column)
+
+
+def _text_if_unconvertible(construct: Callable[[Any, Node], Any]) -> Callable[[Any, Node], Any]:
+    """A scalar constructor that gives the scalar's own text where `construct`
+    raises a conversion error, and `construct`'s value everywhere else.
+
+    `SafeLoader` converts a plain scalar that looks like a date, an integer or
+    a boolean, and one tagged as such, and its converters raise ValueError
+    (`2026-13-01`, an integer past Python's digit limit, `!!int abc`), KeyError
+    (`!!bool maybe`) or AttributeError (`!!timestamp x`), none of them a
+    YAMLError, so a reader catching YAMLError lost the whole scanner on one
+    such scalar: a release date of month 13 in a workflow took 5 scanners
+    down, the always-on hook scanner among them. The text is what the file
+    says, and nothing a reader compares it with can tell the difference.
+    """
+
+    def construct_or_text(loader: Any, node: Node) -> Any:
+        try:
+            return construct(loader, node)
+        except (ValueError, KeyError, AttributeError, TypeError):
+            return loader.construct_scalar(node)
+
+    return construct_or_text
+
+
+for _tag in ("int", "float", "bool", "timestamp"):
+    _BoundedLoader.add_constructor(
+        f"tag:yaml.org,2002:{_tag}",
+        _text_if_unconvertible(yaml.SafeLoader.yaml_constructors[f"tag:yaml.org,2002:{_tag}"]),
+    )
+
+
+def _yaml_children(node: Node) -> list[Node]:
+    if isinstance(node, SequenceNode):
+        return list(node.value)
+    if isinstance(node, MappingNode):
+        return [part for pair in node.value for part in pair]
+    return []
+
+
+def yaml_expanded_size(root: Node, limit: int, cycles_ok: bool = False) -> int | None:
+    """The size of `root` with every alias expanded, or None past `limit` or on
+    a cycle. A node counts 1, a scalar 1 more per character, and a node an alias
+    reaches counts again each time. Iterative, and each node is sized once, so
+    the work is linear in the composed document whatever the aliases do. With
+    `cycles_ok`, for a reader that visits each node once, an alias inside its
+    own anchor counts once instead of refusing the document."""
+    sizes: dict[int, int] = {}
+    on_path: set[int] = set()
+    stack: list[tuple[Node, bool]] = [(root, False)]
+    while stack:
+        node, children_sized = stack.pop()
+        key = id(node)
+        if children_sized:
+            on_path.discard(key)
+            # A child still unsized is a back edge, met only with `cycles_ok`.
+            total = 1 + sum(sizes.get(id(child), 1) for child in _yaml_children(node))
+            if total > limit:
+                return None
+            sizes[key] = total
+            continue
+        if key in sizes:
+            continue
+        if isinstance(node, ScalarNode):
+            size = 1 + len(node.value)
+            if size > limit:
+                return None
+            sizes[key] = size
+            continue
+        on_path.add(key)
+        stack.append((node, True))
+        for child in _yaml_children(node):
+            if id(child) in on_path:
+                if cycles_ok:
+                    continue
+                return None
+            if id(child) not in sizes:
+                stack.append((child, False))
+    return sizes.get(id(root))
+
+
+def _refused_yaml(path: Path | str | None, reason: str) -> RefusedYAML:
+    refuse(path, reason)
+    return RefusedYAML(reason)
+
+
+def _yaml_overflow(path: Path | str | None, exc: BaseException) -> BaseException:
+    if path is None:
+        return exc
+    return _refused_yaml(path, f"YAML nested too deep for the parser ({type(exc).__name__})")
+
+
+def _yaml_documents(
+    text: str, path: Path | str | None, single: bool, cycles_ok: bool = False
+) -> Iterator[tuple[_BoundedLoader, Node]]:
+    """Compose `text` document by document, sizing each against what is left of
+    the stream's alias budget, and yield each with its loader."""
+    budget = max(2 * len(text) + 1_000, _YAML_ALIAS_FLOOR)
+    bound = budget
+    loader = _BoundedLoader(text)
+    try:
+        while single or loader.check_node():
+            # `safe_load` takes one document and raises on a second, as
+            # `get_single_node` does; `safe_load_all` takes each in turn.
+            node = loader.get_single_node() if single else loader.get_node()
+            if node is not None:
+                size = yaml_expanded_size(node, budget, cycles_ok)
+                if size is None:
+                    why = "" if cycles_ok else ", or one sits inside its own anchor"
+                    raise _refused_yaml(path, f"YAML aliases expand past {bound:,} nodes{why}")
+                budget -= size
+                yield loader, node
+            if single:
+                return
+    except _NestedTooDeep as exc:
+        raise _refused_yaml(path, exc.reason) from None
+    except _OVERFLOW as exc:
+        raise _yaml_overflow(path, exc) from None
+    finally:
+        loader.dispose()
+
+
+def load_yaml(text: str, path: Path | str | None, cycles_ok: bool = False) -> Any:
+    """`yaml.safe_load(text)`, refusing a text that nests too deep or that
+    aliases grow too large (see `YAML_MAX_NESTING`, `YAML_MAX_FLOW_NESTING`
+    and `_YAML_ALIAS_FLOOR`).
+
+    The refusal is recorded against `path` and raised as `RefusedYAML`, a
+    `yaml.YAMLError`, so the reader skips the file as it skips invalid YAML
+    while `run_scan` reports it. Anything `safe_load` accepts within the
+    bounds comes back as `safe_load` returns it. A document that contains
+    itself (`&a [*a]`) is refused unless `cycles_ok`, for a reader that visits
+    each container once: every other reader would walk it forever.
+    """
+    for loader, node in _yaml_documents(text, path, single=True, cycles_ok=cycles_ok):
+        try:
+            return loader.construct_document(node)
+        except _OVERFLOW as exc:
+            raise _yaml_overflow(path, exc) from None
+    return None
+
+
+def load_yaml_all(text: str, path: Path | str | None) -> list[Any]:
+    """`list(yaml.safe_load_all(text))`, bounded as `load_yaml` is, with one
+    alias budget for the whole stream."""
+    out: list[Any] = []
+    for loader, node in _yaml_documents(text, path, single=False):
+        try:
+            out.append(loader.construct_document(node))
+        except _OVERFLOW as exc:
+            raise _yaml_overflow(path, exc) from None
+    return out
+
+
+def compose_yaml_all(text: str, path: Path | str | None) -> list[Node]:
+    """The composed documents of `text`, as `yaml.compose_all` gives them,
+    bounded as `load_yaml` is. A node an alias reaches is shared, not copied,
+    so a walker of the result visits each node once (by `id`) to stay linear."""
+    return [node for _loader, node in _yaml_documents(text, path, single=False, cycles_ok=True)]

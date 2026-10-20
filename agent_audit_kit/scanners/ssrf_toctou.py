@@ -57,7 +57,15 @@ from ._dependency_pins import (
     read_manifest,
     read_text,
 )
-from ._helpers import in_skip_dir, make_finding, source_lines, source_segment
+from ._helpers import (
+    in_skip_dir,
+    make_finding,
+    parse_python,
+    refusing_overflow,
+    source_lines,
+    source_segment,
+    walk_tree,
+)
 from ._manifest_deps import MAX_LOCKFILE_BYTES
 
 
@@ -190,7 +198,7 @@ def _func_source(
 
 def _walk_python(text: str, path: Path, project_root: Path, scanned: set[str]) -> list[Finding]:
     try:
-        tree = ast.parse(text, str(path))
+        tree = parse_python(text, path)
     except SyntaxError:
         return []
     findings: list[Finding] = []
@@ -241,7 +249,7 @@ def _walk_python(text: str, path: Path, project_root: Path, scanned: set[str]) -
                 ))
                 return
 
-    FuncVisitor().visit(tree)
+    walk_tree(FuncVisitor().visit, tree)
     return findings
 
 
@@ -250,10 +258,11 @@ def _check_pattern(project_root: Path, scanned: set[str]) -> list[Finding]:
     for path in project_root.rglob("*.py"):
         if in_skip_dir(path, project_root):
             continue
-        text = read_text(path)
+        text = read_text(path, 1_000_000)
         if text is None:
             continue
-        findings.extend(_walk_python(text, path, project_root, scanned))
+        with refusing_overflow(path):
+            findings.extend(_walk_python(text, path, project_root, scanned))
     return findings
 
 

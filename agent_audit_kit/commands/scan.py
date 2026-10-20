@@ -70,8 +70,9 @@ __all__ = ["scan_cmd"]
     is_flag=True,
     default=False,
     help=(
-        "Exit 0 even when a scanner crashed. Off by default: a run whose "
-        "scanners died is incomplete, and an incomplete scan that exits 0 is "
+        "Exit 0 even when a scanner did not finish every file, whether it "
+        "crashed or refused a file it could not parse safely. Off by default: "
+        "such a run is incomplete, and an incomplete scan that exits 0 is "
         "indistinguishable from a clean one (issue #743)."
     ),
 )
@@ -388,22 +389,30 @@ def _run_scan(
     # SDK traces, LangGraph checkpoints, raw JSONL) into that shape and runs the
     # same rule over them, unchanged.
     if sessions:
+        from agent_audit_kit.engine import _OPTIONAL_SCANNERS, _refused_file_findings
+        from agent_audit_kit.scanners._helpers import collecting_refusals
         from agent_audit_kit.sessions.adapters import load_transcripts, scan_sessions
 
         sessions_path = Path(sessions)
-        transcripts = load_transcripts(sessions_path)
-        if verbose:
-            for tpath, fmt, calls in transcripts:
-                click.echo(f"session: {tpath} ({fmt}, {len(calls)} calls)", err=True)
-        if not transcripts:
-            click.echo(
-                f"Warning: no readable session transcript found at {sessions} "
-                f"(supported: OpenAI Agents SDK traces, LangGraph checkpoint/thread "
-                f"state, JSONL of {{tool, args, ts}}, AAK *.session.json).",
-                err=True,
-            )
-        else:
-            result.findings.extend(scan_sessions(sessions_path, config_root=project_root))
+        # A transcript nested past `JSON_MAX_NESTING` levels is refused, and
+        # reported as a refused file in the project is, so the scan says it is
+        # incomplete rather than passing on what it did not read.
+        with collecting_refusals() as refused:
+            transcripts = load_transcripts(sessions_path)
+            if verbose:
+                for tpath, fmt, calls in transcripts:
+                    click.echo(f"session: {tpath} ({fmt}, {len(calls)} calls)", err=True)
+            if not transcripts:
+                click.echo(
+                    f"Warning: no readable session transcript found at {sessions} "
+                    f"(supported: OpenAI Agents SDK traces, LangGraph checkpoint/thread "
+                    f"state, JSONL of {{tool, args, ts}}, AAK *.session.json).",
+                    err=True,
+                )
+            else:
+                result.findings.extend(scan_sessions(sessions_path, config_root=project_root))
+        splice = next(name for module, name, _ in _OPTIONAL_SCANNERS if module == "session_splice")
+        result.findings.extend(_refused_file_findings(splice, refused, project_root))
 
     # RUGPULL / pin-drift detection now lives in the scanners/pin_drift.py
     # scanner and runs as part of run_scan() above.
@@ -491,15 +500,17 @@ def _run_scan(
     if failures and not allow_scanner_failure:
         click.echo("", err=True)
         click.echo(
-            f"INCOMPLETE: {len(failures)} scanner(s) crashed; the rules they own "
-            f"were not evaluated. This scan cannot show a clean result.",
+            f"INCOMPLETE: {len(result.failed_scanners)} scanner(s) did not finish every file "
+            "(a crash or a refused file); the rules they own may be missing findings. "
+            "This scan cannot show a clean result.",
             err=True,
         )
         for f in failures:
             click.echo(f"  {f.evidence}", err=True)
         click.echo(
-            "  Pass --allow-scanner-failure to exit 0 anyway, and please file "
-            "the crash at https://github.com/sattyamjjain/agent-audit-kit/issues",
+            "  Pass --allow-scanner-failure to exit 0 anyway. A refused file is named "
+            "with the reason; please file a crash at "
+            "https://github.com/sattyamjjain/agent-audit-kit/issues",
             err=True,
         )
         sys.exit(EXIT_FINDINGS)

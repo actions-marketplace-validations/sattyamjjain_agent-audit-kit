@@ -34,7 +34,15 @@ from collections import defaultdict
 from pathlib import Path
 
 from agent_audit_kit.models import Finding
-from agent_audit_kit.scanners._helpers import make_finding, in_skip_dir, sub_up_to_last
+from agent_audit_kit.scanners._helpers import (
+    in_skip_dir,
+    make_finding,
+    parse_python,
+    read_text_capped,
+    refusing_overflow,
+    sub_up_to_last,
+    unparse,
+)
 
 _RULE_ID = "AAK-MCP-ARGV-TOCTOU-001"
 
@@ -101,10 +109,7 @@ def _is_rebuild(value: ast.AST, var: str) -> bool:
     """True if the RHS rebuilds/transforms the approved buffer."""
     if any(isinstance(s, ast.Name) and s.id == var for s in ast.walk(value)):
         return True  # derived from the approved var
-    try:
-        src = ast.unparse(value)
-    except Exception:
-        src = ""
+    src = unparse(value)
     if _REBUILD_CALL_RE.search(src):
         return True
     return isinstance(value, (ast.JoinedStr, ast.BinOp))
@@ -120,9 +125,9 @@ def _is_py_spawn(call: ast.Call) -> bool:
     return name in ("os.system", "os.popen")
 
 
-def _scan_python(text: str) -> int | None:
+def _scan_python(text: str, path: Path) -> int | None:
     try:
-        tree = ast.parse(text)
+        tree = parse_python(text, path)
     except SyntaxError:
         return None
 
@@ -276,14 +281,16 @@ def scan(project_root: Path) -> tuple[list[Finding], set[str]]:
         try:
             if path.stat().st_size > 1_000_000:
                 continue
-            text = path.read_text(encoding="utf-8", errors="ignore")
+            text = read_text_capped(path, 1_000_000, errors="ignore")
         except OSError:
             continue
 
-        line = (
-            _scan_python(text) if path.suffix in _PY_SUFFIXES
-            else _scan_ts(text)
-        )
+        line: int | None = None
+        if path.suffix in _PY_SUFFIXES:
+            with refusing_overflow(path):
+                line = _scan_python(text, path)
+        else:
+            line = _scan_ts(text)
         if line is None:
             continue
 

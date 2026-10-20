@@ -3,14 +3,17 @@ from __future__ import annotations
 import json
 import re
 from pathlib import Path
-from typing import Any
+from typing import Any, Iterator
 
 from agent_audit_kit.models import Finding
 from agent_audit_kit.scanners._helpers import (
+    CONFIG_MAX_BYTES,
     find_line_number,
     in_skip_dir,
+    loads_json,
     make_finding,
     placed,
+    read_text_capped,
     url_readings,
 )
 
@@ -222,6 +225,32 @@ def _parse_lifetime_seconds(value: Any) -> int | None:
     return None
 
 
+def _objects_depth_first(data: object) -> Iterator[dict[str, Any]]:
+    """`data` and every object under it, in the order the JWT checks met them
+    when they recursed: an object, then each object value, or each object
+    directly inside a list value, with everything under it, before the next.
+    A list inside a list is not entered, as it never was.
+
+    One frame per level took an agent card nested past the recursion limit,
+    which JSON's parser reads on Python 3.12 and later (about 10,000 levels),
+    down with the whole scanner and its findings on every other card. The
+    walk keeps its own stack.
+    """
+    stack: list[object] = [data]
+    while stack:
+        obj = stack.pop()
+        if not isinstance(obj, dict):
+            continue
+        yield obj
+        children: list[object] = []
+        for value in obj.values():
+            if isinstance(value, dict):
+                children.append(value)
+            elif isinstance(value, list):
+                children.extend(value)
+        stack.extend(reversed(children))
+
+
 def _check_jwt_lifetime(
     data: dict[str, Any],
     rel_path: str,
@@ -229,10 +258,7 @@ def _check_jwt_lifetime(
 ) -> list[Finding]:
     """AAK-A2A-005: Check for JWT token lifetime > 1 hour."""
     findings: list[Finding] = []
-
-    def _inspect(obj: Any) -> None:
-        if not isinstance(obj, dict):
-            return
+    for obj in _objects_depth_first(data):
         for key in _LIFETIME_KEYS:
             if key in obj:
                 seconds = _parse_lifetime_seconds(obj[key])
@@ -243,15 +269,6 @@ def _check_jwt_lifetime(
                         f"JWT lifetime '{key}' is {seconds}s (>{3600}s)",
                         find_line_number(raw_text, key),
                     ))
-        # Recurse into nested dicts
-        for v in obj.values():
-            if isinstance(v, dict):
-                _inspect(v)
-            elif isinstance(v, list):
-                for item in v:
-                    _inspect(item)
-
-    _inspect(data)
     return findings
 
 
@@ -262,10 +279,7 @@ def _check_jwt_validation(
 ) -> list[Finding]:
     """AAK-A2A-006: Check for weak JWT validation settings."""
     findings: list[Finding] = []
-
-    def _inspect(obj: Any) -> None:
-        if not isinstance(obj, dict):
-            return
+    for obj in _objects_depth_first(data):
         # Check verifySignature / verify_signature == false
         for key in ("verifySignature", "verify_signature"):
             val = obj.get(key)
@@ -287,15 +301,6 @@ def _check_jwt_validation(
                         "JWT algorithms include 'none'",
                         find_line_number(raw_text, alg),
                     ))
-        # Recurse into nested dicts
-        for v in obj.values():
-            if isinstance(v, dict):
-                _inspect(v)
-            elif isinstance(v, list):
-                for item in v:
-                    _inspect(item)
-
-    _inspect(data)
     return findings
 
 
@@ -348,10 +353,10 @@ def scan(project_root: Path) -> tuple[list[Finding], set[str]]:
 
     for card_path in _find_agent_cards(project_root):
         try:
-            raw_text = card_path.read_text(encoding="utf-8")
+            raw_text = read_text_capped(card_path, CONFIG_MAX_BYTES, errors="replace")
             if len(raw_text) > 1_000_000:
                 continue
-            data = json.loads(raw_text)
+            data = loads_json(raw_text, card_path)
         except (json.JSONDecodeError, OSError):
             continue
 

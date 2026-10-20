@@ -26,7 +26,7 @@ from pathlib import Path
 
 from agent_audit_kit.models import Finding
 
-from ._helpers import in_skip_dir, make_finding
+from ._helpers import SOURCE_MAX_BYTES, in_skip_dir, make_finding, parse_python, read_text_capped, refusing_overflow, walk_tree
 
 
 _CREWAI_IMPORT_RE = re.compile(
@@ -93,12 +93,36 @@ _TAINT_HINTS_RE = re.compile(
 )
 
 
-def _func_body(text: str, node: ast.AST) -> str:
-    lines = text.splitlines()
+def _func_body(lines: list[str], node: ast.AST) -> str:
     start = max(0, getattr(node, "lineno", 1) - 1)
     end_lineno = getattr(node, "end_lineno", node.lineno) or node.lineno  # type: ignore[attr-defined]
     end = min(len(lines), end_lineno)
     return "\n".join(lines[start:end])
+
+
+def _outermost_functions(tree: ast.AST) -> dict[int, ast.FunctionDef | ast.AsyncFunctionDef]:
+    """Each call in `tree`, by id, with the outermost function definition that
+    holds it, its decorators and defaults included.
+
+    `_enclosing_function_body` used to search for it at every call: a walk of
+    the whole tree, breadth first, and of each function it met until one held
+    the call. A call outside every function paid for the whole file, so 3,000
+    calls at module level took 18 s and 6,000 took 66 s, and a nested call
+    chain, whose bottom a walk now reaches (`walk_tree`), paid for each level.
+    Breadth first, the function found first was always the outermost of those
+    holding the call, since two functions that both hold it are nested; one
+    pass now records it for every call.
+    """
+    found: dict[int, ast.FunctionDef | ast.AsyncFunctionDef] = {}
+    stack: list[tuple[ast.AST, ast.FunctionDef | ast.AsyncFunctionDef | None]] = [(tree, None)]
+    while stack:
+        node, func = stack.pop()
+        if func is None and isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
+            func = node
+        if func is not None and isinstance(node, ast.Call):
+            found[id(node)] = func
+        stack.extend((child, func) for child in ast.iter_child_nodes(node))
+    return found
 
 
 def _kw_value_constant(call: ast.Call, name: str) -> ast.Constant | None:
@@ -132,13 +156,29 @@ def _walk_python(text: str, path: Path, project_root: Path, scanned: set[str]) -
     if not _CREWAI_IMPORT_RE.search(text):
         return []
     try:
-        tree = ast.parse(text, str(path))
+        tree = parse_python(text, path)
     except SyntaxError:
         return []
 
     rel = str(path.relative_to(project_root))
     alias_map = _build_alias_map(tree)
+    outermost = _outermost_functions(tree)
+    lines = text.splitlines()
+    bodies: dict[int, str] = {}
+    searched: dict[tuple[str, int], bool] = {}
     findings: list[Finding] = []
+
+    def body_has(pattern: re.Pattern[str], body: str) -> bool:
+        """`pattern.search(body)`, once per pattern and body. A file's code
+        outside every function is one body, so a run of tool calls there
+        searched the whole file again for each: 152 KB of
+        `CodeInterpreterTool(unsafe_mode=True)` took 11 s. Each body string
+        is held by `bodies` or is `text`, so its id stays its own."""
+        key = (pattern.pattern, id(body))
+        found = searched.get(key)
+        if found is None:
+            found = searched[key] = pattern.search(body) is not None
+        return found
     fired: set[str] = set()  # which CVE-shapes fired in this file
 
     class V(ast.NodeVisitor):
@@ -155,16 +195,15 @@ def _walk_python(text: str, path: Path, project_root: Path, scanned: set[str]) -
             return ""
 
         def _enclosing_function_body(self, call: ast.Call) -> str:
-            # Walk up to find the nearest FunctionDef / AsyncFunctionDef.
-            for parent in ast.walk(tree):
-                if isinstance(parent, (ast.FunctionDef, ast.AsyncFunctionDef)):
-                    if any(
-                        c is call
-                        for c in ast.walk(parent)
-                        if isinstance(c, ast.Call)
-                    ):
-                        return _func_body(text, parent)
-            return text
+            # The source of the outermost function around the call, or the
+            # whole file outside every function (see `_outermost_functions`).
+            parent = outermost.get(id(call))
+            if parent is None:
+                return text
+            body = bodies.get(id(parent))
+            if body is None:
+                body = bodies[id(parent)] = _func_body(lines, parent)
+            return body
 
         def _inspect(self, call: ast.Call) -> None:
             callee = self._callee_attr(call)
@@ -174,7 +213,7 @@ def _walk_python(text: str, path: Path, project_root: Path, scanned: set[str]) -
             if callee == "CodeInterpreterTool":
                 unsafe = _kw_value_constant(call, "unsafe_mode")
                 if unsafe is not None and unsafe.value is True:
-                    if not _GUARD_CODEINTERP_RE.search(body):
+                    if not body_has(_GUARD_CODEINTERP_RE, body):
                         findings.append(make_finding(
                             "AAK-CREWAI-CVE-2026-2275-001",
                             rel,
@@ -192,8 +231,8 @@ def _walk_python(text: str, path: Path, project_root: Path, scanned: set[str]) -
             if callee in {"JSONSearchTool", "JSONLoader"}:
                 path_arg = _arg_value(call, ("file_path", "path", "json_path"))
                 if path_arg is not None and not isinstance(path_arg, ast.Constant):
-                    if not _GUARD_JSON_RE.search(body):
-                        if _TAINT_HINTS_RE.search(body):
+                    if not body_has(_GUARD_JSON_RE, body):
+                        if body_has(_TAINT_HINTS_RE, body):
                             findings.append(make_finding(
                                 "AAK-CREWAI-CVE-2026-2285-001",
                                 rel,
@@ -210,8 +249,8 @@ def _walk_python(text: str, path: Path, project_root: Path, scanned: set[str]) -
             if callee in {"RagTool", "WebsiteSearchTool"}:
                 url_arg = _arg_value(call, ("url", "website", "web_url"))
                 if url_arg is not None and not isinstance(url_arg, ast.Constant):
-                    if not _GUARD_RAG_RE.search(body):
-                        if _TAINT_HINTS_RE.search(body):
+                    if not body_has(_GUARD_RAG_RE, body):
+                        if body_has(_TAINT_HINTS_RE, body):
                             findings.append(make_finding(
                                 "AAK-CREWAI-CVE-2026-2286-001",
                                 rel,
@@ -226,7 +265,7 @@ def _walk_python(text: str, path: Path, project_root: Path, scanned: set[str]) -
 
             # ---- CVE-2026-2287 — sandbox fallback without docker check
             if callee == "CodeInterpreterTool":
-                if not _GUARD_DOCKER_RE.search(body):
+                if not body_has(_GUARD_DOCKER_RE, body):
                     docker_required = _kw_value_constant(call, "docker_required")
                     if docker_required is None or not bool(docker_required.value):
                         findings.append(make_finding(
@@ -242,7 +281,7 @@ def _walk_python(text: str, path: Path, project_root: Path, scanned: set[str]) -
                         ))
                         fired.add("2287")
 
-    V().visit(tree)
+    walk_tree(V().visit, tree)
 
     # Meta-rule: meta-finding only when all 4 sub-shapes fired in the file.
     if fired >= {"2275", "2285", "2286", "2287"}:
@@ -267,8 +306,9 @@ def scan(project_root: Path) -> tuple[list[Finding], set[str]]:
         if in_skip_dir(path, project_root):
             continue
         try:
-            text = path.read_text(encoding="utf-8", errors="replace")
+            text = read_text_capped(path, SOURCE_MAX_BYTES, errors="replace")
         except OSError:
             continue
-        findings.extend(_walk_python(text, path, project_root, scanned))
+        with refusing_overflow(path):
+            findings.extend(_walk_python(text, path, project_root, scanned))
     return findings, scanned

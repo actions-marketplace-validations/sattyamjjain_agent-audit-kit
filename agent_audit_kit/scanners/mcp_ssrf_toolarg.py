@@ -51,7 +51,14 @@ import re
 from pathlib import Path
 
 from agent_audit_kit.models import Finding
-from agent_audit_kit.scanners._helpers import make_finding, in_skip_dir, sub_up_to_last
+from agent_audit_kit.scanners._helpers import (
+    in_skip_dir,
+    make_finding,
+    parse_python,
+    refusing_overflow,
+    sub_up_to_last,
+    unparse,
+)
 
 _RULE_ID = "AAK-MCP-SSRF-001"
 
@@ -169,11 +176,11 @@ def _is_fetch_sink(call: ast.Call, tainted: set[str]) -> bool:
     return any(_expr_uses(a, tainted) for a in args)
 
 
-def _scan_python(text: str) -> int | None:
+def _scan_python(text: str, path: Path) -> int | None:
     if not _MCP_HINT_RE.search(text):
         return None
     try:
-        tree = ast.parse(text)
+        tree = parse_python(text, path)
     except SyntaxError:
         return None
 
@@ -189,11 +196,7 @@ def _scan_python(text: str) -> int | None:
             continue
         tainted = _collect_tainted(fn, seed)
 
-        fn_src = ""
-        try:
-            fn_src = ast.unparse(fn)
-        except Exception:
-            pass
+        fn_src = unparse(fn)
         if _GUARD_RE.search(fn_src):
             continue
 
@@ -271,7 +274,12 @@ def scan(project_root: Path) -> tuple[list[Finding], set[str]]:
         except OSError:
             continue
 
-        line = _scan_python(text) if suf in _PY_SUFFIXES else _scan_regex(text)
+        line: int | None = None
+        if suf in _PY_SUFFIXES:
+            with refusing_overflow(path):
+                line = _scan_python(text, path)
+        else:
+            line = _scan_regex(text)
         if line is None:
             continue
 

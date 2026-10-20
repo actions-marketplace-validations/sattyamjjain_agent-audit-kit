@@ -6,7 +6,14 @@ from pathlib import Path
 from typing import Any
 
 from agent_audit_kit.models import Finding
-from agent_audit_kit.scanners._helpers import iter_mcp_servers, loads_jsonc, make_finding
+from agent_audit_kit.scanners._helpers import (
+    CONFIG_MAX_BYTES,
+    iter_mcp_servers,
+    loads_json,
+    loads_jsonc,
+    make_finding,
+    read_text_capped,
+)
 
 
 def _hash_tool(name: str, description: str, input_schema: str) -> str:
@@ -57,7 +64,7 @@ def _discover_tools(project_root: Path) -> dict[str, dict]:
         if not config_path.is_file():
             continue
         try:
-            data = loads_jsonc(config_path.read_text())
+            data = loads_jsonc(read_text_capped(config_path, CONFIG_MAX_BYTES, encoding=None, errors="replace"), config_path)
         except (json.JSONDecodeError, OSError):
             continue
 
@@ -181,15 +188,27 @@ def _load_pins(pin_file: Path) -> dict[str, dict[str, Any]]:
     reads. A JSON array or an entry without a hash used to raise from inside the
     comparison (``AttributeError``, ``KeyError``), which reached the user as a
     scanner crash with no hint that the pin file was the cause.
+
+    The file is read as AAK's other config files are, up to 1 MB
+    (`read_text_capped`, whose refusal is an OSError), and parsed without the
+    recursion that took the scan's pin-drift check down on a deeply nested
+    file. A refusal of either kind is this error, with its reason; the parse
+    names no path, so that `aak scan` reports it once, here, and not a second
+    time as a refused file.
     """
     try:
-        text = pin_file.read_text(encoding="utf-8")
+        text = read_text_capped(pin_file, CONFIG_MAX_BYTES)
     except UnicodeDecodeError as exc:
         raise PinFileError(f"{PIN_FILE} is not UTF-8 text ({exc.reason} at byte {exc.start})") from exc
     except OSError as exc:
         raise PinFileError(f"{PIN_FILE} could not be read ({exc.strerror or exc})") from exc
     try:
-        pins = json.loads(text)
+        pins = loads_json(text, None)
+    except (RecursionError, MemoryError) as exc:
+        # The nesting screen's refusal says why ("JSON nested deeper than 500
+        # levels"), as does a parser that still runs out of stack; MemoryError
+        # says nothing, so its name stands in.
+        raise PinFileError(f"{PIN_FILE} could not be read ({str(exc) or type(exc).__name__})") from exc
     except json.JSONDecodeError as exc:
         raise PinFileError(
             f"{PIN_FILE} is not valid JSON ({exc.msg} at line {exc.lineno}, column {exc.colno})",

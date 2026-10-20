@@ -52,7 +52,6 @@ read installs nothing, so there is no version in it to report.
 
 from __future__ import annotations
 
-import json
 import re
 from collections import deque
 from dataclasses import dataclass, replace
@@ -66,7 +65,15 @@ except ImportError:  # Python < 3.11
 
 import yaml
 
-from agent_audit_kit.scanners._helpers import loads_jsonc, strip_jsonc
+from agent_audit_kit.scanners._helpers import (
+    compose_yaml_all,
+    load_yaml,
+    loads_json,
+    loads_jsonc,
+    loads_toml,
+    refuse,
+    strip_jsonc,
+)
 from agent_audit_kit.scanners._launchers import (
     Launched,
     basename,
@@ -488,21 +495,26 @@ def _is_argument(value: object) -> bool:
 
 
 def _argv(
-    entry: dict, path: tuple[str | int, ...] = ()
+    entry: dict, path: tuple[str | int, ...] | None = ()
 ) -> tuple[list[str], list[tuple[str | int, ...]]]:
-    """The command line an entry runs, and where each word of it sits."""
+    """The command line an entry runs, and where each word of it sits: () for
+    every word of an entry whose own path is None (see `_command_entries`)."""
+
+    def at(*keys: str | int) -> tuple[str | int, ...]:
+        return path + keys if path is not None else ()
+
     command = entry.get("command")
     tokens: list[str] = []
     paths: list[tuple[str | int, ...]] = []
     if isinstance(command, str):
         words = command.split()
         tokens.extend(words)
-        paths.extend([path + ("command",)] * len(words))
+        paths.extend([at("command")] * len(words))
     elif isinstance(command, list):
         for index, word in enumerate(command):
             if _is_argument(word):
                 tokens.append(str(word))
-                paths.append(path + ("command", index))
+                paths.append(at("command", index))
     else:
         return [], []
     args = entry.get("args")
@@ -510,35 +522,82 @@ def _argv(
         for index, arg in enumerate(args):
             if _is_argument(arg):
                 tokens.append(str(arg))
-                paths.append(path + ("args", index))
+                paths.append(at("args", index))
     return tokens, paths
 
 
-def _command_entries(data: object) -> list[tuple[dict, tuple[str | int, ...]]]:
+# The longest path in a parsed JSON, YAML or TOML document that is built or
+# recorded: `_command_entries` builds none longer for a server, counting the
+# two keys a word of its command line adds (`"args", 3`), and the position
+# passes ("where a declaration is written", below) record none longer. A
+# declaration nested deeper is still reported, without a line; a client reads
+# an MCP server two to six levels down, and a package.json override a few more.
+_MAX_PATH_DEPTH = 64
+
+
+def _command_entries(data: object) -> list[tuple[dict, tuple[str | int, ...] | None]]:
     """Every object holding a `command`, at any depth, in document order, with
-    its path. A container met twice, which only a YAML alias can make, is read
-    once, by identity, and keeps the path it was first reached by. The walk
-    followed every path to a shared node: seven levels of anchors, ten aliases
-    each, is a 449-byte file that reaches the same ten servers by 10^7 paths,
-    and the pin table took 26 s of CPU time on it. A server an alias repeats is
-    the same server, read once, and a document that contains itself (`&a [*a]`)
-    ends."""
-    entries: list[tuple[dict, tuple[str | int, ...]]] = []
-    queue: deque[tuple[object, tuple[str | int, ...]]] = deque([(data, ())])
+    its path, or None for one deeper than `_MAX_PATH_DEPTH` allows (its words
+    have no position then). A container met twice, which only a YAML alias can
+    make, is read once, by identity, and keeps the path it was first reached by.
+    The walk followed every path to a shared node: seven levels of anchors, ten
+    aliases each, is a 449-byte file that reaches the same ten servers by 10^7
+    paths, and the pin table took 26 s of CPU time on it. A server an alias
+    repeats is the same server, read once, and a document that contains itself
+    (`&a [*a]`) ends.
+
+    Each queued container carries the record of its parent rather than its own
+    path: copying the path at every level cost the square of the depth, so a
+    1.9 MB root .mcp.json of 105 chains of 9,000 lists took 10.8 s in the pin
+    table on Python 3.12, and 9 chains of 100,000 took 110 s on 3.14, where
+    JSON's parser reads that deep. A path is built from the records only for
+    an entry, and not past the bound: one server inside another, 9,000 levels
+    down, made 9,000 entries whose paths together held the square of that, and
+    1.4 MB of such chains held 1.75 GB.
+    """
+    if not isinstance(data, (dict, list)):
+        return []
+    entries: list[tuple[dict, int]] = []
+    # Per record (one per container, in the order the walk reads them): the
+    # parent's record (-1 for the top level), the key or index the container
+    # sits under, and its depth.
+    parents: list[int] = []
+    keys: list[str | int] = []
+    depths: list[int] = []
+    queue: deque[tuple[object, int, str | int]] = deque([(data, -1, "")])
     seen: set[int] = set()
     while queue:
-        node, where = queue.popleft()
-        if isinstance(node, (dict, list)):
-            if id(node) in seen:
-                continue
-            seen.add(id(node))
+        node, parent, key = queue.popleft()
+        if id(node) in seen:
+            continue
+        seen.add(id(node))
+        record = len(parents)
+        parents.append(parent)
+        keys.append(key)
+        depths.append(depths[parent] + 1 if parent >= 0 else 0)
         if isinstance(node, dict):
             if isinstance(node.get("command"), (str, list)):
-                entries.append((node, where))
-            queue.extend((value, where + (key,)) for key, value in node.items())
+                entries.append((node, record))
+            queue.extend((value, record, k) for k, value in node.items()
+                         if isinstance(value, (dict, list)))
         elif isinstance(node, list):
-            queue.extend((value, where + (index,)) for index, value in enumerate(node))
-    return entries
+            queue.extend((value, record, index) for index, value in enumerate(node)
+                         if isinstance(value, (dict, list)))
+    return [(node, _record_path(record, parents, keys, depths)) for node, record in entries]
+
+
+def _record_path(
+    record: int, parents: list[int], keys: list[str | int], depths: list[int]
+) -> tuple[str | int, ...] | None:
+    """The path of a `_command_entries` record, or None past `_MAX_PATH_DEPTH`,
+    less the two keys a word of its command line adds (`"args", 3`)."""
+    if depths[record] > _MAX_PATH_DEPTH - 2:
+        return None
+    path: list[str | int] = []
+    while parents[record] >= 0:
+        path.append(keys[record])
+        record = parents[record]
+    return tuple(reversed(path))
 
 
 def mcp_config_declarations(data: object) -> list[Declaration]:
@@ -575,17 +634,26 @@ def declarations(path: Path, text: str) -> list[Declaration]:
         if name.startswith("requirements") and name.endswith(".txt"):
             return requirements_declarations(text)
         if name == "pyproject.toml":
-            return pyproject_declarations(tomllib.loads(text))
+            return pyproject_declarations(loads_toml(text, path))
         if name == "pipfile":
-            return pipfile_declarations(tomllib.loads(text))
+            return pipfile_declarations(loads_toml(text, path))
         if name == "package.json":
-            data = json.loads(text)
+            data = loads_json(text, path)
             return package_json_declarations(data) if isinstance(data, dict) else []
         if name.endswith((".yaml", ".yml")):
-            return mcp_config_declarations(yaml.safe_load(text))
+            # `_command_entries` reads each container once, so a document that
+            # contains itself ends there and is read, not refused.
+            return mcp_config_declarations(load_yaml(text, path, cycles_ok=True))
         if name.endswith(".json"):
-            return mcp_config_declarations(loads_jsonc(text))
-    except (ValueError, tomllib.TOMLDecodeError, yaml.YAMLError, RecursionError):
+            return mcp_config_declarations(loads_jsonc(text, path))
+    except (ValueError, tomllib.TOMLDecodeError, yaml.YAMLError):
+        return []
+    except RecursionError:
+        # A dependency table nested past the recursion limit (npm `overrides`,
+        # a Poetry list of alternatives) is refused, not read as no
+        # dependencies: the parse helpers already refuse a file the parser
+        # cannot take, and this is the same file seen one step later.
+        refuse(path, "dependency table nested too deep to read (RecursionError)")
         return []
     return []
 
@@ -605,6 +673,14 @@ def declarations(path: Path, text: str) -> list[Declaration]:
 # earlier table at a fixed version, and it re-read the whole file for each
 # finding (96 findings in a 31 MiB lockfile took 76 s against 3 s). A path the
 # pass did not reach gives no line rather than a guessed one.
+#
+# A pass records no path longer than `_MAX_PATH_DEPTH`. Each recorded path is a
+# tuple, so recording every one cost the sum of all their lengths: four JSON
+# chains of 6,000 lists (48 KB) held 579 MB, and 400 TOML arrays nested 300
+# deep (243 KB) 155 MB. A pinned server beside 1,000 JSON chains of 480 lists
+# (961 KB, inside the 500-level limit) held 969 MB of traced memory in the pin
+# table for its line. The structure deeper down is still read, so the paths
+# above it keep their lines.
 
 # A JSON string, or one structural character. Scalars are skipped: no
 # declaration is a number or a literal, and the commas around them keep count.
@@ -614,7 +690,7 @@ _JSON_TOKEN_RE = re.compile(r'"(?:[^"\\]|\\.)*"?|[{}\[\]:,]')
 
 def _json_key(token: str) -> str:
     try:
-        key = json.loads(token)
+        key = loads_json(token, None)
     except ValueError:
         return token[1:-1]
     return key if isinstance(key, str) else token[1:-1]
@@ -643,19 +719,24 @@ def _json_positions(text: str) -> dict[tuple[str | int, ...], int]:
             if frame is None:
                 positions[()] = line
             elif frame[0] and frame[3] == "key":
-                frame[2], frame[3] = _json_key(token), "colon"
+                # A key below the bound names no recorded path, so it is not decoded.
+                frame[2], frame[3] = (_json_key(token) if frame[1] is not None else ""), "colon"
             elif frame[3] == "value":
-                positions[frame[1] + (frame[2],)] = line
+                if frame[1] is not None and len(frame[1]) < _MAX_PATH_DEPTH:
+                    positions[frame[1] + (frame[2],)] = line
                 frame[3] = "done"
         elif token in "{[":
+            child: tuple[str | int, ...] | None
             if frame is None:
-                child: tuple[str | int, ...] = ()
+                child = ()
             elif frame[3] == "value":
-                child = frame[1] + (frame[2],)
+                child = (frame[1] + (frame[2],)
+                         if frame[1] is not None and len(frame[1]) < _MAX_PATH_DEPTH else None)
                 frame[3] = "done"
             else:
                 break  # not a document `json.loads` accepted; keep what was read
-            positions[child] = line
+            if child is not None:
+                positions[child] = line
             if token == "{":
                 stack.append([True, child, "", "key"])
             else:
@@ -783,21 +864,33 @@ class _TomlPositions:
                 full = self._resolve(parts[:-1]) + (parts[-1],)
                 self.arrays[full] = self.arrays.get(full, -1) + 1
                 table = full + (self.arrays[full],)
-                self.positions[table] = self.line
+                if len(table) <= _MAX_PATH_DEPTH:
+                    self.positions[table] = self.line
             elif text[self.i] == "[":
                 self.i += 1
                 parts = self._key()
                 self._expect("]")
                 table = self._resolve(parts)
-                self.positions[table] = self.line
+                if len(table) <= _MAX_PATH_DEPTH:
+                    self.positions[table] = self.line
             else:
-                full = table + self._key()
-                self.positions[full] = self.line
+                key_path = self._below(table, self._key())
+                if key_path is not None:
+                    self.positions[key_path] = self.line
                 self._expect("=")
                 self._space()
-                self._value(full)
+                self._value(key_path)
 
-    def _value(self, path: tuple[str | int, ...]) -> None:
+    @staticmethod
+    def _below(
+        path: tuple[str | int, ...] | None, keys: tuple[str | int, ...]
+    ) -> tuple[str | int, ...] | None:
+        """`path` extended by `keys`, or None past `_MAX_PATH_DEPTH` (see above)."""
+        if path is None or len(path) + len(keys) > _MAX_PATH_DEPTH:
+            return None
+        return path + keys
+
+    def _value(self, path: tuple[str | int, ...] | None) -> None:
         text = self.text
         c = text[self.i]
         if c == "[":
@@ -808,8 +901,10 @@ class _TomlPositions:
                 if text[self.i] == "]":
                     self.i += 1
                     return
-                self.positions[path + (index,)] = self.line
-                self._value(path + (index,))
+                item = self._below(path, (index,))
+                if item is not None:
+                    self.positions[item] = self.line
+                self._value(item)
                 self._blank()
                 if text[self.i] == ",":
                     self.i += 1
@@ -824,8 +919,9 @@ class _TomlPositions:
                 if text[self.i] == "}":
                     self.i += 1
                     return
-                full = path + self._key()
-                self.positions[full] = self.line
+                full = self._below(path, self._key())
+                if full is not None:
+                    self.positions[full] = self.line
                 self._expect("=")
                 self._space()
                 self._value(full)
@@ -871,9 +967,10 @@ def _toml_positions(text: str) -> dict[tuple[str | int, ...], int]:
 def _yaml_positions(text: str) -> dict[tuple[str | int, ...], int]:
     """The line of every node of a YAML document, by path (scalar keys only)."""
     try:
-        root = yaml.compose(text, Loader=yaml.SafeLoader)
+        roots = compose_yaml_all(text, None)
     except (yaml.YAMLError, RecursionError):
         return {}
+    root = roots[0] if len(roots) == 1 else None  # `yaml.compose` takes one document
     positions: dict[tuple[str | int, ...], int] = {}
     # Breadth first in document order, as `_command_entries` walks the loaded
     # document, so a node an alias shares gets the path that walk records for it.
@@ -886,6 +983,8 @@ def _yaml_positions(text: str) -> dict[tuple[str | int, ...], int]:
             continue
         seen.add(id(node))
         positions[where] = node.start_mark.line + 1
+        if len(where) >= _MAX_PATH_DEPTH:
+            continue
         if isinstance(node, yaml.MappingNode):
             queue.extend((value, where + (key.value,)) for key, value in node.value
                          if isinstance(key, yaml.ScalarNode))

@@ -18,7 +18,16 @@ from pathlib import Path
 
 from agent_audit_kit.models import Finding
 
-from ._helpers import in_skip_dir, make_finding, source_lines
+from ._helpers import (
+    SOURCE_MAX_BYTES,
+    in_skip_dir,
+    make_finding,
+    parse_python,
+    read_text_capped,
+    refusing_overflow,
+    source_lines,
+    walk_tree,
+)
 
 
 # The imported names stop at the next `from langchain... import` on the line,
@@ -88,7 +97,7 @@ def _walk_python(text: str, path: Path, project_root: Path, scanned: set[str]) -
     if not _LANGCHAIN_IMPORT_RE.search(text):
         return []
     try:
-        tree = ast.parse(text, str(path))
+        tree = parse_python(text, path)
     except SyntaxError:
         return []
     findings: list[Finding] = []
@@ -155,7 +164,7 @@ def _walk_python(text: str, path: Path, project_root: Path, scanned: set[str]) -
                     _scan_call(child, body, searched)
             self.generic_visit(node)
 
-    V().visit(tree)
+    walk_tree(V().visit, tree)
     if findings:
         scanned.add(rel)
     return findings
@@ -168,8 +177,9 @@ def scan(project_root: Path) -> tuple[list[Finding], set[str]]:
         if in_skip_dir(path, project_root):
             continue
         try:
-            text = path.read_text(encoding="utf-8", errors="replace")
+            text = read_text_capped(path, SOURCE_MAX_BYTES, errors="replace")
         except OSError:
             continue
-        findings.extend(_walk_python(text, path, project_root, scanned))
+        with refusing_overflow(path):
+            findings.extend(_walk_python(text, path, project_root, scanned))
     return findings, scanned

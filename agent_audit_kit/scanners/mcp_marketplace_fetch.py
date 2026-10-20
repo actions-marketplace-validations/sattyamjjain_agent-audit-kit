@@ -25,7 +25,18 @@ import yaml
 
 from agent_audit_kit.models import Finding
 
-from ._helpers import in_skip_dir, make_finding
+from ._helpers import (
+    CONFIG_MAX_BYTES,
+    SOURCE_MAX_BYTES,
+    chain_ends,
+    in_skip_dir,
+    load_yaml,
+    make_finding,
+    parse_python,
+    read_text_capped,
+    refusing_overflow,
+    walk_tree,
+)
 
 
 _PY_FETCH_NAMES = frozenset({"get", "post", "request", "urlopen"})
@@ -53,20 +64,16 @@ def _attr_chain(node: ast.AST) -> str:
 
 
 def _is_fetch_call(call: ast.Call) -> bool:
-    chain = _attr_chain(call.func)
-    if not chain:
+    count, first, last = chain_ends(call.func)
+    if not count or last not in _PY_FETCH_NAMES:
         return False
-    parts = chain.split(".")
-    last = parts[-1]
-    if last not in _PY_FETCH_NAMES:
-        return False
-    head = parts[0] if len(parts) > 1 else ""
-    return head in {"requests", "httpx", "urllib"} or chain == "urlopen"
+    head = first if count > 1 else ""
+    return head in {"requests", "httpx", "urllib"} or (count, first) == (1, "urlopen")
 
 
 def _is_stdio_call(call: ast.Call) -> bool:
-    chain = _attr_chain(call.func)
-    return bool(chain) and chain.split(".")[-1] in _PY_STDIO_TARGETS
+    count, _, last = chain_ends(call.func)
+    return count > 0 and last in _PY_STDIO_TARGETS
 
 
 def _trusted_urls(project_root: Path) -> set[str]:
@@ -74,8 +81,8 @@ def _trusted_urls(project_root: Path) -> set[str]:
     if not cfg.is_file():
         return set()
     try:
-        data = yaml.safe_load(cfg.read_text(encoding="utf-8")) or {}
-    except yaml.YAMLError:
+        data = load_yaml(read_text_capped(cfg, CONFIG_MAX_BYTES), cfg) or {}
+    except (yaml.YAMLError, OSError):
         return set()
     out: set[str] = set()
     for entry in data.get("trust", []) or []:
@@ -89,7 +96,7 @@ def _trusted_urls(project_root: Path) -> set[str]:
 
 def _walk_python(text: str, path: Path, project_root: Path, scanned: set[str], trusted: set[str]) -> list[Finding]:
     try:
-        tree = ast.parse(text, str(path))
+        tree = parse_python(text, path)
     except SyntaxError:
         return []
     findings: list[Finding] = []
@@ -137,7 +144,7 @@ def _walk_python(text: str, path: Path, project_root: Path, scanned: set[str], t
                     ))
                     return
 
-    V().visit(tree)
+    walk_tree(V().visit, tree)
     return findings
 
 
@@ -174,11 +181,12 @@ def scan(project_root: Path) -> tuple[list[Finding], set[str]]:
             continue
         suffix = path.suffix
         try:
-            text = path.read_text(encoding="utf-8", errors="replace")
+            text = read_text_capped(path, SOURCE_MAX_BYTES, errors="replace")
         except OSError:
             continue
         if suffix == ".py":
-            findings.extend(_walk_python(text, path, project_root, scanned, trusted))
+            with refusing_overflow(path):
+                findings.extend(_walk_python(text, path, project_root, scanned, trusted))
         elif suffix in (".ts", ".tsx", ".js", ".mjs", ".cjs"):
             findings.extend(_walk_ts(text, path, project_root, scanned))
     return findings, scanned

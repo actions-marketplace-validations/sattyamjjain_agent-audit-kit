@@ -43,6 +43,7 @@ from agent_audit_kit.models import Finding
 
 from . import _ts_stdio_taint
 from ._helpers import (
+    SOURCE_MAX_BYTES,
     _JS_IDENT_CHARS,
     _JS_OPERAND,
     _js_regex_allowed,
@@ -50,6 +51,10 @@ from ._helpers import (
     blank_js_comments,
     in_skip_dir,
     make_finding,
+    parse_python,
+    read_text_capped,
+    refusing_overflow,
+    unparse,
 )
 
 
@@ -198,10 +203,7 @@ def _names_in(node: ast.AST) -> set[str]:
 
 
 def _unparse(node: ast.AST) -> str:
-    try:
-        return ast.unparse(node)
-    except Exception:  # pragma: no cover - unparse is available on 3.9+
-        return ""
+    return unparse(node)
 
 
 def _command_arg_exprs(call: ast.Call) -> list[ast.expr]:
@@ -579,7 +581,7 @@ def _functions_in(tree: ast.AST) -> Iterator[tuple[ast.FunctionDef | ast.AsyncFu
 
 def _walk_python(text: str, path: Path, project_root: Path, scanned: set[str]) -> list[Finding]:
     try:
-        tree = ast.parse(text, str(path))
+        tree = parse_python(text, path)
     except SyntaxError:
         return []
     findings: list[Finding] = []
@@ -1059,11 +1061,12 @@ def scan(project_root: Path) -> tuple[list[Finding], set[str]]:
             continue
         suffix = path.suffix
         try:
-            text = path.read_text(encoding="utf-8", errors="replace")
+            text = read_text_capped(path, SOURCE_MAX_BYTES, errors="replace")
         except OSError:
             continue
         if suffix == ".py":
-            findings.extend(_walk_python(text, path, project_root, scanned))
+            with refusing_overflow(path):
+                findings.extend(_walk_python(text, path, project_root, scanned))
         elif suffix in (".ts", ".tsx", ".js", ".mjs", ".cjs"):
             findings.extend(_walk_ts(text, path, project_root, scanned))
         elif suffix == ".java":

@@ -9,16 +9,19 @@ from typing import Any
 from agent_audit_kit.models import Finding
 from agent_audit_kit.redaction import shown_arg
 from agent_audit_kit.scanners._helpers import (
+    CONFIG_MAX_BYTES,
     ZCODE_SERVER_KEY,
     find_line_number,
     host_ip,
     in_skip_dir,
     is_loopback_url,
     is_zcode_workspace_config,
+    loads_json,
     loads_jsonc,
     make_finding,
     mcp_server_maps,
     placed,
+    read_text_capped,
     strip_vscode_variables,
     url_hosts,
     zcode_workspace_configs,
@@ -296,6 +299,11 @@ def _check_server(
     # guessing at a coercion, and let the malformed rule be the one that speaks.
     url = _as_str(server_cfg.get("url", ""))
     command = _as_str(server_cfg.get("command", ""))
+    # The program the command runs: its first word, or "" when it has none.
+    # `command.strip().split()[0]` raised IndexError on a command of only
+    # whitespace, and this is a core scanner, so one such server cost every
+    # finding it makes in every file.
+    cmd_bin = (command.split() or [""])[0]
     args = server_cfg.get("args", [])
     env = server_cfg.get("env", {})
     headers_helper = _as_str(server_cfg.get("headersHelper", ""))
@@ -342,7 +350,7 @@ def _check_server(
                     ), key))
 
     # AAK-MCP-005: npx/uvx package fetcher
-    if command and command.strip().split()[0] in PACKAGE_FETCHERS:
+    if cmd_bin in PACKAGE_FETCHERS:
         findings.append((_make_finding(
             "AAK-MCP-005", file_path,
             f"Server '{server_name}' command: {command}",
@@ -350,7 +358,6 @@ def _check_server(
 
     # AAK-MCP-006: Relative path command
     if command:
-        cmd_bin = command.strip().split()[0]
         is_absolute = cmd_bin.startswith("/")
         is_known = cmd_bin in KNOWN_BINARIES
         if not is_absolute and not is_known and cmd_bin:
@@ -362,7 +369,7 @@ def _check_server(
     # AAK-MCP-007: Unpinned package version in args. `engine.run_scan` drops a
     # finding here when AAK-SUPPLY-001 reports the same launch, which it
     # recognises by the evidence `launch_evidence` builds.
-    if command and command.strip().split()[0] in PACKAGE_FETCHERS and isinstance(args, list):
+    if cmd_bin in PACKAGE_FETCHERS and isinstance(args, list):
         for index, arg in enumerate(args):
             if isinstance(arg, str) and not arg.startswith("-"):
                 # Skip path-like arguments
@@ -468,12 +475,14 @@ def scan(project_root: Path, include_user_config: bool = False) -> tuple[list[Fi
     for config_path in configs:
         zcode = is_zcode_workspace_config(config_path)
         try:
-            raw_text = config_path.read_text(encoding="utf-8")
+            # Decoded as Node decodes it (a bad byte becomes U+FFFD): a client
+            # still loads the file, so a stray byte must not hide it.
+            raw_text = read_text_capped(config_path, CONFIG_MAX_BYTES, errors="replace")
             if len(raw_text) > 1_000_000:
                 continue
             # ZCode parses its config with JSON.parse and skips a file with a
             # comment in it, servers and all, so such a file is not read here.
-            data = json.loads(raw_text) if zcode else loads_jsonc(raw_text)
+            data = loads_json(raw_text, config_path) if zcode else loads_jsonc(raw_text, config_path)
         except (json.JSONDecodeError, OSError):
             continue
 
@@ -644,7 +653,7 @@ def _host_has_attestation(data: Any) -> bool:
     # Some hosts carry the well-known URI as a top-level setting.
     try:
         host_blob = json.dumps(data, default=str).lower()
-    except (TypeError, ValueError):
+    except (TypeError, ValueError, RecursionError):
         return False
     return _WELL_KNOWN_TOKEN in host_blob
 
@@ -666,7 +675,7 @@ def _server_has_attestation(server_cfg: Any) -> bool:
     # Well-known URI named anywhere in the server entry.
     try:
         server_blob = json.dumps(server_cfg, default=str).lower()
-    except (TypeError, ValueError):
+    except (TypeError, ValueError, RecursionError):
         return False
     return _WELL_KNOWN_TOKEN in server_blob
 
