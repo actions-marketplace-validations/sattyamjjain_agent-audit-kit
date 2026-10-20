@@ -24,12 +24,20 @@ class FixAction:
         file_path: Path to the file that was fixed.
         description: Human-readable description of the fix.
         applied: Whether the fix was actually applied (False in dry-run).
+        writes: Whether the fix changes its file: True once written, or in a dry run
+            when it would be; False when the recipe refused the file, could not read
+            it or had nothing to change, including the value already set that the
+            TRUST-004, TRUST-007 and SECRET-006 recipes report as ``applied``. A dry
+            run's ``applied`` is False for a fix it would make and a file it refused
+            alike, so `suggest --auto-pr`, which plans from one, counted a refused file
+            as a fix.
     """
 
     rule_id: str
     file_path: str
     description: str
     applied: bool = False
+    writes: bool = False
 
 
 def run_fixes(project_root: Path, dry_run: bool = False) -> list[FixAction]:
@@ -74,7 +82,9 @@ def _log_fixes(project_root: Path, fixes: list[FixAction]) -> None:
     raised: `aak fix` and `suggest --apply-trivial` still list what they changed.
     """
     refused = _write_fix_log(project_root, fixes)
-    if refused is not None:
+    if isinstance(refused, _PartlyWritten):
+        sys.stderr.write(f"fix: {refused}\n")
+    elif refused is not None:
         sys.stderr.write(f"fix: the fix log was not written: {refused}\n")
 
 
@@ -168,12 +178,22 @@ def _write_refusal(path: Path, project_root: Path) -> str | None:
     return None
 
 
+class _PartlyWritten(str):
+    """Why `_write_inside_project` did not finish a write it had started: the open had
+    already truncated the file, or appended part of the data, so the file may hold part
+    of what was meant. Every other reason it returns left the file as it was. Callers
+    that say "was not changed" after a reason check for this first; the text says it
+    may be partly written, so one that only shows the reason stays honest.
+    """
+
+
 def _write_inside_project(
     path: Path, data: bytes, project_root: Path, mode: Literal["append", "replace"] = "replace"
 ) -> str | None:
     """Write ``data`` to ``path`` when `_write_refusal` allows it, appended to the file or
     in place of its content. Returns None once written, or why it refused; a refusal or
-    an OS error is reported, never raised.
+    an OS error is reported, never raised. An OS error after the open, which in replace
+    mode has already emptied the file, comes back as `_PartlyWritten`.
 
     The file is opened without following a link (O_NOFOLLOW where the OS has one) and
     without waiting (O_NONBLOCK), and its descriptor must still be a regular file before
@@ -215,9 +235,80 @@ def _write_inside_project(
         while view:
             view = view[os.write(fd, view):]
     except OSError as exc:
-        return f"{path.name} could not be written ({exc.strerror or exc})"
+        return _PartlyWritten(
+            f"{path.name} could not be written ({exc.strerror or exc}) and may be partly written"
+        )
     finally:
         os.close(fd)
+    return None
+
+
+def _replace_inside_project(path: Path, data: bytes, project_root: Path) -> str | None:
+    """Make ``data`` the whole content of ``path``, when `_write_refusal` allows it, by
+    writing a new file beside it and moving that over it. Returns None once done, or
+    why it refused; a refusal or an OS error is reported, never raised, and leaves
+    ``path`` as it was, since a write that fails part way fails on the new file, which
+    is removed.
+
+    `_write_inside_project` writes in place, and its open empties the file before a
+    byte goes in, so a full disk part way through left part of it. For a file the
+    user keeps, such as their pre-commit config, that is the wrong failure. The new
+    file is created with O_CREAT, O_EXCL and O_NOFOLLOW in ``path``'s directory, so
+    nothing already there, a link included, can stand in for it; it takes the
+    original's permission bits and is synced before the move; and `_write_refusal`
+    is asked about ``path`` again just before `os.replace`, which renames over a
+    link rather than writing through it in any case. As a new file it no longer
+    shares its contents with another hard link to the old one, and it belongs to
+    whoever runs the command.
+    """
+    refused = _write_refusal(path, project_root)
+    if refused is not None:
+        return refused
+    try:
+        mode: int | None = stat.S_IMODE(os.lstat(path).st_mode)
+    except FileNotFoundError:
+        mode = None
+    except OSError as exc:
+        return f"{path.name} could not be examined ({exc.strerror or exc})"
+    if mode is not None:
+        # A rename needs only the directory to be writable, so a file the user made
+        # read-only would be replaced all the same; it is opened for writing first,
+        # without truncating it, and refused as an in-place write refuses it.
+        flags = os.O_WRONLY | getattr(os, "O_NOFOLLOW", 0) | getattr(os, "O_NONBLOCK", 0)
+        try:
+            os.close(os.open(path, flags))
+        except OSError as exc:
+            return f"{path.name} could not be opened ({exc.strerror or exc})"
+    temp = path.with_name(f".{path.name}.aak-{os.getpid()}-{os.urandom(4).hex()}.tmp")
+    flags = os.O_WRONLY | os.O_CREAT | os.O_EXCL | getattr(os, "O_NOFOLLOW", 0) | getattr(os, "O_BINARY", 0)
+    try:
+        fd = os.open(temp, flags, 0o666)
+    except OSError as exc:
+        return f"{path.name} could not be written ({exc.strerror or exc})"
+    moved = False
+    try:
+        try:
+            if mode is not None and hasattr(os, "fchmod"):
+                os.fchmod(fd, mode)
+            view = memoryview(data)
+            while view:
+                view = view[os.write(fd, view):]
+            os.fsync(fd)
+        finally:
+            os.close(fd)
+        refused = _write_refusal(path, project_root)
+        if refused is not None:
+            return refused
+        os.replace(temp, path)
+        moved = True
+    except OSError as exc:
+        return f"{path.name} could not be written ({exc.strerror or exc})"
+    finally:
+        if not moved:
+            try:
+                os.unlink(temp)
+            except OSError:
+                pass
     return None
 
 
@@ -462,6 +553,7 @@ def _fix_raised_pin(path: Path, rule_id: str, project_root: Path, dry_run: bool)
         str(path),
         f"Raised {result.raised} {label} declaration(s) to >={floor}{relock}",
         not dry_run,
+        writes=True,
     )
 
 
@@ -493,6 +585,10 @@ def _fix_litellm_version(path: Path, project_root: Path, dry_run: bool) -> FixAc
         new_text, count = pin_re.subn(rf"\1\2>={min_version}", text)
         if count == 0:
             return FixAction(rule_id, str(path), "No matching litellm pin", False)
+        if new_text == text:
+            # Every pin it matched already reads >=1.83.7, and the one the rule reports
+            # is a form it does not match (`litellm[proxy]==1.50.0`): no change to write.
+            return FixAction(rule_id, str(path), f"Nothing in {path.name} this recipe can rewrite", False)
         if not dry_run:
             refused = _write_inside_project(path, _as_written(new_text), project_root)
             if refused is not None:
@@ -502,6 +598,7 @@ def _fix_litellm_version(path: Path, project_root: Path, dry_run: bool) -> FixAc
             str(path),
             f"Bumped {count} litellm pin(s) to >={min_version}",
             not dry_run,
+            writes=True,
         )
 
     return FixAction(
@@ -569,6 +666,7 @@ def _fix_dependency_floor(path: Path, rule_id: str, project_root: Path, dry_run:
             str(path),
             f"Bumped {bumped} {label} dep(s) to >={min_version} (package.json)",
             not dry_run,
+            writes=True,
         )
 
     if path.name.endswith(".txt"):
@@ -579,6 +677,8 @@ def _fix_dependency_floor(path: Path, rule_id: str, project_root: Path, dry_run:
         new_text, count = pin_re.subn(rf"\1\2>={min_version}", text)
         if count == 0:
             return FixAction(rule_id, str(path), f"No matching {label} pin", False)
+        if new_text == text:
+            return FixAction(rule_id, str(path), f"Nothing in {path.name} this recipe can rewrite", False)
         if not dry_run:
             refused = _write_inside_project(path, _as_written(new_text), project_root)
             if refused is not None:
@@ -588,6 +688,7 @@ def _fix_dependency_floor(path: Path, rule_id: str, project_root: Path, dry_run:
             str(path),
             f"Bumped {count} {label} pin(s) to >={min_version}",
             not dry_run,
+            writes=True,
         )
 
     return FixAction(
@@ -635,6 +736,7 @@ def _fix_langgraph_toolnode(path: Path, project_root: Path, dry_run: bool) -> Fi
         str(path),
         "Rewrote ToolNode(positional list) to ToolNode(tools=[...])",
         not dry_run,
+        writes=True,
     )
 
 
@@ -660,6 +762,7 @@ def _fix_enable_all_mcp(path: Path, project_root: Path, dry_run: bool) -> FixAct
             str(path),
             "Set enableAllProjectMcpServers to false",
             not dry_run,
+            writes=True,
         )
     except (json.JSONDecodeError, OSError):
         return FixAction("AAK-TRUST-001", str(path), "Failed to fix", False)
@@ -674,7 +777,8 @@ def _fix_missing_deny(path: Path, project_root: Path, dry_run: bool) -> FixActio
     try:
         data = json.loads(_read_text(path))
         perms = data.setdefault("permissions", {})
-        if not perms.get("deny"):
+        writes = not perms.get("deny")
+        if writes:
             perms["deny"] = [
                 "Bash(rm -rf *)",
                 "Bash(curl *)",
@@ -689,6 +793,7 @@ def _fix_missing_deny(path: Path, project_root: Path, dry_run: bool) -> FixActio
             str(path),
             "Added default deny rules",
             not dry_run,
+            writes=writes,
         )
     except (json.JSONDecodeError, OSError):
         return FixAction("AAK-TRUST-004", str(path), "Failed to fix", False)
@@ -702,7 +807,8 @@ def _fix_missing_allowlist(path: Path, project_root: Path, dry_run: bool) -> Fix
         return FixAction("AAK-TRUST-007", str(path), f"Failed to fix: {refused}", False)
     try:
         data = json.loads(_read_text(path))
-        if "enabledMcpjsonServers" not in data:
+        writes = "enabledMcpjsonServers" not in data
+        if writes:
             data["enabledMcpjsonServers"] = []
             if not dry_run:
                 refused = _write_json(path, data, project_root)
@@ -713,6 +819,7 @@ def _fix_missing_allowlist(path: Path, project_root: Path, dry_run: bool) -> Fix
             str(path),
             "Added empty enabledMcpjsonServers allowlist",
             not dry_run,
+            writes=writes,
         )
     except (json.JSONDecodeError, OSError):
         return FixAction("AAK-TRUST-007", str(path), "Failed to fix", False)
@@ -804,6 +911,7 @@ def _fix_secret_env_ref(path: Path, project_root: Path, dry_run: bool) -> FixAct
         f"Replaced literal secret with an environment reference for: {names} "
         "(export the variable before starting the server, and rotate the exposed value)",
         not dry_run,
+        writes=True,
     )
 
 
@@ -837,7 +945,8 @@ def _fix_env_gitignore(project_root: Path, dry_run: bool) -> FixAction:
     try:
         names = [path.name for path in _root_env_files(project_root)] or [".env"]
         rules = _gitignore_rules(_read_gitignore(project_root) or "")
-        if not all(_gitignore_ignores(rules, name) for name in names):
+        writes = not all(_gitignore_ignores(rules, name) for name in names)
+        if writes:
             refused = _write_refusal(gitignore, project_root)
             if refused is not None:
                 return FixAction("AAK-SECRET-006", ".gitignore", f"Failed to fix: {refused}", False)
@@ -861,6 +970,7 @@ def _fix_env_gitignore(project_root: Path, dry_run: bool) -> FixAction:
             ".gitignore",
             "Added .env patterns to .gitignore",
             not dry_run,
+            writes=writes,
         )
     except OSError:
         return FixAction("AAK-SECRET-006", ".gitignore", "Failed to fix", False)

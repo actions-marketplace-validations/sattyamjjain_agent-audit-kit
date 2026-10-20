@@ -296,6 +296,21 @@ class TestWriteInsideProject:
     and directory resolve inside the project, opened without following a link. It returns
     None once written, or the reason it refused, and never raises for a refusal."""
 
+    @pytest.mark.usefixtures("full_disk")
+    def test_a_write_that_fails_after_the_open_says_the_file_may_be_partly_written(self, tmp_path: Path) -> None:
+        """The open truncates the file before a byte goes in, so a write that fails part
+        way leaves part of it. That is reported apart from a refusal or a failed open,
+        which leave the file as it was, so a caller can say which happened."""
+        target = tmp_path / "notes.txt"
+        target.write_bytes(b"previous content\n")
+
+        refused = _write_inside_project(target, b"a new and longer content\n", tmp_path)
+
+        assert refused == "notes.txt could not be written (No space left on device) and may be partly written"
+        assert isinstance(refused, fix_module._PartlyWritten)
+        assert target.read_bytes() == b"a new and "
+        assert not isinstance(_write_inside_project(tmp_path / "sub" / "x", b"", tmp_path), fix_module._PartlyWritten)
+
     def test_it_appends_replaces_and_creates(self, tmp_path: Path) -> None:
         target = tmp_path / "notes.txt"
         target.write_bytes(b"a\n")
@@ -515,11 +530,11 @@ class TestEveryRecipeWritesOnlyInsideTheProject:
         path.write_bytes(recipe.before)
 
         dry = _call(recipe, project, recipe.rel, dry_run=True)
-        assert dry is not None and (dry.applied, dry.description) == (False, recipe.said)
+        assert dry is not None and (dry.applied, dry.writes, dry.description) == (False, True, recipe.said)
         assert path.read_bytes() == recipe.before
 
         done = _call(recipe, project, recipe.rel, dry_run=False)
-        assert done is not None and (done.applied, done.description) == (True, recipe.said)
+        assert done is not None and (done.applied, done.writes, done.description) == (True, True, recipe.said)
         assert path.read_bytes() == recipe.after
 
     @pytest.mark.parametrize("dry_run", [False, True], ids=["write", "dry-run"])
@@ -535,6 +550,7 @@ class TestEveryRecipeWritesOnlyInsideTheProject:
 
         assert action is not None
         assert (action.applied, action.description) == (False, f"Failed to fix: {recipe.rel} is a symlink")
+        assert action.writes is False, "a refused file is not a fix, in a dry run either"
         assert target.read_bytes() == recipe.before
 
     def test_a_dangling_link_creates_nothing(self, tmp_path: Path, recipe: _Recipe) -> None:
@@ -545,6 +561,7 @@ class TestEveryRecipeWritesOnlyInsideTheProject:
 
         assert action is not None
         assert (action.applied, action.description) == (False, f"Failed to fix: {recipe.rel} is a symlink")
+        assert action.writes is False
         assert not os.path.lexists(outside / "created-by-fix")
 
     def test_a_directory_at_the_path_is_refused(self, tmp_path: Path, recipe: _Recipe) -> None:
@@ -555,6 +572,7 @@ class TestEveryRecipeWritesOnlyInsideTheProject:
 
         assert action is not None
         assert (action.applied, action.description) == (False, f"Failed to fix: {recipe.rel} is not a regular file")
+        assert action.writes is False
 
     def test_a_file_under_a_directory_linked_out_of_the_project_is_refused(
         self, tmp_path: Path, recipe: _Recipe
@@ -574,6 +592,7 @@ class TestEveryRecipeWritesOnlyInsideTheProject:
         assert (action.applied, action.description) == (
             False, f"Failed to fix: {rel} is in a directory outside the project"
         )
+        assert action.writes is False
         assert (outside / below).read_bytes() == recipe.before
 
     def test_a_link_put_in_place_after_the_read_is_refused_by_the_write(
@@ -602,6 +621,7 @@ class TestEveryRecipeWritesOnlyInsideTheProject:
 
         assert action is not None
         assert (action.applied, action.description) == (False, f"Failed to fix: {recipe.rel} is a symlink")
+        assert action.writes is False, "a write refused after the read wrote nothing"
         assert target.read_bytes() == b"keep\n"
 
     @pytest.mark.skipif(not hasattr(os, "mkfifo"), reason="needs POSIX FIFOs")
@@ -619,6 +639,126 @@ class TestEveryRecipeWritesOnlyInsideTheProject:
         assert done.returncode == 0, done.stderr
         said = f"False Failed to fix: {recipe.rel} is not a regular file" if how == "fifo" else recipe.unread
         assert done.stdout.strip() == said
+
+
+# ---------------------------------------------------------------------------
+# A fix that changes nothing says so
+# ---------------------------------------------------------------------------
+
+
+class _Unchanged(NamedTuple):
+    """A recipe run that writes nothing, and what it says. ``applied`` is what a real run
+    reports, which three recipes give as True for a value already set; a dry run reports
+    False either way, as it does for a fix it would write, so only ``writes`` tells the
+    two apart. `suggest --auto-pr` plans from a dry run."""
+
+    id: str
+    rule_id: str
+    func: str
+    rel: str
+    before: bytes
+    said: str
+    applied: bool = False
+    extra: tuple[tuple[str, bytes], ...] = ()
+
+
+_UNCHANGED = [
+    _Unchanged("trust-001-bad-json", "AAK-TRUST-001", "_fix_enable_all_mcp", _SETTINGS, b"{bad json}", "Failed to fix"),
+    _Unchanged(
+        "trust-004-deny-set", "AAK-TRUST-004", "_fix_missing_deny", _SETTINGS,
+        b'{"permissions": {"allow": ["*"], "deny": ["Bash(curl *)"]}}', "Added default deny rules", True,
+    ),
+    _Unchanged(
+        "trust-007-list-set", "AAK-TRUST-007", "_fix_missing_allowlist", _SETTINGS,
+        b'{"enabledMcpjsonServers": []}', "Added empty enabledMcpjsonServers allowlist", True,
+    ),
+    _Unchanged(
+        "secret-006-covered", "AAK-SECRET-006", "_fix_env_gitignore", ".gitignore", b".env*\n",
+        "Added .env patterns to .gitignore", True, ((".env", b"A=1\n"),),
+    ),
+    _Unchanged(
+        "langchain-not-a-manifest", "AAK-LANGCHAIN-001", "_fix_raised_pin", "setup.py",
+        b"install_requires = ['langchain-core==1.2.21']\n", "setup.py is not a manifest the langchain-core pin reads",
+    ),
+    _Unchanged(
+        "langchain-already-raised", "AAK-LANGCHAIN-001", "_fix_raised_pin", "requirements.txt",
+        b"langchain-core>=1.2.22\n", "No langchain-core declaration admits a release below 1.2.22",
+    ),
+    _Unchanged(
+        "litellm-pyproject", "AAK-LITELLM-CVE-2026-30623-PIN-001", "_fix_litellm_version", "pyproject.toml",
+        b'[project]\ndependencies = ["litellm==1.80.0"]\n',
+        "pyproject.toml is not a supported manifest for auto-bump (only requirements*.txt is line-safe to rewrite)",
+    ),
+    _Unchanged(
+        "litellm-no-pin", "AAK-LITELLM-CVE-2026-30623-PIN-001", "_fix_litellm_version", "requirements.txt",
+        b"click\n", "No matching litellm pin",
+    ),
+    _Unchanged(
+        "litellm-rewritten-as-it-was", "AAK-LITELLM-CVE-2026-30623-PIN-001", "_fix_litellm_version",
+        "requirements.txt",
+        b'litellm>=1.83.7; python_version >= "3.10"\nlitellm[proxy]==1.50.0; python_version < "3.10"\n',
+        "Nothing in requirements.txt this recipe can rewrite",
+    ),
+    _Unchanged(
+        "flowise-rewritten-as-it-was", "AAK-FLOWISE-001", "_fix_dependency_floor", "requirements.txt",
+        b"flowise>=3.1.3\nflowise[extra]==3.0.0\n", "Nothing in requirements.txt this recipe can rewrite",
+    ),
+    _Unchanged(
+        "flowise-bad-json", "AAK-FLOWISE-001", "_fix_dependency_floor", "package.json", b"{not json",
+        "package.json is not valid JSON",
+    ),
+    _Unchanged(
+        "flowise-no-dep", "AAK-FLOWISE-001", "_fix_dependency_floor", "package.json",
+        b'{"dependencies": {"react": "18.0.0"}}', "No matching flowise dep found",
+    ),
+    _Unchanged(
+        "flowise-lockfile", "AAK-FLOWISE-001", "_fix_dependency_floor", "package-lock.json", b"{}",
+        "package-lock.json is not a supported manifest for auto-bump "
+        "(only requirements*.txt and package.json are safe to rewrite)",
+    ),
+]
+
+
+@pytest.mark.parametrize("case", _UNCHANGED, ids=[case.id for case in _UNCHANGED])
+@pytest.mark.parametrize("dry_run", [True, False], ids=["dry-run", "write"])
+def test_a_fix_that_changes_nothing_does_not_write(tmp_path: Path, case: _Unchanged, dry_run: bool) -> None:
+    for rel, body in case.extra:
+        (tmp_path / rel).write_bytes(body)
+    path = _placed(tmp_path, case.rel)
+    path.write_bytes(case.before)
+    func = getattr(fix_module, case.func)
+    given = {"path": path, "rule_id": case.rule_id, "project_root": tmp_path, "dry_run": dry_run}
+
+    action = func(**{name: value for name, value in given.items() if name in inspect.signature(func).parameters})
+
+    assert (action.applied, action.writes, action.description) == (case.applied and not dry_run, False, case.said)
+    assert path.read_bytes() == case.before
+
+
+@pytest.mark.usefixtures("full_disk")
+def test_a_recipe_whose_write_fails_part_way_says_the_file_may_be_partly_written(tmp_path: Path) -> None:
+    settings = tmp_path / "settings.json"
+    settings.write_text(json.dumps({"enableAllProjectMcpServers": True}))
+
+    fix = _fix_enable_all_mcp(settings, tmp_path, dry_run=False)
+
+    assert (fix.applied, fix.writes, fix.description) == (
+        False, False,
+        "Failed to fix: settings.json could not be written (No space left on device) and may be partly written",
+    )
+
+
+def test_run_fixes_says_the_fix_log_may_be_partly_written(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """The fixes stand and the line on stderr said the log was not written; a log whose
+    write failed part way may hold part of it."""
+    partly = fix_module._PartlyWritten("fix-log.json could not be written (No space left on device) and may be partly written")
+    monkeypatch.setattr(fix_module, "_write_fix_log", lambda root, fixes: partly)
+
+    fix_module._log_fixes(tmp_path, [])
+
+    assert capsys.readouterr().err == "fix: " + partly + "\n"
 
 
 # ---------------------------------------------------------------------------
