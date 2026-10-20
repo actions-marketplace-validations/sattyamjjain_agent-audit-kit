@@ -32,10 +32,14 @@ other projects.
 NetLicensing MCP is on PyPI
 too, and like obsidian-tc it has rows in both
 readers, here for `ghcr.io/labs64/netlicensing-mcp` and `labs64/netlicensing-mcp`.
-n8n-mcp (npm) and mcp-atlassian (PyPI) have rows here as well, for
-`ghcr.io/czlonkowski/n8n-mcp` (and its `-railway` build) and
-`ghcr.io/sooperset/mcp-atlassian`, which their docs run with `docker run`; those
-rows read a version tag only and never report `latest` or an untagged reference.
+n8n-mcp (npm), mcp-atlassian (PyPI) and IBM ContextForge (PyPI) have rows here as
+well, for `ghcr.io/czlonkowski/n8n-mcp` (and its `-railway` build),
+`ghcr.io/sooperset/mcp-atlassian` and `ghcr.io/ibm/mcp-context-forge`, which their
+docs run with `docker run`; those rows read a version tag only and never report
+`latest` or an untagged reference. Langchain-Chatchat's PyPI package is a
+presence-only row in the pin table, and its compose file runs `chatimage/chatchat`,
+mirrored at `ccr.ccs.tencentyun.com/langchain-chatchat/chatchat`, so the same rule
+reads every tag of both here.
 Docker Hub
 images are matched by the bare name their docs use, so `docker.io/grafana/mcp-k6`
 is not read. Nothing `mcp_cve_pins_2026_07` reads carries their version, and a pin
@@ -388,6 +392,49 @@ _PINS: tuple[_ImagePin, ...] = (
         "ghcr.io/sooperset/mcp-atlassian",
         (0, 22, 0), "below 0.22.0", "Fixed in 0.22.0.", ("CVE-2026-73498",),
     ),
+    # IBM ContextForge MCP Gateway (PyPI `mcp-contextforge-gateway`): the pin
+    # table's row for the same rule reads the package below 1.0.9. Its README and
+    # Helm chart run `ghcr.io/ibm/mcp-context-forge`, which the release workflow
+    # tags with the release tag (`v1.0.5`; the 0.x releases also without the `v`)
+    # and `latest`. The image labels name the release commit: v1.0.5 is af178ee1,
+    # v1.0.6 d24df05e. The 1.0.0 betas and release candidates read as 1.0.0 and
+    # `v1.0.7-20260921`, a patch on the 1.0.7 support line, as 1.0.7, all below
+    # the floor, as the PyPI row reads 1.0.7.post20260921. On 2026-10-20 `latest`
+    # was the v1.0.11 digest, fixed, and the chart's default `tag: latest` is not
+    # a release.
+    _ImagePin(
+        "AAK-MCP-CONTEXTFORGE-CVE-2026-77822-001", "IBM ContextForge MCP Gateway",
+        "ghcr.io/ibm/mcp-context-forge",
+        (1, 0, 9), "below 1.0.9", "Fixed in 1.0.9.",
+        ("CVE-2026-77822", "CVE-2026-18905", "CVE-2026-18486", "CVE-2026-18489",
+         "CVE-2026-53710", "CVE-2026-78573", "CVE-2026-53709", "CVE-2026-53711",
+         "CVE-2026-8355"),
+    ),
+    # CVE-2026-75128: Langchain-Chatchat's API runs any registered tool, the
+    # always-registered `shell` tool included, for an unauthenticated caller on
+    # 0.0.0.0:7861. The pin table's presence-only row reads the PyPI package. The
+    # docker build workflow clones `master`, tags `<version>-<commit>-<date>` and
+    # pushes to Docker Hub and the Tencent mirror, and the image runs as root.
+    # Docker Hub carries 0.3.0-0622 to 0.3.1.3-717e03e-20241109 and the Tencent
+    # mirror 0.3.1-4e03ec6-20240726 to the same, both with
+    # 0.3.2-dev-d15fcd4-20241014. tool_routes.py serves the route from the 0.3.0
+    # wheel to `master` today, so every image built in between has it, and no
+    # release fixes it. A tag reads as its first three numbers: the release
+    # builds as 0.3.0 or 0.3.1 (0.3.1.3-717e03e-20241109 is 0.3.1), and the dev
+    # build as 0.3.2. So the floor is 0.3.3, the first number past the dev tag,
+    # and every tag on either registry reads affected. Neither registry has a
+    # `latest` tag, so `floating_affected` stays False.
+    _ImagePin(
+        "AAK-CHATCHAT-CVE-2026-75128-001", "Langchain-Chatchat", "chatimage/chatchat",
+        (0, 3, 3), "on every tag through 0.3.2-dev", "No fixed release.",
+        ("CVE-2026-75128",),
+    ),
+    _ImagePin(
+        "AAK-CHATCHAT-CVE-2026-75128-001", "Langchain-Chatchat",
+        "ccr.ccs.tencentyun.com/langchain-chatchat/chatchat",
+        (0, 3, 3), "on every tag through 0.3.2-dev", "No fixed release.",
+        ("CVE-2026-75128",),
+    ),
 )
 
 _MAX_FILE_BYTES = 2_000_000
@@ -572,7 +619,10 @@ def scan(project_root: Path) -> tuple[list[Finding], set[str]]:
         pins = [pin for pin in _PINS if _NEEDLES[pin.image] in lowered]
         if not pins:
             continue
-        helm = list(_helm_refs(text, path)) if kind == "yaml" else []
+        # The walk pops from the end of the document; sort so a file with two
+        # image blocks (a chart's app and its migration job) is reported on
+        # the first, as the inline reader reports its first reference.
+        helm = sorted(_helm_refs(text, path), key=lambda ref: ref[2]) if kind == "yaml" else []
         for pin in pins:
             hit = _inline_hit(text, kind, pin)
             if hit is None:

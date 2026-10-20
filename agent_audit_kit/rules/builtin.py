@@ -359,6 +359,7 @@ _AICM_TAGS: dict[str, list[str]] = {
     "AAK-MCP-ZCODE-CVE-2026-88755-001": ["IAM-16", "STA-08"],
     "AAK-MCP-CLAUDEAGENTSDK-CVE-2026-96620-001": ["AIS-07", "STA-08"],
     "AAK-MCP-APACHEANSWER-CVE-2026-71563-001": ["IAM-01", "STA-08"],
+    "AAK-CHATCHAT-CVE-2026-75128-001": ["IAM-01", "AIS-07", "STA-08"],
     "AAK-MCP-GRAFANA-CVE-2026-19516-001": ["IVS-04", "STA-08"],
     "AAK-MCP-N8N-CVE-2026-72768-001": ["IVS-04", "STA-08"],
     "AAK-MCP-CCTEMPLATES-CVE-2026-73222-001": ["IAM-01", "STA-08"],
@@ -13497,9 +13498,10 @@ _r(
 
 _r(
     "AAK-MCP-CONTEXTFORGE-CVE-2026-77822-001",
-    "IBM ContextForge MCP Gateway: default credentials and JWT key, DNS-rebind SSRF, jq-filter, Admin UI XSS and cross-session leaks (<= 1.0.8)",
-    "IBM ContextForge MCP Gateway (`mcp-contextforge-gateway`, PyPI) at or below "
-    "1.0.8 carries four disclosed defects that one floor remediates. "
+    "IBM ContextForge MCP Gateway: default credentials and JWT key, DNS-rebind and OAuth token-URL SSRF, jq-filter, Admin UI XSS and cross-session leaks (<= 1.0.8)",
+    "IBM ContextForge MCP Gateway (`mcp-contextforge-gateway` on PyPI, and the "
+    "`ghcr.io/ibm/mcp-context-forge` image) at or below 1.0.8 carries disclosed "
+    "defects that one floor remediates. "
     "CVE-2026-77822 (HIGH 8.2): the A2A invocation endpoint "
     "`POST /a2a/{agent_name}/invoke` does not pin the DNS-resolved IP at connection "
     "time — unlike every other egress path in the gateway — so an authenticated "
@@ -13520,11 +13522,20 @@ _r(
     "no database account, so a remote attacker can mint admin tokens. "
     "CVE-2026-53711 (MEDIUM, CVSS 4.0 5.1): before 0.3.1 the Admin UI writes a "
     "saved Global Prompts template into the page as HTML, a stored XSS against "
-    "whoever views it. Both are fixed below this floor. "
+    "whoever views it. Both are fixed below this floor. CVE-2026-8355 (MEDIUM, "
+    "CVSS 3.1 6.4 from IBM): through 1.0.5, a user allowed to create gateways "
+    "registers one with OAuth client credentials and a `token_url` of their "
+    "choosing, and the gateway posts its client credentials there and returns up "
+    "to 256 characters of a reply that is not a token in its 502, so the user "
+    "reaches internal services and cloud metadata. 1.0.1 began checking "
+    "`token_url`, but token requests still followed redirects; 1.0.6 stops "
+    "following them and checks `redirect_uri` and `jwks_uri` too, below this "
+    "floor as well. "
     "Treat < 1.0.9 (and unpinned) as exposed.",
     Severity.CRITICAL,
     Category.SUPPLY_CHAIN,
-    "Upgrade `mcp-contextforge-gateway` to >= 1.0.9 and pin it. Change any "
+    "Upgrade `mcp-contextforge-gateway` to >= 1.0.9 and pin it, or run the "
+    "`ghcr.io/ibm/mcp-context-forge` image at v1.0.9 or later. Change any "
     "credential that shipped as a default before doing anything else, "
     "`JWT_SECRET_KEY` included: generate a new one (from 1.0.2, "
     "`python -m mcpgateway.scripts.init_secrets`), because a token signed with the "
@@ -13557,6 +13568,13 @@ _r(
         # the 0.1.0 to 0.3.0 wheels and sets `textContent` from 0.3.1. The record
         # says `>= 0.2.0, < 0.3.1`, the release its reporter tested.
         "CVE-2026-53711",
+        # 2026-10-20 (#1054). CVE-2026-8355: OAuth gateway registration posts to a
+        # caller's `oauth_config.token_url`. IBM's bulletin names <= 1.0.5 and the
+        # fix as 1.0.6, whose dc429d9 (#5601) stops following redirects on token
+        # requests and checks `redirect_uri` and `jwks_uri`; 1.0.1 had begun
+        # checking `token_url` itself. Below the floor, so the pin table's row
+        # stays as it is.
+        "CVE-2026-8355",
     ],
     owasp_mcp_references=["MCP04:2025", "MCP05:2025", "MCP07:2025", "MCP10:2025"],
     owasp_agentic_references=["ASI02", "ASI03", "ASI04"],
@@ -13573,7 +13591,12 @@ _r(
         "(`pdm.lock`). A file over 2 MB, or a lockfile over 32 MiB, is not read."
         " A declaration nested more than 64 levels deep in package.json, a TOML "
         "manifest or an MCP config (an MCP server more than 62) is still judged, and "
-        "reported without a line; a lockfile entry keeps its line at any depth."
+        "reported without a line; a lockfile entry keeps its line at any depth. "
+        "It also reads `ghcr.io/ibm/mcp-context-forge` tags below 1.0.9 in compose "
+        "files, Kubernetes manifests, Helm values, Dockerfiles and MCP configs. "
+        "`latest` was the v1.0.11 digest on 2026-10-20, fixed, so an untagged or "
+        "`latest` reference, which the README and the chart default to, is not "
+        "reported."
     ),
 )
 
@@ -16458,6 +16481,69 @@ _r(
         "binaries or the Go module is not read, nor is the `docker.io/apache/answer` "
         "spelling, and an MCP client config names the endpoint by URL, which states "
         "no version."
+    ),
+)
+
+
+# ---------------------------------------------------------------------------
+# 2026-10-20 (#1055). Langchain-Chatchat's API runs any registered tool, the
+# shell tool included, for an unauthenticated caller. No release fixes it, so the
+# pin is presence-only on PyPI and covers every image tag. No published Chatchat
+# artifact has MCP code, so the id has no MCP area and the rule no MCP id.
+# ---------------------------------------------------------------------------
+
+_r(
+    "AAK-CHATCHAT-CVE-2026-75128-001",
+    "Langchain-Chatchat, every release and image (no fix): POST /tools/call runs the shell tool for an unauthenticated caller",
+    "Langchain-Chatchat, a self-hosted RAG and agent app (`langchain-chatchat` on "
+    "PyPI, and the `chatimage/chatchat` image), serves its API on 0.0.0.0:7861 by "
+    "default, with no authentication. `POST /tools/call` runs any registered agent "
+    "tool by name, and the `shell` tool is always registered, so one request runs "
+    "an OS command as the server's user, root in the shipped image "
+    "(CVE-2026-75128, CVSS 3.1 9.8, CWE-306). There is no fixed version: every "
+    "published release, 0.3.0 to 0.3.1.3, and every image tag is affected, and "
+    "`master`, which carries the route unchanged, is unreleased. Checked in the "
+    "published "
+    "artifacts: the oldest wheel, 0.3.0, and the newest, 0.3.1.3 (2024-07-23), both "
+    "mount the route and register the tool, and so does the commit the newest "
+    "image was built from (717e03e, 2024-11-09); no setting takes the tool out of "
+    "the registry the route reads. This is the agent's tool-call layer, which "
+    "every user runs. Chatchat's upload-handler CVEs are a different kind of "
+    "claim: an upload handler with no agent surface, which this rule does not "
+    "make.",
+    Severity.CRITICAL,
+    Category.SUPPLY_CHAIN,
+    "There is no fixed version. Keep the API's port, 7861, off any network you "
+    "do not trust: bind `API_SERVER` to 127.0.0.1 in "
+    "basic_settings.yaml, and in the Docker image do not publish 7861. Put a proxy "
+    "that authenticates every request in front of the API. Remove the shell tool's "
+    "registration: delete `from .shell import shell` from "
+    "`chatchat/server/agent/tools_factory/__init__.py`, the only line that registers "
+    "it, since no setting does.",
+    sarif_name="ChatchatUnauthenticatedToolsCallShell",
+    cve_references=["CVE-2026-75128"],
+    owasp_agentic_references=["ASI03", "ASI04", "ASI05"],
+    adversa_references=["ADV-SUPPLY-04"],
+    limitations=(
+        "Reads `langchain-chatchat` in requirements*.txt at any depth and, at the "
+        "project root only, in pyproject.toml, Pipfile, package.json, .mcp.json, "
+        "mcp.json, claude_desktop_config.json and the Pipfile.lock, poetry.lock, "
+        "uv.lock, package-lock.json, pnpm-lock.yaml and yarn.lock lockfiles, with or "
+        "without a version, since every release is affected. It reads two image "
+        "spellings, `chatimage/chatchat` on Docker Hub and its Tencent mirror "
+        "`ccr.ccs.tencentyun.com/langchain-chatchat/chatchat`, in compose files, "
+        "Kubernetes manifests, Helm values, Dockerfiles and MCP configs, and every tag "
+        "of either is reported; neither registry has a `latest` tag, so an untagged "
+        "reference is not. `docker.io/chatimage/chatchat` and the older Tencent "
+        "namespace `ccr.ccs.tencentyun.com/chatchat/chatchat` are not read. Chatchat "
+        "publishes no release binaries (its GitHub releases carry no assets), and a "
+        "source checkout started with `cli.py start`, which is how the image itself "
+        "runs and how `master` is used, is not read. It reads the version, not "
+        "whether port 7861 is reachable or the shell tool is still registered. A "
+        "file over 2 MB, or a lockfile over 32 MiB, is not read. A declaration "
+        "nested more than 64 levels deep in package.json, a TOML manifest or an MCP "
+        "config (an MCP server more than 62) is still judged, and reported without a "
+        "line; a lockfile entry keeps its line at any depth."
     ),
 )
 

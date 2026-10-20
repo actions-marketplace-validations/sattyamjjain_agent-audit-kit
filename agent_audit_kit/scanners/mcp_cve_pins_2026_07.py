@@ -105,8 +105,9 @@ available) before shipping:
     docstring)
   - mcp-contextforge-gateway        >= 1.0.9   (+ CVE-2026-78573 default
     credentials, 1.0.0–1.0.7; already under the existing floor. CVE-2026-53709,
-    a published default JWT key below 1.0.2, and CVE-2026-53711, an Admin UI
-    stored XSS below 0.3.1, joined it the same way)
+    a published default JWT key below 1.0.2, CVE-2026-53711, an Admin UI
+    stored XSS below 0.3.1, and CVE-2026-8355, an OAuth token-URL SSRF below
+    1.0.6, joined it the same way)
   - awslabs.security-agent-mcp-server >= 0.2.0   (CVE-2026-87913; unverified S3
     bucket ownership for scan output)
   - mysql-mcp-server               >= 0.4.2   (CVE-2026-59971; SSE transport with no
@@ -225,6 +226,9 @@ available) before shipping:
     flag such as --mcp-config. The CVE names the Python SDK, and its fix commit says
     the TypeScript SDK shipped the same fix in 0.3.208. One rule, two pins, a stated
     version required)
+  - langchain-chatchat             presence-only  (CVE-2026-75128; `POST /tools/call`
+    runs the always-registered shell tool for an unauthenticated caller, in every
+    release from 0.3.0 to 0.3.1.3, the newest; the images are image-pin rows)
 
 CVEs without a pinnable PyPI/npm artifact (aerostack-mcp SSRF, MaxKB stdio
 command-injection, mastergo-magic-mcp path-traversal/SSRF with no vendor fix,
@@ -914,10 +918,12 @@ _PINS: tuple[_Pin, ...] = (
     # v1.0.8 patched-version. A floor inferred from either source alone would have
     # shipped one release short and called four vulnerable installs patched.
     #
-    # Four more have since joined below the floor, no row change: CVE-2026-53710
+    # Five more have since joined below the floor, no row change: CVE-2026-53710
     # (1.0.2), CVE-2026-78573 (1.0.8), CVE-2026-53709 (a published default JWT key
-    # and the platform-admin bootstrap, fixed 1.0.2) and CVE-2026-53711 (an Admin
-    # UI stored XSS, fixed 0.3.1). No `introduced`, so every one of them fires.
+    # and the platform-admin bootstrap, fixed 1.0.2), CVE-2026-53711 (an Admin UI
+    # stored XSS, fixed 0.3.1) and CVE-2026-8355 (OAuth gateway registration posts
+    # to a caller's token URL, fixed 1.0.6). No `introduced`, so every one of them
+    # fires. The image the README runs has a row in `container_image_pins`.
     _Pin("AAK-MCP-CONTEXTFORGE-CVE-2026-77822-001", "mcp-contextforge-gateway",
          ("mcp-contextforge-gateway",), (1, 0, 9),
          fix_label="1.0.9 (affected <= 1.0.8)"),
@@ -1452,6 +1458,19 @@ _PINS: tuple[_Pin, ...] = (
          fix_label="0.3.208 (the TypeScript SDK's fix; the CVE record names only the "
                    "Python SDK)",
          requires_version=True, ecosystem="js"),
+    # --- 2026-10-20 (#1055) ---
+    # Langchain-Chatchat's API runs any registered tool, the always-registered
+    # `shell` tool included, from an unauthenticated `POST /tools/call`
+    # (CVE-2026-75128, CVSS 3.1 9.8). PyPI carries 0.3.0 (2024-05-06) to 0.3.1.3
+    # (2024-07-23), and the wheels at both ends mount the route and register the
+    # tool. Nothing has been published since, and `master` serves the route
+    # unchanged, so the pin is presence-only: an unpinned reference installs an
+    # affected release as well. npm has no package by the name, and PyPI's
+    # `chatchat` is another project. The images are rows in `container_image_pins`.
+    _Pin("AAK-CHATCHAT-CVE-2026-75128-001", "langchain-chatchat",
+         ("langchain-chatchat",), None,
+         fix_label="no fixed release (0.3.1.3 is the newest); keep the API port, "
+                   "7861, off networks you do not trust"),
 )
 
 _CANDIDATE_NAMES = (
