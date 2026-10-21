@@ -1,12 +1,13 @@
-"""v0.3.10 SAST tests — CrewAI 4-CVE chain, LangChain prompt-loader,
-OpenClaw privesc."""
+"""v0.3.10 SAST tests — CrewAI 4-CVE chain, LangChain prompt-loader."""
 from __future__ import annotations
 
+import time
 from pathlib import Path
+
+import pytest
 
 from agent_audit_kit.scanners.crewai_rce_chain import scan as crewai_scan
 from agent_audit_kit.scanners.langchain_prompt_loader import scan as langchain_scan
-from agent_audit_kit.scanners.openclaw_privesc import scan as openclaw_scan
 
 FIXTURES = Path(__file__).parent / "fixtures"
 
@@ -85,29 +86,25 @@ def test_langchain_prompt_loader_validated_passes(tmp_path: Path) -> None:
     )
 
 
-# -------------------- AAK-OPENCLAW-PRIVESC-001 --------------------
+@pytest.mark.parametrize(("line", "imports"), [
+    ("from langchain.prompts import PromptTemplate", True),
+    ("from langchain import x, load_prompt", True),
+    ("from langchain import x from langchain import load_prompt", True),
+    ("from langchain import PromptTemplates", False),
+    ("from langchain import x\nPromptTemplate", False),
+])
+def test_langchain_prompt_import_keeps_its_shape(line: str, imports: bool) -> None:
+    from agent_audit_kit.scanners.langchain_prompt_loader import _LANGCHAIN_IMPORT_RE
 
-def test_openclaw_unsafe_fires(tmp_path: Path) -> None:
-    src = (FIXTURES / "openclaw" / "role_default_admin_unsafe.py").read_text()
-    (tmp_path / "agent.py").write_text(src, encoding="utf-8")
-    findings, _ = openclaw_scan(tmp_path)
-    fired = [f for f in findings if f.rule_id == "AAK-OPENCLAW-PRIVESC-001"]
-    # Three unsafe constructions in the fixture (missing role, role=None, role=user_role)
-    assert len(fired) == 3
-
-
-def test_openclaw_safe_passes(tmp_path: Path) -> None:
-    src = (FIXTURES / "openclaw" / "role_explicit_safe.py").read_text()
-    (tmp_path / "agent.py").write_text(src, encoding="utf-8")
-    findings, _ = openclaw_scan(tmp_path)
-    assert not any(f.rule_id == "AAK-OPENCLAW-PRIVESC-001" for f in findings)
+    assert bool(_LANGCHAIN_IMPORT_RE.search(line)) is imports
 
 
-def test_openclaw_no_import_passes(tmp_path: Path) -> None:
-    (tmp_path / "x.py").write_text(
-        "class OpenClawAgent: pass\n"
-        "OpenClawAgent()\n",
-        encoding="utf-8",
-    )
-    findings, _ = openclaw_scan(tmp_path)
-    assert findings == []
+def test_a_line_of_langchain_imports_reads_in_linear_time() -> None:
+    """1 MB of `from langchain import x ` on one line. Each import read the
+    rest of the line: 80 KB took 0.74 seconds and the time grew with the
+    square. The bound is loose for slow CI runners."""
+    from agent_audit_kit.scanners.langchain_prompt_loader import _LANGCHAIN_IMPORT_RE
+
+    started = time.perf_counter()
+    _LANGCHAIN_IMPORT_RE.search("from langchain import x " * 42_000)
+    assert time.perf_counter() - started < 5.0

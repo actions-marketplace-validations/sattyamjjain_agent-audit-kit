@@ -11,7 +11,8 @@ the new spec can be measured against a fixed reference instead of a moving one.
 - **Tool:** agent-audit-kit 0.3.56 · 262 rules · fully offline
 - **This is the PRE-spec baseline.** The 2026-07-28 spec has **not** shipped as of
   this snapshot, so this document makes **no** claim about the post-spec world.
-  The re-measure is scheduled for **2026-08-11**.
+  The comparison against it was run on 2026-08-24; current figures are in the
+  [State of MCP 2026 report](https://sattyamjjain.github.io/agent-audit-kit/docs/research/state-of-mcp-2026/REPORT/).
 
 Verify the snapshot is untampered:
 
@@ -108,12 +109,14 @@ This is deliberately labelled *benign-slice HIGH/CRITICAL false-positive rate*, 
 servers that look benign, half were wrong, and both share one fixable root cause
 (`AAK-MCP-001` not recognising custom API-key headers). The interval is wide
 because n is small — stated plainly. Full adjudication:
-[`benchmarks/false_positive/triage.md`](../../benchmarks/false_positive/triage.md).
+[`benchmarks/false_positive/triage.md`](https://github.com/sattyamjjain/agent-audit-kit/blob/main/benchmarks/false_positive/triage.md).
 
 ## Re-measuring after the spec ships
 
-The 2026-08-11 re-measure is one command — it re-scans the corpus and diffs against
-this frozen baseline (absolute + percentage-point deltas per dimension):
+The comparison is one command, last run on 2026-08-24. It re-scans the current
+corpus with the current rules and diffs the result against this frozen baseline
+(absolute + percentage-point deltas per dimension), so its deltas combine corpus
+growth and rule changes with any effect of the spec:
 
 ```bash
 python research/state-of-mcp-2026/baseline.py \

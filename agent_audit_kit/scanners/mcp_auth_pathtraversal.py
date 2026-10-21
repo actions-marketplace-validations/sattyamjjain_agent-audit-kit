@@ -44,10 +44,18 @@ from __future__ import annotations
 
 import ast
 import re
+from bisect import bisect_left
 from pathlib import Path
 
 from agent_audit_kit.models import Finding
-from agent_audit_kit.scanners._helpers import make_finding, SKIP_DIRS
+from agent_audit_kit.scanners._helpers import (
+    in_skip_dir,
+    make_finding,
+    parse_python,
+    refusing_overflow,
+    sub_up_to_last,
+    unparse,
+)
 
 _RULE_ID = "AAK-MCP-AUTH-PATHTRAVERSAL-001"
 
@@ -103,16 +111,21 @@ def _attr_chain(node: ast.AST) -> str:
     return ".".join(reversed(parts))
 
 
+# `headers` and then, later on the line, a token word. The gap stops at the next
+# `headers`, which reads on itself: with `.*` alone a line of them and no token
+# word was read to its end once per `headers`.
+_HEADER_TOKEN_RE = re.compile(r"headers(?:(?!headers).)*?(?:auth|bearer|token)", re.IGNORECASE)
+
+
 def _is_token_source_expr(value: ast.AST) -> bool:
     """True if expr reads a token from a request header / bearer extraction."""
-    try:
-        src = ast.unparse(value)
-    except Exception:
+    src = unparse(value)
+    if not src:
         return False
     return bool(_HEADER_SOURCE_RE.search(src) and _TOKEN_NAME_RE.search(
         # last identifier-ish token in the expr, best effort
         (re.findall(r"[A-Za-z_][\w]*", src) or [""])[-1]
-    )) or bool(re.search(r"headers.*(auth|bearer|token)", src, re.IGNORECASE))
+    )) or bool(_HEADER_TOKEN_RE.search(src))
 
 
 def _collect_tainted(tree: ast.AST, seed: set[str]) -> set[str]:
@@ -153,7 +166,19 @@ def _expr_uses_tainted(node: ast.AST, tainted: set[str]) -> bool:
 
 def _builds_path_from_token(node: ast.AST, tainted: set[str]) -> bool:
     """True if this expr builds a path-like value that includes a tainted token:
-    os.path.join(..token..), Path(..)/token, f"{dir}/{token}", dir + token."""
+    os.path.join(..token..), Path(..)/token, f"{dir}/{token}", dir + token.
+
+    A `/` or `+` was judged at every level of a chain of them, each time by
+    searching and unparsing the whole chain below it, which cost the square of
+    the chain's length. The unparse used to fail a few hundred levels down, and
+    now reaches the bottom (`walk_tree`): four chains of 1,500 took 7.7 s. No
+    `/` or `+` below one already judged can be judged differently. Below one
+    that holds no token, none holds one; below one whose source shows no path
+    word, none's source shows one, since its source is part of the source
+    above, and none is a `/`, which the source above would show. So each chain
+    is judged once, from the top.
+    """
+    judged: set[int] = set()
     for sub in ast.walk(node):
         if isinstance(sub, ast.Call):
             name = _attr_chain(sub.func)
@@ -163,16 +188,17 @@ def _builds_path_from_token(node: ast.AST, tainted: set[str]) -> bool:
                 if any(_expr_uses_tainted(a, tainted) for a in sub.args):
                     return True
         # Path(...) / token  or  base / token
-        if isinstance(sub, ast.BinOp) and isinstance(sub.op, (ast.Div, ast.Add)):
+        if isinstance(sub, ast.BinOp) and isinstance(sub.op, (ast.Div, ast.Add)) and id(sub) not in judged:
             if _expr_uses_tainted(sub, tainted):
-                # at least one side references a dir-ish / Path expr
-                blob = ""
-                try:
-                    blob = ast.unparse(sub)
-                except Exception:
-                    pass
-                if isinstance(sub.op, ast.Div) or re.search(r"path|dir|Path|\.session|/", blob):
+                if isinstance(sub.op, ast.Div):
                     return True
+                # at least one side references a dir-ish / Path expr
+                blob = unparse(sub)
+                if re.search(r"path|dir|Path|\.session|/", blob):
+                    return True
+                if not blob:  # the unparser gave up: judge the ones below on their own
+                    continue
+            judged.update(id(below) for below in ast.walk(sub))
         # f-string containing a tainted name and a path separator
         if isinstance(sub, ast.JoinedStr):
             has_tokq = any(
@@ -188,11 +214,11 @@ def _builds_path_from_token(node: ast.AST, tainted: set[str]) -> bool:
     return False
 
 
-def _scan_python(text: str) -> int | None:
+def _scan_python(text: str, path: Path) -> int | None:
     if not _MCP_HINT_RE.search(text):
         return None
     try:
-        tree = ast.parse(text)
+        tree = parse_python(text, path)
     except SyntaxError:
         return None
 
@@ -207,11 +233,7 @@ def _scan_python(text: str) -> int | None:
         if not tainted:
             continue
 
-        fn_src = ""
-        try:
-            fn_src = ast.unparse(fn)
-        except Exception:
-            pass
+        fn_src = unparse(fn)
         guarded = bool(_GUARD_RE.search(fn_src))
 
         # names bound to a path built from the token
@@ -258,16 +280,63 @@ _TS_LINE = re.compile(r"//[^\n]*")
 
 
 def _strip_comments(text: str) -> str:
-    text = _TS_BLOCK.sub(lambda m: "\n" * m.group(0).count("\n"), text)
+    text = sub_up_to_last(_TS_BLOCK, lambda m: "\n" * m.group(0).count("\n"), text, "*/")
     return _TS_LINE.sub("", text)
 
 
 # token var built into a path via join/template/concat, then an fs check.
-_PATH_TOKEN_RE = re.compile(
-    r"(?:path\.join|join!|PathBuf|format!|`[^`]*\$\{)[^\n;]*"
+_PATH_CALL_RE = re.compile(r"(?=(path\.join|join!|PathBuf|format!))", re.IGNORECASE)
+_TEMPLATE_HOLE_RE = re.compile(r"\$\{")
+_TOKEN_WORD_RE = re.compile(
     r"\b(?:token|bearer|auth|authorization|credential|sessionId|session_id|apiKey|api_key)\b",
     re.IGNORECASE,
 )
+
+
+def _path_token_start(text: str) -> int | None:
+    """Start of the first match of the pattern this check used,
+
+        (?:path\\.join|join!|PathBuf|format!|`[^`]*\\$\\{)[^\\n;]*\\b(?:token|...)\\b
+
+    found without its rescans. A call matches when a token word follows it
+    before the next newline or `;`, and a template literal when one of its `${`
+    is followed that way. Each head read on to that newline, so a line of
+    `path.join` and no token word took the square of its length. Whether a
+    token word follows depends only on where the reading starts, so each start
+    is checked once, in order, against the next token word and the next stop.
+    """
+    calls = [(m.start(), m.start() + len(m.group(1))) for m in _PATH_CALL_RE.finditer(text)]
+    holes = [m.start() for m in _TEMPLATE_HOLE_RE.finditer(text)]
+    none = len(text)
+    word = newline = semicolon = -1
+    followed: set[int] = set()
+    for at in sorted({after for _, after in calls} | {hole + 2 for hole in holes}):
+        if word < at:
+            m = _TOKEN_WORD_RE.search(text, at)
+            word = m.start() if m else none
+        if newline < at:
+            newline = _find(text, "\n", at)
+        if semicolon < at:
+            semicolon = _find(text, ";", at)
+        if word < min(newline, semicolon, none):
+            followed.add(at)
+    first = min((start for start, after in calls if after in followed), default=none)
+    # A template literal's `${` must come before the literal's next backtick.
+    tick = text.find("`")
+    while 0 <= tick < first:
+        end = _find(text, "`", tick + 1)
+        if any(hole + 2 in followed for hole in holes[bisect_left(holes, tick):bisect_left(holes, end)]):
+            first = tick
+        tick = text.find("`", tick + 1)
+    return first if first < none else None
+
+
+def _find(text: str, sub: str, start: int) -> int:
+    """`str.find`, with the end of the text for not found."""
+    at = text.find(sub, start)
+    return len(text) if at < 0 else at
+
+
 _FS_SINK_RE = re.compile(
     r"existsSync|fs\.exists|fs\.access|readFile|createReadStream|openSync"
     r"|\.exists\(\)|std::fs::|File::open|Path::new",
@@ -281,12 +350,12 @@ def _scan_regex(text: str) -> int | None:
     text = _strip_comments(text)
     if _GUARD_RE.search(text):
         return None
-    m = _PATH_TOKEN_RE.search(text)
-    if not m:
+    start = _path_token_start(text)
+    if start is None:
         return None
     if not _FS_SINK_RE.search(text):
         return None
-    return text.count("\n", 0, m.start()) + 1
+    return text.count("\n", 0, start) + 1
 
 
 # ---------------------------------------------------------------------------
@@ -310,11 +379,7 @@ def scan(project_root: Path) -> tuple[list[Finding], set[str]]:
         suf = path.suffix
         if suf not in _PY_SUFFIXES + _TS_SUFFIXES + _RUST_SUFFIXES:
             continue
-        try:
-            rel_parts = path.relative_to(project_root).parts
-        except ValueError:
-            continue
-        if any(part in SKIP_DIRS for part in rel_parts):
+        if in_skip_dir(path, project_root):
             continue
         if not path.is_file():
             continue
@@ -325,7 +390,12 @@ def scan(project_root: Path) -> tuple[list[Finding], set[str]]:
         except OSError:
             continue
 
-        line = _scan_python(text) if suf in _PY_SUFFIXES else _scan_regex(text)
+        line: int | None = None
+        if suf in _PY_SUFFIXES:
+            with refusing_overflow(path):
+                line = _scan_python(text, path)
+        else:
+            line = _scan_regex(text)
         if line is None:
             continue
 

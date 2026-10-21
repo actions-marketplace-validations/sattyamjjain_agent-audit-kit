@@ -30,14 +30,34 @@ from pathlib import Path
 from typing import Any
 
 from agent_audit_kit.models import Finding
-from agent_audit_kit.scanners._helpers import find_line_number, make_finding, SKIP_DIRS
+from agent_audit_kit.scanners._helpers import in_skip_dir, loads_json, make_finding, placed
 
 _RULE_ID = "AAK-AGENT-SHARED-RES-AUTHZ-001"
 
 # Mutating verbs (per the CVE-2026-44654 brief).
+_MUTATE_VERBS = frozenset({"delete", "remove", "edit", "update", "overwrite", "move"})
 _MUTATE_RE = re.compile(
     r"\b(?:delete|remove|edit|update|overwrite|move)\b", re.IGNORECASE
 )
+# The same verbs in the third person, the way most tool descriptions are
+# written ("Deletes a file shared with the team"), which `_MUTATE_RE` missed.
+# Updates, edits and moves are also everyday plural nouns ("progress updates",
+# "small focused edits", "the legal moves"; on MCPTox's 353 clean tools the
+# nouns outnumber the verbs), so those three count only when an article or a
+# quantifier follows, as a verb's object does; deletes, removes and overwrites
+# count anywhere.
+_MUTATE_THIRD_PERSON_RE = re.compile(
+    r"\b(?:deletes|removes|overwrites)\b"
+    r"|\b(?:updates|edits|moves)\s+(?:a|an|the|this|that|these|those|its|their|"
+    r"your|any|all|each|every|one|existing|specified|selected|given|multiple)\b",
+    re.IGNORECASE,
+)
+# The first word of a tool name. Names are written `<verb>_<object>`, and the
+# underscore is a word character, so `_MUTATE_RE` never found `delete` in
+# `delete_shared_file`, nor in `deleteSharedFile`; only a hyphenated name gave
+# up its verb. Only the leading word is read: a verb further in
+# (`get_file_update_time`) names what a read reports.
+_NAME_LEAD_RE = re.compile(r"[A-Z]?[a-z]+|[A-Z]+(?![a-z])")
 # Resource nouns the mutation acts on — required alongside a verb so a verb in
 # unrelated prose (e.g. "update the user on progress") does not match alone.
 _RESOURCE_RE = re.compile(
@@ -168,9 +188,19 @@ def _iter_tool_descriptors(
             _iter_tool_descriptors(item, depth + 1, acc)
 
 
+def _name_leads_with_verb(name: str) -> bool:
+    lead = _NAME_LEAD_RE.match(name.lstrip("_-"))
+    return lead is not None and lead.group(0).lower() in _MUTATE_VERBS
+
+
 def _is_mutating(name: str, description: str) -> bool:
     blob = f"{name} {description}"
-    return bool(_MUTATE_RE.search(blob) and _RESOURCE_RE.search(blob))
+    verb = (
+        _MUTATE_RE.search(blob)
+        or _MUTATE_THIRD_PERSON_RE.search(description)
+        or _name_leads_with_verb(name)
+    )
+    return bool(verb and _RESOURCE_RE.search(blob))
 
 
 def scan(project_root: Path) -> tuple[list[Finding], set[str]]:
@@ -186,11 +216,7 @@ def scan(project_root: Path) -> tuple[list[Finding], set[str]]:
     scanned_files: set[str] = set()
 
     for json_path in project_root.rglob("*.json"):
-        try:
-            rel_parts = json_path.relative_to(project_root).parts
-        except ValueError:
-            continue
-        if any(part in SKIP_DIRS for part in rel_parts):
+        if in_skip_dir(json_path, project_root):
             continue
         if not json_path.is_file():
             continue
@@ -207,7 +233,7 @@ def scan(project_root: Path) -> tuple[list[Finding], set[str]]:
         ):
             continue
         try:
-            data = json.loads(raw_text)
+            data = loads_json(raw_text, json_path)
         except json.JSONDecodeError:
             continue
 
@@ -220,6 +246,7 @@ def scan(project_root: Path) -> tuple[list[Finding], set[str]]:
         _iter_tool_descriptors(data, 0, descriptors)
 
         seen: set[str] = set()
+        unplaced: list[tuple[Finding, str]] = []
         for name, description, schema in descriptors:
             if not _is_mutating(name, description):
                 continue
@@ -233,7 +260,7 @@ def scan(project_root: Path) -> tuple[list[Finding], set[str]]:
             if name in seen:
                 continue
             seen.add(name)
-            findings.append(make_finding(
+            unplaced.append((make_finding(
                 _RULE_ID,
                 rel_path,
                 (
@@ -243,7 +270,8 @@ def scan(project_root: Path) -> tuple[list[Finding], set[str]]:
                     f"enforce a per-actor authorization parameter, or annotate "
                     f"the tool x-aak-shared-authz: global-ok if intentional."
                 ),
-                find_line_number(raw_text, name),
-            ))
+            ), name))
+        # Every reported tool's line in one pass over the file, not one search of it per tool.
+        findings.extend(placed(raw_text, unplaced))
 
     return findings, scanned_files

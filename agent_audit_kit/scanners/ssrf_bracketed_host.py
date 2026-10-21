@@ -36,7 +36,7 @@ import re
 from pathlib import Path
 
 from agent_audit_kit.models import Finding
-from agent_audit_kit.scanners._helpers import SKIP_DIRS, find_line_number, make_finding
+from agent_audit_kit.scanners._helpers import in_skip_dir, find_line_number, make_finding, sub_up_to_last
 
 _RULE_ID = "AAK-SSRF-BRACKETED-HOST-001"
 
@@ -87,7 +87,7 @@ _GUARD_RE = re.compile(
 
 
 def _strip_comments(text: str) -> str:
-    return _TS_LINE_COMMENT_RE.sub(" ", _TS_BLOCK_COMMENT_RE.sub(" ", text))
+    return _TS_LINE_COMMENT_RE.sub(" ", sub_up_to_last(_TS_BLOCK_COMMENT_RE, " ", text, "*/"))
 
 
 def scan(project_root: Path) -> tuple[list[Finding], set[str]]:
@@ -105,11 +105,7 @@ def scan(project_root: Path) -> tuple[list[Finding], set[str]]:
     for path in project_root.rglob("*"):
         if path.suffix not in _JS_SUFFIXES:
             continue
-        try:
-            rel_parts = path.relative_to(project_root).parts
-        except ValueError:
-            continue
-        if any(part in SKIP_DIRS for part in rel_parts):
+        if in_skip_dir(path, project_root):
             continue
         if not path.is_file():
             continue

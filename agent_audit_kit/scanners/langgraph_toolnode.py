@@ -17,13 +17,16 @@ from pathlib import Path
 
 from agent_audit_kit.models import Finding
 
-from ._helpers import SKIP_DIRS, make_finding
+from ._helpers import SOURCE_MAX_BYTES, in_skip_dir, make_finding, parse_python, read_text_capped, refusing_overflow, walk_tree
 
 
+# The imported names stop at the next `from langgraph.prebuilt import` on the
+# line, which reads on itself: with `[^\n]*` alone a line of such imports and no
+# `ToolNode` was read to its end once per import.
 _TOOLNODE_IMPORT_RE = re.compile(
     r"""
     (?:
-        from\s+langgraph\.prebuilt\s+import[^\n]*\bToolNode\b
+        from\s+langgraph\.prebuilt\s+import(?:(?!from\s+langgraph\.prebuilt\s+import)[^\n])*\bToolNode\b
       | from\s+langgraph\s+import\s+prebuilt
       | import\s+langgraph\.prebuilt
     )
@@ -36,7 +39,7 @@ def _walk_python(text: str, path: Path, project_root: Path, scanned: set[str]) -
     if not _TOOLNODE_IMPORT_RE.search(text):
         return []
     try:
-        tree = ast.parse(text, str(path))
+        tree = parse_python(text, path)
     except SyntaxError:
         return []
     findings: list[Finding] = []
@@ -77,7 +80,7 @@ def _walk_python(text: str, path: Path, project_root: Path, scanned: set[str]) -
             ))
             self.generic_visit(node)
 
-    V().visit(tree)
+    walk_tree(V().visit, tree)
     return findings
 
 
@@ -85,11 +88,12 @@ def scan(project_root: Path) -> tuple[list[Finding], set[str]]:
     scanned: set[str] = set()
     findings: list[Finding] = []
     for path in project_root.rglob("*.py"):
-        if any(part in SKIP_DIRS for part in path.parts):
+        if in_skip_dir(path, project_root):
             continue
         try:
-            text = path.read_text(encoding="utf-8", errors="replace")
+            text = read_text_capped(path, SOURCE_MAX_BYTES, errors="replace")
         except OSError:
             continue
-        findings.extend(_walk_python(text, path, project_root, scanned))
+        with refusing_overflow(path):
+            findings.extend(_walk_python(text, path, project_root, scanned))
     return findings, scanned

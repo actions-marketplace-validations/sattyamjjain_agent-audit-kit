@@ -315,6 +315,13 @@ jobs:
     steps:
       - uses: actions/checkout@v7.0.1
 
+      # arm64 is built under QEMU. Through 0.6.15 the image was amd64-only, so
+      # the documented `docker pull` failed on Apple Silicon and ARM runners
+      # ("no matching manifest for linux/arm64/v8") unless the caller added
+      # --platform linux/amd64. The python base is pinned to a multi-arch index.
+      - name: Set up QEMU
+        uses: docker/setup-qemu-action@v4
+
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v4
 
@@ -336,19 +343,34 @@ jobs:
           load: true
           tags: agent-audit-kit:scan
 
+      # The documented one-liner, on the image about to be pushed. Through 0.6.9
+      # the image's entrypoint was the Action bridge, which read `scan` as the
+      # path and `/project` as the severity: every documented `docker run`
+      # exited 2, and nothing ever ran one to notice.
+      - name: Smoke-test the documented docker run
+        run: |
+          set -euo pipefail
+          docker run --rm agent-audit-kit:scan --version
+          docker run --rm -v "$PWD/tests/fixtures/cves/cve-2026-94044-mcp-route/vulnerable:/project:ro" \
+            agent-audit-kit:scan scan /project --format json --fail-on none > smoke.json
+          python3 -c 'import json; ids = {f["ruleId"] for f in json.load(open("smoke.json"))["findings"]}; assert "AAK-MCP-015" in ids, sorted(ids)'
+
       - name: Scan Docker image with Trivy
-        uses: aquasecurity/trivy-action@master
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
         with:
           image-ref: agent-audit-kit:scan
           format: sarif
           output: trivy-results.sarif
           severity: CRITICAL,HIGH
+          limit-severities-for-sarif: true
+          ignore-unfixed: true
 
       - name: Build and push
         id: push
         uses: docker/build-push-action@v7
         with:
           context: .
+          platforms: linux/amd64,linux/arm64
           push: true
           tags: |
             ghcr.io/sattyamjjain/agent-audit-kit:${{ steps.version.outputs.version }}
@@ -361,6 +383,16 @@ jobs:
             org.opencontainers.image.licenses=Apache-2.0
           cache-from: type=gha
           cache-to: type=gha,mode=max
+
+      # The smoke test above ran the amd64 build this runner loaded. This one runs
+      # the arm64 image that was just pushed, through QEMU, so a broken arm64 build
+      # fails the release instead of the first Apple Silicon user.
+      - name: Smoke-test the pushed arm64 image
+        run: |
+          set -euo pipefail
+          docker run --rm --platform linux/arm64 \
+            "ghcr.io/sattyamjjain/agent-audit-kit:${{ steps.version.outputs.version }}" --version \
+            | grep -q "version ${{ steps.version.outputs.version }}"
 
       - name: Generate SLSA provenance attestation
         uses: actions/attest-build-provenance@v4
@@ -396,10 +428,19 @@ jobs:
           sha256sum rules.json > rules.json.sha256
           cat rules.json.sha256
 
-      - name: Emit SBOMs (CycloneDX + SPDX)
+      # `agent-audit-kit sbom .` inventories the MCP servers a scanned project
+      # declares; this repository declares none, so from v0.3.0 to v0.6.9 every
+      # SBOM signed and attached here listed zero components. Describe the thing
+      # being released instead: the package installed alone into an empty
+      # environment, with the runtime dependencies that came with it. The script
+      # exits non-zero if a declared dependency is missing from that environment.
+      - name: Emit SBOMs of the package (CycloneDX + SPDX)
         run: |
-          agent-audit-kit sbom . --format cyclonedx --output sbom.cdx.json
-          agent-audit-kit sbom . --format spdx      --output sbom.spdx.json
+          set -euo pipefail
+          python -m venv --without-pip "$RUNNER_TEMP/sbom-env"
+          python -m pip --python "$RUNNER_TEMP/sbom-env/bin/python" install --quiet .
+          "$RUNNER_TEMP/sbom-env/bin/python" scripts/release_sbom.py \
+            --cyclonedx sbom.cdx.json --spdx sbom.spdx.json
 
       - name: Sigstore keyless sign
         uses: sigstore/gh-action-sigstore-python@v3.5.0
@@ -467,6 +508,12 @@ jobs:
           name: signed-bundle
           path: signed
 
+      # The docker job pushes the image as the tag without its `v`; the notes
+      # said `docker pull ...:v0.6.9`, which is a 404. Same step, same id.
+      - name: Extract version from tag
+        id: version
+        run: echo "version=${GITHUB_REF_NAME#v}" >> "$GITHUB_OUTPUT"
+
       - name: Create release
         uses: softprops/action-gh-release@v3
         with:
@@ -484,12 +531,12 @@ jobs:
 
             **pip:**
             ```bash
-            pip install agent-audit-kit==${{ github.ref_name }}
+            pip install agent-audit-kit==${{ steps.version.outputs.version }}
             ```
 
             **Docker:**
             ```bash
-            docker pull ghcr.io/sattyamjjain/agent-audit-kit:${{ github.ref_name }}
+            docker pull ghcr.io/sattyamjjain/agent-audit-kit:${{ steps.version.outputs.version }}
             ```
 
             **GitHub Action:**
@@ -503,8 +550,13 @@ jobs:
 
             - `rules.json` — deterministic rule bundle
             - `rules.json.sha256` — trusted digest
-            - `sbom.cdx.json` / `sbom.spdx.json` — CycloneDX + SPDX SBOM
-            - `*.sigstore` — Sigstore keyless signatures (verify with `agent-audit-kit verify-bundle`)
+            - `sbom.cdx.json` / `sbom.spdx.json` — CycloneDX + SPDX SBOM of the package and its runtime dependencies
+            - `*.sigstore.json` — Sigstore keyless signature bundles. Verify one, and that this release's workflow signed it:
+
+            ```bash
+            pip install "agent-audit-kit[verify]"
+            agent-audit-kit verify-bundle rules.json --signature rules.json.sigstore.json --tag ${{ github.ref_name }}
+            ```
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 

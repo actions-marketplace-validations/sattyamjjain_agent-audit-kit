@@ -3,7 +3,8 @@
 v0.3.4's AAK-SPLUNK-TOKLOG-001 fires on token-shaped values in log
 sinks at runtime. This rule fires on the *configuration* that makes
 the runtime leak inevitable: a splunk-mcp-server config (inputs.conf,
-splunk-mcp.yaml, anything under splunk-mcp/) that routes a token-bearing
+splunk-mcp.yaml, anything under a directory named for splunk and mcp, such
+as splunk-mcp/ or splunk-mcp-server/) that routes a token-bearing
 source into the `_internal` or `_audit` index.
 """
 
@@ -16,7 +17,7 @@ import yaml
 
 from agent_audit_kit.models import Finding
 
-from ._helpers import SKIP_DIRS, find_line_number, make_finding
+from ._helpers import CONFIG_MAX_BYTES, find_line_number, in_skip_dir, load_yaml, make_finding, read_text_capped
 
 
 _TOKEN_SOURCETYPE_RE = re.compile(
@@ -34,18 +35,27 @@ _INTERNAL_INDEX_RE = re.compile(
 )
 
 
+_NAME_WORD_SPLIT_RE = re.compile(r"[-_.]+")
+
+
+def _names_splunk_mcp(part: str) -> bool:
+    """A directory named for both splunk and mcp, in either order: `splunk-mcp`,
+    `splunk_mcp_server`, `splunk-mcp-server` (the server's own repository name, so a
+    vendored copy below the scan root), `mcp-server-splunk`."""
+    return {"splunk", "mcp"} <= set(_NAME_WORD_SPLIT_RE.split(part.lower()))
+
+
 def _is_splunk_mcp_path(path: Path, project_root: Path) -> bool:
     rel = path.relative_to(project_root)
-    parts = {p.lower() for p in rel.parts}
-    if "splunk-mcp" in parts or "splunk_mcp" in parts:
+    if any(_names_splunk_mcp(part) for part in rel.parts[:-1]):
         return True
     name = path.name.lower()
     return name in {"inputs.conf", "splunk-mcp.yaml", "splunk-mcp.yml", "splunk_mcp.yaml", "splunk_mcp.yml"}
 
 
-def _yaml_routes_token_to_internal(text: str) -> bool:
+def _yaml_routes_token_to_internal(text: str, path: Path) -> bool:
     try:
-        data = yaml.safe_load(text)
+        data = load_yaml(text, path)
     except yaml.YAMLError:
         return False
     if not isinstance(data, dict):
@@ -72,19 +82,19 @@ def scan(project_root: Path) -> tuple[list[Finding], set[str]]:
     for path in project_root.rglob("*"):
         if not path.is_file():
             continue
-        if any(part in SKIP_DIRS for part in path.parts):
+        if in_skip_dir(path, project_root):
             continue
         if not _is_splunk_mcp_path(path, project_root):
             continue
         try:
-            text = path.read_text(encoding="utf-8", errors="replace")
+            text = read_text_capped(path, CONFIG_MAX_BYTES, errors="replace")
         except OSError:
             continue
 
         rel = str(path.relative_to(project_root))
         suspicious = False
         if path.suffix in (".yaml", ".yml"):
-            suspicious = _yaml_routes_token_to_internal(text)
+            suspicious = _yaml_routes_token_to_internal(text, path)
         # Always run the line-pair regex too — picks up inputs.conf and
         # mixed YAML files where keys aren't structured.
         if not suspicious:

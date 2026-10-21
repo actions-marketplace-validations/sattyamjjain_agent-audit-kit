@@ -19,7 +19,7 @@ from pathlib import Path
 
 from agent_audit_kit.models import Finding
 
-from ._helpers import SKIP_DIRS, make_finding
+from ._helpers import SOURCE_MAX_BYTES, in_skip_dir, make_finding, read_text_capped
 
 
 _REPLY_SINK_RE = re.compile(
@@ -88,10 +88,10 @@ def scan(project_root: Path) -> tuple[list[Finding], set[str]]:
     scanned: set[str] = set()
     findings: list[Finding] = []
     for path in project_root.rglob("*.py"):
-        if any(part in SKIP_DIRS for part in path.parts):
+        if in_skip_dir(path, project_root):
             continue
         try:
-            text = path.read_text(encoding="utf-8", errors="replace")
+            text = read_text_capped(path, SOURCE_MAX_BYTES, errors="replace")
         except OSError:
             continue
         findings.extend(_walk_python(text, path, project_root, scanned))

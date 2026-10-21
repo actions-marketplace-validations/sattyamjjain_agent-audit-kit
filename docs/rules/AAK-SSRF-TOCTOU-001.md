@@ -9,11 +9,11 @@
 | Shipped | v0.3.5 (2026-04-25) |
 | Scanner | `agent_audit_kit/scanners/ssrf_toctou.py` |
 | CWE | CWE-367 (TOCTOU) + CWE-918 (SSRF) |
-| OWASP MCP | MCP05:2025 |
-| OWASP Agentic | ASI04 |
+| OWASP MCP | MCP05:2025 (Command Injection & Execution) |
+| OWASP Agentic | ASI02 (Tool Misuse and Exploitation) |
 | AICM | IVS-04, AIS-08 |
 | CVE | [CVE-2026-41488](https://nvd.nist.gov/vuln/detail/CVE-2026-41488) |
-| Advisory | [GHSA-r7w7-9xr2-qq2r](https://advisories.gitlab.com/pypi/langchain-openai/GHSA-r7w7-9xr2-qq2r/) |
+| Advisory | [GHSA-r7w7-9xr2-qq2r](https://github.com/advisories/GHSA-r7w7-9xr2-qq2r) |
 
 ## What it catches
 
@@ -50,9 +50,9 @@ The pin check covers `langchain-openai < 1.1.14` across
 
 - Cross-function flow where the validator runs in one helper and the
   fetch in another — we look only within a single function body.
-  Refactor to consolidate, or silence with
-  `# aak: ignore[AAK-SSRF-TOCTOU-001]` if the cross-function design
-  has its own TTL-bounded DNS pin.
+  Refactor to consolidate, or, if the cross-function design has its
+  own TTL-bounded DNS pin, list the file under `ignore-paths` in
+  `.agent-audit-kit.yml`. AAK reads no per-line suppression comment.
 - Any pattern AAK-LANGCHAIN-SSRF-REDIR-001 already catches — when both
   rules would fire on the same code, the redirect-bypass rule wins
   by being CRITICAL-class.

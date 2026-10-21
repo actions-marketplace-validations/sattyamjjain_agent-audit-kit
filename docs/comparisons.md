@@ -25,7 +25,7 @@ file an issue and we will correct it (best-effort — no fixed clock).
 | Signed rule bundle | Yes (Sigstore) | Partial (SLSA provenance on releases) | No — it GPG-signs release checksums and ships an SBOM, but there is no rule set on disk to sign | No | No |
 | Deterministic (reproducible CI) | **Yes** | Yes (sub-ms policy enforcement) | No — analysis runs through the Agent Scan API against a dated API model, so a result depends on service state as well as the commit | Partial | No |
 | Public CVE-to-rule ledger | **Yes** (CHANGELOG.cves.md) | No (internal cadence) | No | No | No |
-| MCP Security Index / leaderboard | **Yes** — server count and last-snapshot date are [stated once in the README](../README.md#mcp-security-index), which `scripts/index_cadence.py` writes from the published `history.json` | No | No | No | No |
+| MCP Security Index / leaderboard | **Yes** — server count and last-snapshot date are [stated once in the README](https://github.com/sattyamjjain/agent-audit-kit/blob/main/README.md#mcp-security-index), which `scripts/index_cadence.py` writes from the published `history.json` | No | No | No | No |
 | Pin + drift verification of tool surface | **Yes** | Yes (via Agent Runtime rings) | Partial — it models a `ServerSignature` of the tool surface and sends it for analysis, but ships no pin/verify command to fail a build on drift | No | No |
 | OWASP Agentic Top 10 coverage | 10/10 | 10/10 | Not advertised (no OWASP mapping in its README or `docs/`, checked 2026-09-16) | Partial | Partial |
 
@@ -207,7 +207,7 @@ coexisted, the README linked only this one, and the other two drifted unread._
 
 | Feature | AgentAuditKit | mcp-scan | Snyk Agent | Agent Audit | Microsoft AGT |
 |---------|:---:|:---:|:---:|:---:|:---:|
-| **Rules** | <!-- rule-count:total -->357<!-- /rule-count --> | ~10 | 20 codes (v0.5.x) / 15 risks (v0.6+) [†](#snyk-rule-count) | 57 | N/A (runtime) |
+| **Rules** | <!-- rule-count:total -->412<!-- /rule-count --> | ~10 | 20 codes (v0.5.x) / 15 risks (v0.6+) [†](#snyk-rule-count) | 57 | N/A (runtime) |
 | MCP config scanning | Yes | No | Yes | No | No |
 | Hook injection detection | Yes | No | No | No | No |
 | Trust boundary analysis | Yes | No | No | No | Yes |
@@ -278,7 +278,7 @@ consumers can pick the right tool for their stack.
 |---|---|---|
 | License | Apache-2.0, OSS | Proprietary, Ultimate-tier paywall |
 | Distribution | PyPI + Marketplace + Docker + VS Code ext | GitLab CI / Premium offering only |
-| Rule count | <!-- rule-count:total -->357<!-- /rule-count --> | Not publicly disclosed |
+| Rule count | <!-- rule-count:total -->412<!-- /rule-count --> | Not publicly disclosed |
 | OWASP Agentic Top 10 mapping | Per-rule, public JSON manifest | Claimed; mapping not published |
 | MCP Top 10 mapping | Per-rule | Not advertised |
 | AICM (CSA) mapping | Yes | Not advertised |

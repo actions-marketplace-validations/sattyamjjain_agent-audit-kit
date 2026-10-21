@@ -38,7 +38,7 @@ class TestDiscoverAgents:
         # Filter out user-level agents -- only check project-level
         project_names = {
             "Claude Code", "Cursor", "VS Code Copilot", "Windsurf",
-            "Amazon Q", "Goose", "Continue", "Roo Code", "Kiro",
+            "Amazon Q", "Goose", "Continue", "Roo Code", "Kiro", "ZCode",
         }
         project_agents = [a for a in agents if a.name in project_names]
         assert len(project_agents) == 0
@@ -67,6 +67,22 @@ class TestDiscoverAgents:
         assert len(cursor) == 1
         assert cursor[0].mcp_server_count == 1
 
+    def test_vscode_servers_are_counted(self, tmp_path: Path) -> None:
+        """`.vscode/mcp.json` keeps its servers under `servers`; reading only
+        `mcpServers` reported every VS Code workspace as having none."""
+        vscode = tmp_path / ".vscode"
+        vscode.mkdir()
+        cfg = {"servers": {
+            "a": {"type": "stdio", "command": "node", "args": ["a.js"]},
+            "b": {"type": "http", "url": "https://mcp.example.com/mcp"},
+        }}
+        (vscode / "mcp.json").write_text(json.dumps(cfg))
+
+        agents = discover_agents(project_root=tmp_path)
+        vs_code = [a for a in agents if a.name == "VS Code Copilot"]
+        assert len(vs_code) == 1
+        assert vs_code[0].mcp_server_count == 2
+
     def test_hook_counting_from_claude_settings(self, tmp_path: Path) -> None:
         claude_dir = tmp_path / ".claude"
         claude_dir.mkdir()
@@ -84,6 +100,29 @@ class TestDiscoverAgents:
         claude = [a for a in agents if a.name == "Claude Code"][0]
         assert claude.hook_count == 3
 
+    def test_hook_counting_counts_each_hook_in_a_matcher_group(self, tmp_path: Path) -> None:
+        """Claude Code's documented shape nests the hooks in a matcher group; the
+        count is of hooks, not of groups (it read 2 here before)."""
+        claude_dir = tmp_path / ".claude"
+        claude_dir.mkdir()
+        settings = {
+            "hooks": {
+                "PreToolUse": [{
+                    "matcher": "Bash",
+                    "hooks": [
+                        {"type": "command", "command": "echo 1"},
+                        {"type": "command", "command": "echo 2"},
+                    ],
+                }],
+                "Stop": [{"hooks": [{"type": "command", "command": "echo 3"}]}],
+            }
+        }
+        (claude_dir / "settings.json").write_text(json.dumps(settings))
+
+        agents = discover_agents(project_root=tmp_path)
+        claude = [a for a in agents if a.name == "Claude Code"][0]
+        assert claude.hook_count == 3
+
     def test_malformed_json_skipped(self, tmp_path: Path) -> None:
         (tmp_path / ".mcp.json").write_text("{invalid json")
         agents = discover_agents(project_root=tmp_path)
@@ -96,7 +135,7 @@ class TestDiscoverAgents:
         agents = discover_agents(project_root=None)
         project_names = {
             "Claude Code", "Cursor", "VS Code Copilot", "Windsurf",
-            "Amazon Q", "Goose", "Continue", "Roo Code", "Kiro",
+            "Amazon Q", "Goose", "Continue", "Roo Code", "Kiro", "ZCode",
         }
         project_agents = [a for a in agents if a.name in project_names]
         assert len(project_agents) == 0
@@ -111,8 +150,14 @@ class TestCountHooks:
         assert _count_hooks(data) == 3
 
     def test_hooks_non_list_value(self) -> None:
-        data = {"hooks": {"event1": "single-value"}}
+        data = {"hooks": {"event1": {"command": "a"}}}
         assert _count_hooks(data) == 1
+
+    def test_a_bare_string_under_an_event_is_not_a_hook(self) -> None:
+        """Counted as one while the count was of entries; it defines no hook a
+        client would run, so a count of hooks leaves it out."""
+        data = {"hooks": {"event1": "single-value"}}
+        assert _count_hooks(data) == 0
 
     def test_hooks_not_dict_returns_zero(self) -> None:
         data = {"hooks": "invalid"}

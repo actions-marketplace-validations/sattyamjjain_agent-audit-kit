@@ -70,9 +70,11 @@ __all__ = ["scan_cmd"]
     is_flag=True,
     default=False,
     help=(
-        "Exit 0 even when a scanner crashed. Off by default: a run whose "
-        "scanners died is incomplete, and an incomplete scan that exits 0 is "
-        "indistinguishable from a clean one (issue #743)."
+        "Exit 0 even when a scanner did not finish every file, whether it "
+        "crashed or refused a file it could not parse safely, or --llm-scan "
+        "left a tool unanalyzed. Off by default: such a run is incomplete, and "
+        "an incomplete scan that exits 0 is indistinguishable from a clean one "
+        "(issue #743)."
     ),
 )
 @click.option(
@@ -92,9 +94,9 @@ __all__ = ["scan_cmd"]
 @click.option("--score", "show_score", is_flag=True, default=False, help="Show security score and grade.")
 @click.option("--owasp-report", is_flag=True, default=False, help="Show OWASP coverage matrix.")
 @click.option("--compliance", default=None, help="Compliance framework: eu-ai-act, soc2, iso27001, iso42001, hipaa, nist-ai-rmf, nsa-mcp-csi-2026 (NSA AISC MCP Security CSI, U/OO/6030316-26), aicm (CSA AI Controls Matrix, CSV output), mcp-2026-roadmap (MCP 2026 Roadmap conformance).")
-@click.option("--verify-secrets", is_flag=True, default=False, help="Actively verify if detected secrets are live (makes network calls).")
-@click.option("--diff", "diff_base", default=None, help="Only report findings in files changed since BASE_REF (e.g., HEAD~1, main).")
-@click.option("--llm-scan", is_flag=True, default=False, help="Run LLM semantic analysis on tool descriptions (opt-in).")
+@click.option("--verify-secrets", is_flag=True, default=False, help="Actively verify whether detected Anthropic, OpenAI, GitHub and GitLab keys are live (makes network calls; AWS and GCP keys are reported but not checked).")
+@click.option("--diff", "diff_base", default=None, help="Only report findings in files changed since BASE_REF (e.g., HEAD~1, main), untracked files included. If git cannot answer (not a repository, unknown ref), every finding is reported and a warning says so.")
+@click.option("--llm-scan", is_flag=True, default=False, help="Ask the model chosen with --llm whether each tool's metadata (MCP config tools, *tools*.json, Python and TypeScript tool registrations, SKILL.md) tries to manipulate the agent (opt-in; sends that text to the provider).")
 @click.option(
     "--sessions",
     default=None,
@@ -111,9 +113,10 @@ __all__ = ["scan_cmd"]
     "llm_model",
     default="ollama/gemma2:2b",
     help=(
-        "LLM model slug when --llm-scan is set. Prefix selects provider: "
-        "claude* (Anthropic, ANTHROPIC_API_KEY), gpt* (OpenAI, OPENAI_API_KEY), "
-        "gemini* (Google, GEMINI_API_KEY), or ollama/<model> (local Ollama daemon)."
+        "Model for --llm-scan. The prefix selects the provider: claude-* "
+        "(Anthropic, ANTHROPIC_API_KEY; e.g. claude-haiku-5-5, claude-sonnet-5-5), "
+        "gpt-* (OpenAI, OPENAI_API_KEY), gemini-* (Google, GEMINI_API_KEY), or "
+        "ollama/<model> (local Ollama daemon, the default; nothing leaves the machine)."
     ),
 )
 @click.option(
@@ -348,27 +351,69 @@ def _run_scan(
     if diff_base:
         from agent_audit_kit.diff import filter_by_diff
 
-        result = filter_by_diff(result, project_root, diff_base)
+        filtered = filter_by_diff(result, project_root, diff_base)
+        # filter_by_diff hands back the same object when git could not list
+        # the changed files. That fallback reports everything, which is the
+        # safe direction, but silently it reads as "these are the findings in
+        # your change" when no diff was taken at all.
+        if filtered is result:
+            click.echo(
+                f"Warning: --diff {diff_base}: git could not list the changed files "
+                "(not a git repository, or the ref does not resolve), so every "
+                "finding is reported.",
+                err=True,
+            )
+        result = filtered
 
     # Active secret verification
     if verify_secrets:
         from agent_audit_kit.verification import verify_findings
 
-        result = verify_findings(result)
+        result = verify_findings(result, project_root)
 
-    # LLM semantic analysis (opt-in, provider chosen by --llm)
+    # LLM semantic analysis (opt-in, provider chosen by --llm). Through 0.6.22 a
+    # missing key, a refused request or a dead endpoint all printed nothing
+    # unless --verbose and returned no findings, which read as "the model
+    # looked and found nothing". The summary line now always prints, and a
+    # tool the model did not analyze is an AAK-LLM-002 finding that makes the
+    # run INCOMPLETE below.
     if llm_scan:
-        try:
-            from agent_audit_kit.llm_scan import run_llm_analysis
+        from agent_audit_kit.llm_scan import GAP_RULE_ID, run_llm_scan
 
-            if verbose:
-                click.echo(f"LLM scan using model: {llm_model}", err=True)
-            llm_findings = run_llm_analysis(project_root, model=llm_model)
-            result.findings.extend(llm_findings)
+        try:
+            report = run_llm_scan(project_root, model=llm_model)
         except ValueError as e:
             click.echo(f"LLM scan config error: {e}", err=True)
-        except Exception as e:
-            click.echo(f"LLM scan failed: {e}", err=True)
+            sys.exit(EXIT_ERROR)
+        except Exception as e:  # a bug in the analysis must not pass as a clean run
+            from agent_audit_kit.scanners._helpers import make_finding
+
+            click.echo(f"LLM scan failed: {type(e).__name__}: {e}", err=True)
+            result.findings.append(make_finding(
+                GAP_RULE_ID, "<llm-scan>",
+                f"the LLM analysis crashed ({type(e).__name__}: {e}); no tool was analyzed",
+            ))
+        else:
+            result.findings.extend(report.findings)
+            if report.tools_found == 0:
+                click.echo(
+                    f"LLM scan ({report.provider}, {report.model}): found no tool "
+                    "metadata to analyze (MCP config tools, *tools*.json, Python or "
+                    "TypeScript tool registrations, SKILL.md).",
+                    err=True,
+                )
+            else:
+                summary = (
+                    f"LLM scan ({report.provider}, {report.model}): "
+                    f"{report.analyzed} of {report.tools_found} tool(s) analyzed, "
+                    f"{report.flagged} flagged, {report.gaps} not analyzed."
+                )
+                if report.stopped:
+                    summary += f" Stopped early: {report.stopped}."
+                others = sorted(m for m in report.served_models if m != report.model)
+                if others:
+                    summary += f" Served by: {', '.join(others)}."
+                click.echo(summary, err=True)
 
     # Session-transcript ingest. The session-scoped rules only discover
     # *.session.json / .aak/sessions/ inside the project root, which no agent
@@ -376,22 +421,30 @@ def _run_scan(
     # SDK traces, LangGraph checkpoints, raw JSONL) into that shape and runs the
     # same rule over them, unchanged.
     if sessions:
+        from agent_audit_kit.engine import _OPTIONAL_SCANNERS, _refused_file_findings
+        from agent_audit_kit.scanners._helpers import collecting_refusals
         from agent_audit_kit.sessions.adapters import load_transcripts, scan_sessions
 
         sessions_path = Path(sessions)
-        transcripts = load_transcripts(sessions_path)
-        if verbose:
-            for tpath, fmt, calls in transcripts:
-                click.echo(f"session: {tpath} ({fmt}, {len(calls)} calls)", err=True)
-        if not transcripts:
-            click.echo(
-                f"Warning: no readable session transcript found at {sessions} "
-                f"(supported: OpenAI Agents SDK traces, LangGraph checkpoint/thread "
-                f"state, JSONL of {{tool, args, ts}}, AAK *.session.json).",
-                err=True,
-            )
-        else:
-            result.findings.extend(scan_sessions(sessions_path, config_root=project_root))
+        # A transcript nested past `JSON_MAX_NESTING` levels is refused, and
+        # reported as a refused file in the project is, so the scan says it is
+        # incomplete rather than passing on what it did not read.
+        with collecting_refusals() as refused:
+            transcripts = load_transcripts(sessions_path)
+            if verbose:
+                for tpath, fmt, calls in transcripts:
+                    click.echo(f"session: {tpath} ({fmt}, {len(calls)} calls)", err=True)
+            if not transcripts:
+                click.echo(
+                    f"Warning: no readable session transcript found at {sessions} "
+                    f"(supported: OpenAI Agents SDK traces, LangGraph checkpoint/thread "
+                    f"state, JSONL of {{tool, args, ts}}, AAK *.session.json).",
+                    err=True,
+                )
+            else:
+                result.findings.extend(scan_sessions(sessions_path, config_root=project_root))
+        splice = next(name for module, name, _ in _OPTIONAL_SCANNERS if module == "session_splice")
+        result.findings.extend(_refused_file_findings(splice, refused, project_root))
 
     # RUGPULL / pin-drift detection now lives in the scanners/pin_drift.py
     # scanner and runs as part of run_scan() above.
@@ -475,21 +528,36 @@ def _run_scan(
     #
     # The opt-out is a flag rather than the default so that the safe state is
     # what you get by not thinking about it.
+    #
+    # An --llm-scan that could not analyze every tool (AAK-LLM-002) is the same
+    # question with the same answer: the run did not cover what it was asked to
+    # cover, so it cannot exit as clean.
     failures = result.scanner_failures
-    if failures and not allow_scanner_failure:
+    gaps = result.llm_gaps
+    if (failures or gaps) and not allow_scanner_failure:
         click.echo("", err=True)
-        click.echo(
-            f"INCOMPLETE: {len(failures)} scanner(s) crashed; the rules they own "
-            f"were not evaluated. This scan cannot show a clean result.",
-            err=True,
-        )
-        for f in failures:
-            click.echo(f"  {f.evidence}", err=True)
-        click.echo(
-            "  Pass --allow-scanner-failure to exit 0 anyway, and please file "
-            "the crash at https://github.com/sattyamjjain/agent-audit-kit/issues",
-            err=True,
-        )
+        if failures:
+            click.echo(
+                f"INCOMPLETE: {len(result.failed_scanners)} scanner(s) did not finish every file "
+                "(a crash or a refused file); the rules they own may be missing findings. "
+                "This scan cannot show a clean result.",
+                err=True,
+            )
+            for f in failures:
+                click.echo(f"  {f.evidence}", err=True)
+        if gaps:
+            click.echo(
+                "INCOMPLETE: --llm-scan did not analyze every tool, so it cannot "
+                "show a clean result for the ones it skipped.",
+                err=True,
+            )
+            for f in gaps:
+                click.echo(f"  {f.evidence}", err=True)
+        hint = "  Pass --allow-scanner-failure to exit 0 anyway"
+        if failures:
+            hint += (". A refused file is named with the reason; please file a crash at "
+                     "https://github.com/sattyamjjain/agent-audit-kit/issues")
+        click.echo(hint, err=True)
         sys.exit(EXIT_FINDINGS)
 
     # --- Fail-on threshold check ---

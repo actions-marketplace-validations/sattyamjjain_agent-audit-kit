@@ -16,6 +16,8 @@ import json
 import textwrap
 from pathlib import Path
 
+import pytest
+
 from agent_audit_kit.engine import run_scan
 from agent_audit_kit.output.compliance import FRAMEWORKS, format_results
 from agent_audit_kit.output.sarif import format_results as format_sarif
@@ -52,9 +54,10 @@ def test_tunnel_001_metadata_shape() -> None:
     assert r.severity.name == "CRITICAL"
     assert r.category.name == "MCP_CONFIG"
     assert r.sarif_name == "McpTunnelSsrfDefenseDisabled"
-    assert "MCP04:2025" in r.owasp_mcp_references
-    assert "MCP06:2025" in r.owasp_mcp_references
-    assert {"ASI02", "ASI05"} <= set(r.owasp_agentic_references)
+    # SSRF sits under OWASP MCP05 (API requests built from untrusted input) and
+    # ASI02. The MCP04/MCP06 pins here were AAK's retired numbering.
+    assert r.owasp_mcp_references == ["MCP05:2025"]
+    assert r.owasp_agentic_references == ["ASI02"]
     assert any("Anthropic MCP Tunnels" in ref for ref in r.incident_references)
 
 
@@ -64,7 +67,8 @@ def test_tunnel_002_metadata_shape() -> None:
     assert r.category.name == "MCP_CONFIG"
     assert r.sarif_name == "McpTunnelUpstreamNoTrustAnchor"
     assert "MCP07:2025" in r.owasp_mcp_references
-    assert "ASI03" in r.owasp_agentic_references
+    # A channel open to MITM is ASI07 (Insecure Inter-Agent Communication).
+    assert "ASI07" in r.owasp_agentic_references
 
 
 def test_tunnel_003_metadata_shape() -> None:
@@ -72,8 +76,10 @@ def test_tunnel_003_metadata_shape() -> None:
     assert r.severity.name == "CRITICAL"
     assert r.category.name == "MCP_CONFIG"
     assert r.sarif_name == "McpTunnelCredentialHardcoded"
-    assert {"MCP02:2025", "MCP07:2025"} <= set(r.owasp_mcp_references)
-    assert {"ASI03", "ASI06"} <= set(r.owasp_agentic_references)
+    # A hardcoded tunnel token or TLS key is OWASP MCP01 (Token Mismanagement &
+    # Secret Exposure) and ASI03 (authentication material).
+    assert r.owasp_mcp_references == ["MCP01:2025"]
+    assert r.owasp_agentic_references == ["ASI03"]
 
 
 # ---------------------------------------------------------------------------
@@ -152,6 +158,57 @@ def test_001_rfc1918_only_passes(tmp_path: Path) -> None:
     """)
     findings, _ = scan(tmp_path)
     assert "AAK-MCP-TUNNEL-001" not in _ids(findings)
+
+
+# Multi-document files. `yaml.safe_load` raises on more than one document and
+# both callers skipped the file on that error, so a second document, or only a
+# trailing `---`, hid a CRITICAL finding and dropped the file from files_scanned.
+
+_DISABLED = (
+    "tunnel_domain: acme.tunnel.anthropic.com\n"
+    "routes:\n"
+    "  wiki: http://wiki.internal:8080\n"
+    "upstream:\n"
+    "  disable_ip_validation: true\n"
+)
+
+
+def _scan_config(root: Path, text: str) -> tuple[list[str], set[str]]:
+    path = root / "mcp-gateway" / "config.yaml"
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(text, encoding="utf-8")
+    findings, scanned = scan(root)
+    return [f.rule_id for f in findings], scanned
+
+
+@pytest.mark.parametrize("text", [
+    "---\n# production\n" + _DISABLED + "---\n# staging overrides\nlisten_addr: \":9444\"\n",
+    _DISABLED + "---\n",
+    "listen_addr: \":9444\"\n---\n" + _DISABLED,
+])
+def test_001_reads_every_document_of_a_file(tmp_path: Path, text: str) -> None:
+    ids, scanned = _scan_config(tmp_path, text)
+    assert ids == ["AAK-MCP-TUNNEL-001"]
+    assert scanned == {"mcp-gateway/config.yaml"}
+
+
+def test_001_the_same_setting_in_two_documents_is_reported_once(tmp_path: Path) -> None:
+    ids, _ = _scan_config(tmp_path, _DISABLED + "---\n" + _DISABLED)
+    assert ids == ["AAK-MCP-TUNNEL-001"]
+
+
+def test_002_reads_a_proxy_config_in_a_second_document(tmp_path: Path) -> None:
+    second = "tunnel_domain: acme.tunnel.anthropic.com\nroutes:\n  docs: https://docs.internal:8443\n"
+    ids, _ = _scan_config(tmp_path, "log_level: debug\n---\n" + second)
+    assert ids == ["AAK-MCP-TUNNEL-002"]
+
+
+@pytest.mark.parametrize("text", [
+    "listen_addr: \":9443\"\n---\nlog_level: debug\n",
+    "tunnel_domain: [unclosed\nroutes: {}\n",
+])
+def test_a_file_with_no_readable_proxy_config_is_skipped(tmp_path: Path, text: str) -> None:
+    assert _scan_config(tmp_path, text) == ([], set())
 
 
 # ---------------------------------------------------------------------------
@@ -409,8 +466,8 @@ def test_iso42001_framework_is_registered() -> None:
     asi_pool = set()
     for asi_list in controls.values():
         asi_pool.update(asi_list)
-    # Our TUNNEL rules carry ASI02 / ASI03 / ASI04 / ASI05 / ASI06.
-    assert asi_pool & {"ASI02", "ASI03", "ASI04", "ASI05", "ASI06"}
+    # Our TUNNEL rules carry ASI02 / ASI03 / ASI07.
+    assert asi_pool & {"ASI02", "ASI03", "ASI07"}
 
 
 def test_iso42001_text_report_renders_with_tunnel_finding(tmp_path: Path) -> None:

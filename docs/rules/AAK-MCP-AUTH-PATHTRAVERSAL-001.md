@@ -9,8 +9,8 @@
 | Shipped | v0.3.43 (2026-07-04) |
 | Scanner | `agent_audit_kit/scanners/mcp_auth_pathtraversal.py` |
 | CWE | CWE-22 (Path Traversal) |
-| OWASP MCP | MCP07:2025 (Authentication / Authorization) |
-| OWASP Agentic | ASI03 |
+| OWASP MCP | MCP07:2025 (Insufficient Authentication & Authorization) |
+| OWASP Agentic | ASI03 (Identity and Privilege Abuse) |
 | AICM | IAM-01, IVS-04 |
 | CVE | [CVE-2026-52830](https://nvd.nist.gov/vuln/detail/CVE-2026-52830) (CVSS 9.4) |
 
@@ -59,8 +59,9 @@ normalize guard.
 
 - Cross-function flow where the token is extracted in one helper and the path
   built in another — detection is within a single function body. Consolidate,
-  or silence with `# aak: ignore[AAK-MCP-AUTH-PATHTRAVERSAL-001]` if the
-  cross-function design has its own reject-and-contain guard.
+  or, if the cross-function design has its own reject-and-contain guard, list
+  the file under `ignore-paths` in `.agent-audit-kit.yml`. AAK reads no
+  per-line suppression comment.
 - A resource-handler traversal on a request *path* parameter (that is
   `AAK-MCP-015`) — this rule is specifically the auth-*token*-as-filename case.
 

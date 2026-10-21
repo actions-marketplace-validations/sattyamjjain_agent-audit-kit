@@ -7,12 +7,14 @@ open challenge for harness engineering.
 
 The defensive code shape: a Python class whose name matches an
 Agent pattern (`*Agent`, `*Worker`, `*Harness`) accesses a
-module-level or class-level mutable shared object (dict / list /
-set) without using a lock primitive (`threading.Lock` /
+module-level mutable shared object (dict / list / set) without
+using a lock primitive (`threading.Lock` /
 `asyncio.Lock` / `multiprocessing.Lock` / contextmanager named
 `*lock*`). The detector fires when at least 2 distinct Agent
 classes write to the same shared symbol with no lock acquisition
-visible in either function scope.
+visible in either function scope. State held as a class attribute
+(`self.registry[key] = value`, `Registry.items.append(...)`) is not
+tracked, as the rule's limitation says.
 
 **Research-grade** (MEDIUM severity). The Code-as-Harness paper is
 a survey, not a code prescription — it identifies the open
@@ -31,7 +33,14 @@ from __future__ import annotations
 import ast
 from pathlib import Path
 
-from agent_audit_kit.models import Category, Finding, Severity
+from agent_audit_kit.models import Finding
+from agent_audit_kit.scanners._helpers import (
+    SOURCE_MAX_BYTES,
+    in_skip_dir,
+    make_finding,
+    parse_python,
+    read_text_capped,
+)
 
 
 _AGENT_CLASS_SUFFIXES: tuple[str, ...] = ("Agent", "Worker", "Harness")
@@ -136,14 +145,14 @@ def _function_mutations_against(
 def _scan_python_file(path: Path, rel: str) -> list[Finding]:
     findings: list[Finding] = []
     try:
-        src = path.read_text(encoding="utf-8", errors="replace")
+        src = read_text_capped(path, SOURCE_MAX_BYTES, errors="replace")
     except OSError:
         return findings
     # Pre-filter: file must contain at least one *Agent / *Worker / *Harness class.
     if not any(suf in src for suf in _AGENT_CLASS_SUFFIXES):
         return findings
     try:
-        tree = ast.parse(src, filename=str(path))
+        tree = parse_python(src, path)
     except SyntaxError:
         return findings
 
@@ -174,21 +183,8 @@ def _scan_python_file(path: Path, rel: str) -> list[Finding]:
             continue
         primary_line = writes[0][1]
         agent_list = ", ".join(sorted(agent_names))
-        findings.append(Finding(
+        findings.append(make_finding(
             rule_id="AAK-AGENT-HARNESS-SHARED-STATE-001",
-            title="Multi-agent shared state mutated by >=2 agents without a lock primitive",
-            description=(
-                "A module-level mutable object (`dict` / `list` / `set` "
-                "/ comprehension result) is mutated by methods of >=2 "
-                "distinct Agent / Worker / Harness classes without a "
-                "lock primitive (`threading.Lock` / `asyncio.Lock` / "
-                "etc.) visible in any of the mutating functions. Per "
-                "*Code as Agent Harness* (arXiv:2605.18747, EASE 2026 "
-                "survey), 'consistent shared state across multiple "
-                "agents' is an explicit open challenge."
-            ),
-            severity=Severity.MEDIUM,
-            category=Category.A2A_PROTOCOL,
             file_path=rel,
             line_number=primary_line,
             evidence=(
@@ -196,17 +192,6 @@ def _scan_python_file(path: Path, rel: str) -> list[Finding]:
                 f"{{{agent_list}}} without a lock acquisition in any "
                 "of the mutating function bodies"
             ),
-            remediation=(
-                "Guard every mutation against the shared symbol with a "
-                "lock primitive (`threading.Lock` / `asyncio.Lock` / "
-                "`multiprocessing.Lock`). If serialization is enforced "
-                "by an external coordinator (database transaction, "
-                "message queue), this rule's false-positive rate is "
-                "expected — add a `# noqa: AAK-AGENT-HARNESS-SHARED-STATE-001` "
-                "comment with the coordinator name to suppress."
-            ),
-            owasp_agentic_references=["ASI04", "ASI06"],
-            incident_references=["ARXIV-2605.18747"],
         ))
     return findings
 
@@ -218,7 +203,7 @@ def scan(project_root: Path) -> tuple[list[Finding], set[str]]:
     for path in project_root.rglob("*.py"):
         if not path.is_file():
             continue
-        if any(part in skip_dirs for part in path.parts):
+        if in_skip_dir(path, project_root, skip_dirs):
             continue
         rel = str(path.relative_to(project_root))
         fires = _scan_python_file(path, rel)

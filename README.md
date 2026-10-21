@@ -7,9 +7,9 @@
   <a href="https://pypi.org/project/agent-audit-kit/"><img src="https://img.shields.io/pypi/v/agent-audit-kit.svg" alt="PyPI"></a>
   <a href="https://www.python.org/downloads/"><img src="https://img.shields.io/badge/python-3.9+-blue.svg" alt="Python 3.9+"></a>
   <a href="https://www.apache.org/licenses/LICENSE-2.0"><img src="https://img.shields.io/badge/License-Apache_2.0-blue.svg" alt="License: Apache-2.0"></a>
-  <a href="#what-it-finds"><img src="https://img.shields.io/badge/rules-357-blue.svg" alt="Rules: 357"></a>
-  <a href="https://sattyamjjain.github.io/agent-audit-kit/docs/research/state-of-mcp-2026/REPORT/#how-to-cite-this-report"><img src="https://img.shields.io/badge/cite-State_of_MCP_Security_2026_v1.0-informational.svg" alt="Cite the State of MCP Security 2026 report, version 1.0"></a>
-  <!-- fp-badge --><a href="benchmarks/false_positive/RESULTS.md"><img src="https://img.shields.io/badge/benign--slice%20536%20configs-HIGH%2FCRIT%20FP%200%2F1-brightgreen.svg" alt="Benign-slice false-positive measurement: 536 configs scanned, 0 of 1 HIGH/CRITICAL findings were false positives (0.0%)"></a><!-- /fp-badge -->
+  <a href="#what-it-finds"><img src="https://img.shields.io/badge/rules-412-blue.svg" alt="Rules: 412"></a>
+  <a href="https://sattyamjjain.github.io/agent-audit-kit/docs/research/state-of-mcp-2026/REPORT/#how-to-cite-this-report"><img src="https://img.shields.io/badge/cite-State_of_MCP_Security_2026_v1.1-informational.svg" alt="Cite the State of MCP Security 2026 report, version 1.1"></a>
+  <!-- fp-badge --><a href="benchmarks/false_positive/RESULTS.md"><img src="https://img.shields.io/badge/benign--slice%20536%20MCP%20configs-1%20HIGH%2FCRIT%20finding%2C%200%20false-brightgreen.svg" alt="Benign-slice false-positive measurement: 536 MCP configs scanned, 0 of 1 HIGH/CRITICAL findings were false positives (0.0%)"></a><!-- /fp-badge -->
 </p>
 
 <p align="center">
@@ -18,7 +18,7 @@
 
 Static security scanner for MCP-connected AI agent pipelines. It finds
 misconfigurations, hardcoded secrets, tool poisoning, rug pulls, trust-boundary
-violations and tainted data flows across **10 agent platforms** — and emits the
+violations and tainted data flows across **11 agent platforms** — and emits the
 compliance evidence an auditor asks for afterwards.
 
 It runs fully offline. No account, no telemetry, no model in the loop.
@@ -38,7 +38,7 @@ As a pre-commit hook:
 # .pre-commit-config.yaml
 repos:
   - repo: https://github.com/sattyamjjain/agent-audit-kit
-    rev: v0.6.7
+    rev: v0.6.23
     hooks:
       - id: agent-audit-kit
 ```
@@ -47,7 +47,7 @@ In CI:
 
 ```yaml
 # .github/workflows/agent-security.yml
-- uses: sattyamjjain/agent-audit-kit@v0.6.7
+- uses: sattyamjjain/agent-audit-kit@v0.6.23
   with:
     severity: medium
     fail-on: high
@@ -62,21 +62,21 @@ to land findings in the GitHub Security tab. Full
 
 ## What it finds
 
-<!-- rule-count:total -->357<!-- /rule-count --> rules across 14 security categories:
+<!-- rule-count:total -->412<!-- /rule-count --> rules across 14 security categories:
 
 | Category | Rules | What it detects |
 |----------|:-----:|-----------------|
-| **MCP Configuration** | <!-- category-count:MCP_CONFIG -->68<!-- /category-count --> | Missing auth, wildcard CORS, `0.0.0.0` binds, SSRF, OAuth 2.1 and RFC 9728 gaps |
-| **Supply Chain** | <!-- category-count:SUPPLY_CHAIN -->117<!-- /category-count --> | Unpinned packages, typosquats, install scripts, and verified CVE version pins |
-| **Tool Poisoning** | <!-- category-count:TOOL_POISONING -->31<!-- /category-count --> | Invisible Unicode, prompt injection in tool and parameter descriptions, rug pulls |
+| **MCP Configuration** | <!-- category-count:MCP_CONFIG -->67<!-- /category-count --> | Missing auth, wildcard CORS, `0.0.0.0` binds, SSRF, OAuth 2.1 and RFC 9728 gaps |
+| **Supply Chain** | <!-- category-count:SUPPLY_CHAIN -->171<!-- /category-count --> | Unpinned packages, typosquats, install scripts, and verified CVE version pins |
+| **Tool Poisoning** | <!-- category-count:TOOL_POISONING -->32<!-- /category-count --> | Invisible Unicode, prompt injection in tool and parameter descriptions, rug pulls |
 | **Secret Exposure** | <!-- category-count:SECRET_EXPOSURE -->18<!-- /category-count --> | Provider keys, tokens in configs and env files, credentials in logs |
-| **Agent Config** | <!-- category-count:AGENT_CONFIG -->18<!-- /category-count --> | Permission escalation, auto-approve, headless trust in CI |
+| **Agent Config** | <!-- category-count:AGENT_CONFIG -->19<!-- /category-count --> | Permission escalation, auto-approve, headless trust in CI |
 | **A2A Protocol** | <!-- category-count:A2A_PROTOCOL -->13<!-- /category-count --> | Missing mutual auth, unbounded delegation, transitive trust |
-| **Hook Injection** | <!-- category-count:HOOK_INJECTION -->17<!-- /category-count --> | Hook RCE, exfiltration through lifecycle hooks |
+| **Hook Injection** | <!-- category-count:HOOK_INJECTION -->16<!-- /category-count --> | Hook RCE, exfiltration through lifecycle hooks |
 | **Taint Analysis** | <!-- category-count:TAINT_ANALYSIS -->14<!-- /category-count --> | `@tool` parameters reaching shell, SQL, filesystem and network sinks |
 | **Transport Security** | <!-- category-count:TRANSPORT_SECURITY -->15<!-- /category-count --> | Cleartext transports, DNS rebinding, session and body-size limits |
 | **Legal Compliance** | <!-- category-count:LEGAL_COMPLIANCE -->19<!-- /category-count --> | Copyleft licences, PII surface, and regional AI duties |
-| **Trust Boundaries** | <!-- category-count:TRUST_BOUNDARY -->17<!-- /category-count --> | Project-scoped trust, untrusted workspace escalation |
+| **Trust Boundaries** | <!-- category-count:TRUST_BOUNDARY -->18<!-- /category-count --> | Project-scoped trust, untrusted workspace escalation |
 | **MCP Server Card** | <!-- category-count:MCP_SERVER_CARD -->4<!-- /category-count --> | Static audit of SEP-1649 server cards |
 | **Composition** | <!-- category-count:COMPOSITION -->3<!-- /category-count --> | Risk that exists only between components, not in any one of them |
 | **Agentic Skills** | <!-- category-count:AGENTIC_SKILL -->3<!-- /category-count --> | OWASP Agentic Skills Top 10 surface in skill bundles |
@@ -99,9 +99,16 @@ Full detail per rule is in the [rule reference](https://github.com/sattyamjjain/
   behaves until it does not — see the
   [Deadbugz case study](https://github.com/sattyamjjain/agent-audit-kit/blob/main/examples/case-studies/deadbugz-delayed-metadata/README.md).
 
-Precision is measured rather than asserted: a hand-adjudicated
+The hand-adjudicated
 [benign-slice false-positive rate](https://github.com/sattyamjjain/agent-audit-kit/blob/main/benchmarks/false_positive/RESULTS.md)
-with a Wilson interval, and any offending rule filed as an issue.
+covers MCP server configs only. Instruction files (`CLAUDE.md`, `AGENTS.md` and
+the like) are not in the slice, and an outside report on 930 repositories
+([#771](https://github.com/sattyamjjain/agent-audit-kit/issues/771)) is what
+exposed `AAK-AGENT-002` on them, fixed in
+[v0.6.8](https://github.com/sattyamjjain/agent-audit-kit/releases/tag/v0.6.8).
+Instruction files now have
+[their own benign slice](https://github.com/sattyamjjain/agent-audit-kit/blob/main/benchmarks/false_positive/instruction_files/RESULTS.md),
+built from that report's corpus; it is pending adjudication, so it has no rate yet.
 
 ## What we measured
 
@@ -109,8 +116,8 @@ From the [State of MCP Security 2026](https://sattyamjjain.github.io/agent-audit
 report ([how to cite](https://sattyamjjain.github.io/agent-audit-kit/docs/research/state-of-mcp-2026/REPORT/#how-to-cite-this-report)):
 
 - <!-- report:corpus -->2,303<!-- /report --> distinct public MCP configs scanned.
-- <!-- report:noauth-pct -->52.1<!-- /report -->% (<!-- report:noauth-n -->1,201<!-- /report -->) declare a remote server with **no authentication**.
-- <!-- report:rfc9728-n -->0<!-- /report --> serve RFC 9728 Protected-Resource-Metadata discovery.
+- <!-- report:noauth-pct -->50.6<!-- /report -->% (<!-- report:noauth-n -->1,166<!-- /report -->) declare a remote server with **no authentication**.
+- <!-- report:rfc9728-n -->0<!-- /report --> reference RFC 9728 Protected-Resource-Metadata discovery in the config.
 - <!-- report:inline-auth-pct -->100<!-- /report -->% (<!-- report:inline-auth-n -->424<!-- /report -->/<!-- report:inline-auth-d -->424<!-- /report -->) of inline-auth remote configs **hardcode a static credential**.
 
 These regenerate from `results.json` and are asserted in CI, so they cannot
@@ -129,27 +136,37 @@ agent-audit-kit vex  . -o vex.openvex.json
 ```
 
 Every control row cites a real clause, and a row the scanner cannot evidence
-says so instead of printing a tick. Full list of the <!-- rule-count:total -->357<!-- /rule-count -->
+says so instead of printing a tick. Full list of the <!-- rule-count:total -->412<!-- /rule-count -->
 rules mapped to 14 frameworks: [compliance reference](https://github.com/sattyamjjain/agent-audit-kit/blob/main/docs/owasp-mapping.md).
 
 ### OWASP Agentic Top 10 coverage
 
+Against the [OWASP Top 10 for Agentic Applications](https://genai.owasp.org/resource/owasp-top-10-for-agentic-applications-for-2026/)
+(Version 2026, December 2025), with OWASP's own titles. A rule is counted when
+it detects the risk, or the absence of a control the entry prescribes for it.
+
 <!-- owasp-coverage:start -->
 | ASI | Title | # rules |
 | --- | --- | --- |
-| **ASI01** | Goal Hijack | 15 |
-| **ASI02** | Tool Misuse | 50 |
-| **ASI03** | Memory Poisoning | 74 |
-| **ASI04** | Identity & Privilege Abuse | 79 |
-| **ASI05** | Cascading Failures | 56 |
-| **ASI06** | Unauthorized Capability Acquisition | 48 |
-| **ASI07** | Plan Injection | 9 |
-| **ASI08** | Agent Communication Poisoning | 5 |
-| **ASI09** | Resource Abuse | 18 |
-| **ASI10** | Supply-Chain | 22 |
+| **ASI01** | Agent Goal Hijack | 17 |
+| **ASI02** | Tool Misuse and Exploitation | 100 |
+| **ASI03** | Identity and Privilege Abuse | 107 |
+| **ASI04** | Agentic Supply Chain Vulnerabilities | 199 |
+| **ASI05** | Unexpected Code Execution (RCE) | 93 |
+| **ASI06** | Memory & Context Poisoning | 5 |
+| **ASI07** | Insecure Inter-Agent Communication | 24 |
+| **ASI08** | Cascading Failures | 9 |
+| **ASI09** | Human-Agent Trust Exploitation | 13 |
+| **ASI10** | Rogue Agents | 5 |
 <!-- owasp-coverage:end -->
 
-Complete mapping for OWASP Agentic, OWASP MCP, and the NSA MCP CSI is in the
+Per-entry rule lists, generated from the registry:
+[Agentic Top 10](https://github.com/sattyamjjain/agent-audit-kit/blob/main/docs/coverage/owasp-agentic-top10.md) ·
+[MCP Top 10 (v0.1, 2025 edition)](https://github.com/sattyamjjain/agent-audit-kit/blob/main/docs/coverage/owasp-mcp-top10.md) ·
+[Agentic Skills Top 10](https://github.com/sattyamjjain/agent-audit-kit/blob/main/docs/coverage/owasp-agentic-skills-top10.md).
+Every MCP Top 10 entry has at least one rule, but not evenly; the MCP table
+labels the thin entries Partial and names their rules. The rule-by-rule NSA MCP
+CSI and OWASP Agentic view is the
 [standards crosswalk](https://github.com/sattyamjjain/agent-audit-kit/blob/main/docs/crosswalk/nsa-csi-owasp-agentic.md).
 
 ## MCP Security Index
@@ -158,7 +175,7 @@ A public leaderboard of scanned public MCP servers, with per-server grade cards
 and a 90-day [disclosure policy](https://github.com/sattyamjjain/agent-audit-kit/blob/main/docs/disclosure-policy.md):
 [sattyamjjain.github.io/agent-audit-kit](https://sattyamjjain.github.io/agent-audit-kit/).
 
-<!-- index-cadence -->Last published snapshot: **2026-09-14** (6 snapshots in [`history.json`](https://sattyamjjain.github.io/agent-audit-kit/data/history.json)). The build fails if this date falls more than 10 days behind, so a stalled index reports itself.<!-- /index-cadence -->
+<!-- index-cadence -->Last published snapshot: **2026-10-19** (11 snapshots in [`history.json`](https://sattyamjjain.github.io/agent-audit-kit/data/history.json)). The build fails if this date falls more than 10 days behind, so a stalled index reports itself.<!-- /index-cadence -->
 
 ## CVE response
 
@@ -172,11 +189,11 @@ regenerated from the ledger, not asserted.
 
 <!-- scanner-count:total -->103<!-- /scanner-count --> scanner modules: AST-based taint analysis for
 Python, and regex dangerous-sink scanners for TypeScript/JavaScript and Rust.
-<!-- test-count:total -->2,481<!-- /test-count --> tests. 27 CLI commands. Releases are Sigstore-signed
+<!-- test-count:total -->4,684<!-- /test-count --> test functions. 27 CLI commands. Releases are Sigstore-signed
 and ship a deterministic rule bundle.
 
-Mechanical fix recipes cover <!-- fix-recipe-coverage:count -->11<!-- /fix-recipe-coverage --> of <!-- rule-count:total -->357<!-- /rule-count --> rules
-(<!-- fix-recipe-coverage:pct -->3.1<!-- /fix-recipe-coverage -->%), applied by `agent-audit-kit fix`. That is a scope
+Mechanical fix recipes cover <!-- fix-recipe-coverage:count -->11<!-- /fix-recipe-coverage --> of <!-- rule-count:total -->412<!-- /rule-count --> rules
+(<!-- fix-recipe-coverage:pct -->2.7<!-- /fix-recipe-coverage -->%), applied by `agent-audit-kit fix`. That is a scope
 decision, not a coverage gap: a recipe ships only where the remediation is
 **deterministic and one-line** — exactly one correct edit, confirmable from the
 diff. Everything else stays advisory on purpose, because a fix that needs

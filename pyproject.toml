@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "agent-audit-kit"
-version = "0.6.7"
+version = "0.6.23"
 description = "Security scanner for MCP-connected AI agent pipelines"
 readme = "README.md"
 license = "Apache-2.0"
@@ -41,6 +41,14 @@ taint = [
     "tree-sitter>=0.21",
     "tree-sitter-typescript>=0.21",
 ]
+# Signature verification for `agent-audit-kit verify-bundle --signature`, lazy-
+# imported like the taint extra. 4.1 is the floor: the oldest release checked to
+# verify a current release bundle offline (3.4's bundled trust root lacks the
+# current Rekor key), and the last one that still supports Python 3.9.
+#   pip install "agent-audit-kit[verify]"
+verify = [
+    "sigstore>=4.1",
+]
 
 dev = [
     # Pulls in the optional taint extra so CI exercises the tree-sitter
@@ -48,6 +56,10 @@ dev = [
     # grammar-gated tests skip on every runner and the analysis would ship with
     # no CI coverage at all — the fallback tests would be the only thing green.
     "agent-audit-kit[taint]",
+    # Same reason for the verify extra: tests/test_verify_bundle.py checks a real
+    # release signature and skips without sigstore, and until 0.6.9 nothing ran
+    # that path at all -- which is how it broke with sigstore 3.0 unnoticed.
+    "agent-audit-kit[verify]",
     "pytest>=7.0",
     "pytest-cov>=4.0",
     "mypy>=1.0",
@@ -56,8 +68,13 @@ dev = [
     # problem was that the repo had no explicit rule selection, so CI enforced
     # whatever ruff happened to ship. `[tool.ruff.lint] select` now pins that set,
     # which makes the bound safe to widen — see the note there before touching it.
-    "ruff>=0.15,<0.17",
+    "ruff>=0.15,<0.18",
     "types-PyYAML>=6.0",
+    # tests/test_docs_research_publishing.py imports the MkDocs build hook and
+    # skips as a whole module without MkDocs. CI installs only this extra, so the
+    # link-rewrite guard for the published research pages never ran there. 1.6 is
+    # the floor because the hook overrides `File.content_string`, added in 1.6.
+    "mkdocs>=1.6",
 ]
 
 [project.scripts]
@@ -96,7 +113,7 @@ extend-exclude = ["tests/fixtures/cves"]
 # enforces: 0.16 expanded the defaults from these 59 rules to a set that flags
 # 314 findings here (148 I001 import-order, 40 SIM102, 16 UP045, ...) — none of
 # them regressions, just rules this project never opted into. That is what broke
-# the `ruff>=0.15,<0.17` bump.
+# the `ruff>=0.15,<0.18` bump.
 #
 # These four selectors reproduce ruff 0.15's default set exactly (verified rule
 # for rule: 59 enabled either way, no additions, no removals), so pinning them

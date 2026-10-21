@@ -3,10 +3,19 @@ from __future__ import annotations
 import json
 import re
 from pathlib import Path
-from typing import Any
+from typing import Any, Iterator
 
 from agent_audit_kit.models import Finding
-from agent_audit_kit.scanners._helpers import find_line_number, make_finding, SKIP_DIRS
+from agent_audit_kit.scanners._helpers import (
+    CONFIG_MAX_BYTES,
+    find_line_number,
+    in_skip_dir,
+    loads_json,
+    make_finding,
+    placed,
+    read_text_capped,
+    url_readings,
+)
 
 # ---- Known file names and patterns for A2A Agent Cards ----
 _AGENT_CARD_FILES: list[str] = [
@@ -24,6 +33,18 @@ _INTERNAL_CAPABILITIES = re.compile(
 _HTTP_URL_RE = re.compile(r"^http://", re.IGNORECASE)
 
 
+def _is_http(value: str) -> bool:
+    """True when a client would reach `value` over cleartext http.
+
+    `^http://` alone missed what a WHATWG client (Node's `fetch`, a browser)
+    still reads as http: a leading space, `http:/host`, `http:\\\\host`, a tab
+    in the scheme. `url_readings` reads those; the regex still answers first.
+    """
+    return bool(_HTTP_URL_RE.match(value)) or any(
+        reading.scheme == "http" for reading in url_readings(value)
+    )
+
+
 def _find_agent_cards(project_root: Path) -> list[Path]:
     """Discover A2A Agent Card files in the project."""
     found: list[Path] = []
@@ -36,7 +57,7 @@ def _find_agent_cards(project_root: Path) -> list[Path]:
 
     # Glob for *agent-card*.json anywhere in the tree
     for p in project_root.rglob("*agent-card*.json"):
-        if any(part in SKIP_DIRS for part in p.relative_to(project_root).parts):
+        if in_skip_dir(p, project_root):
             continue
         if p.is_file() and p not in found:
             found.append(p)
@@ -47,29 +68,27 @@ def _find_agent_cards(project_root: Path) -> list[Path]:
 def _check_capabilities(
     data: dict[str, Any],
     rel_path: str,
-    raw_text: str,
-) -> list[Finding]:
-    """AAK-A2A-001: Check capabilities for internal / admin keywords."""
-    findings: list[Finding] = []
+) -> list[tuple[Finding, str]]:
+    """AAK-A2A-001: Check capabilities for internal / admin keywords; each finding
+    comes with the key its line is found by (see `placed`)."""
+    findings: list[tuple[Finding, str]] = []
     capabilities = data.get("capabilities", [])
     if isinstance(capabilities, list):
         for cap in capabilities:
             if isinstance(cap, str) and _INTERNAL_CAPABILITIES.search(cap):
-                findings.append(make_finding(
+                findings.append((make_finding(
                     "AAK-A2A-001",
                     rel_path,
                     f"Internal capability exposed: {cap}",
-                    find_line_number(raw_text, cap),
-                ))
+                ), cap))
     elif isinstance(capabilities, dict):
         for cap_name in capabilities:
             if isinstance(cap_name, str) and _INTERNAL_CAPABILITIES.search(cap_name):
-                findings.append(make_finding(
+                findings.append((make_finding(
                     "AAK-A2A-001",
                     rel_path,
                     f"Internal capability exposed: {cap_name}",
-                    find_line_number(raw_text, cap_name),
-                ))
+                ), cap_name))
     return findings
 
 
@@ -113,10 +132,10 @@ def _check_authentication(
 def _check_skills(
     data: dict[str, Any],
     rel_path: str,
-    raw_text: str,
-) -> list[Finding]:
-    """AAK-A2A-003: Check for missing inputSchema in skill definitions."""
-    findings: list[Finding] = []
+) -> list[tuple[Finding, str]]:
+    """AAK-A2A-003: Check for missing inputSchema in skill definitions; each finding
+    comes with the key its line is found by (see `placed`)."""
+    findings: list[tuple[Finding, str]] = []
     skills = data.get("skills", [])
     if not isinstance(skills, list):
         return findings
@@ -127,19 +146,17 @@ def _check_skills(
         skill_name = skill.get("name", skill.get("id", "<unnamed>"))
         input_schema = skill.get("inputSchema")
         if input_schema is None:
-            findings.append(make_finding(
+            findings.append((make_finding(
                 "AAK-A2A-003",
                 rel_path,
                 f"Skill '{skill_name}' has no inputSchema",
-                find_line_number(raw_text, str(skill_name)),
-            ))
+            ), str(skill_name)))
         elif isinstance(input_schema, dict) and not input_schema:
-            findings.append(make_finding(
+            findings.append((make_finding(
                 "AAK-A2A-003",
                 rel_path,
                 f"Skill '{skill_name}' has empty inputSchema",
-                find_line_number(raw_text, str(skill_name)),
-            ))
+            ), str(skill_name)))
 
     return findings
 
@@ -147,21 +164,20 @@ def _check_skills(
 def _check_endpoints(
     data: dict[str, Any],
     rel_path: str,
-    raw_text: str,
-) -> list[Finding]:
-    """AAK-A2A-004: Check url/endpoint fields for HTTP (not HTTPS)."""
-    findings: list[Finding] = []
+) -> list[tuple[Finding, str]]:
+    """AAK-A2A-004: Check url/endpoint fields for HTTP (not HTTPS); each finding
+    comes with the key its line is found by (see `placed`)."""
+    findings: list[tuple[Finding, str]] = []
 
     # Check top-level url/endpoint fields
     for key in ("url", "endpoint", "baseUrl", "base_url"):
         val = data.get(key, "")
-        if isinstance(val, str) and _HTTP_URL_RE.match(val):
-            findings.append(make_finding(
+        if isinstance(val, str) and _is_http(val):
+            findings.append((make_finding(
                 "AAK-A2A-004",
                 rel_path,
                 f"Field '{key}' uses HTTP: {val}",
-                find_line_number(raw_text, val),
-            ))
+            ), val))
 
     # Check nested skills for endpoints
     skills = data.get("skills", [])
@@ -172,13 +188,12 @@ def _check_endpoints(
             skill_name = skill.get("name", skill.get("id", "<unnamed>"))
             for key in ("url", "endpoint"):
                 val = skill.get(key, "")
-                if isinstance(val, str) and _HTTP_URL_RE.match(val):
-                    findings.append(make_finding(
+                if isinstance(val, str) and _is_http(val):
+                    findings.append((make_finding(
                         "AAK-A2A-004",
                         rel_path,
                         f"Skill '{skill_name}' {key} uses HTTP: {val}",
-                        find_line_number(raw_text, val),
-                    ))
+                    ), val))
 
     return findings
 
@@ -210,6 +225,32 @@ def _parse_lifetime_seconds(value: Any) -> int | None:
     return None
 
 
+def _objects_depth_first(data: object) -> Iterator[dict[str, Any]]:
+    """`data` and every object under it, in the order the JWT checks met them
+    when they recursed: an object, then each object value, or each object
+    directly inside a list value, with everything under it, before the next.
+    A list inside a list is not entered, as it never was.
+
+    One frame per level took an agent card nested past the recursion limit,
+    which JSON's parser reads on Python 3.12 and later (about 10,000 levels),
+    down with the whole scanner and its findings on every other card. The
+    walk keeps its own stack.
+    """
+    stack: list[object] = [data]
+    while stack:
+        obj = stack.pop()
+        if not isinstance(obj, dict):
+            continue
+        yield obj
+        children: list[object] = []
+        for value in obj.values():
+            if isinstance(value, dict):
+                children.append(value)
+            elif isinstance(value, list):
+                children.extend(value)
+        stack.extend(reversed(children))
+
+
 def _check_jwt_lifetime(
     data: dict[str, Any],
     rel_path: str,
@@ -217,10 +258,7 @@ def _check_jwt_lifetime(
 ) -> list[Finding]:
     """AAK-A2A-005: Check for JWT token lifetime > 1 hour."""
     findings: list[Finding] = []
-
-    def _inspect(obj: Any) -> None:
-        if not isinstance(obj, dict):
-            return
+    for obj in _objects_depth_first(data):
         for key in _LIFETIME_KEYS:
             if key in obj:
                 seconds = _parse_lifetime_seconds(obj[key])
@@ -231,15 +269,6 @@ def _check_jwt_lifetime(
                         f"JWT lifetime '{key}' is {seconds}s (>{3600}s)",
                         find_line_number(raw_text, key),
                     ))
-        # Recurse into nested dicts
-        for v in obj.values():
-            if isinstance(v, dict):
-                _inspect(v)
-            elif isinstance(v, list):
-                for item in v:
-                    _inspect(item)
-
-    _inspect(data)
     return findings
 
 
@@ -250,10 +279,7 @@ def _check_jwt_validation(
 ) -> list[Finding]:
     """AAK-A2A-006: Check for weak JWT validation settings."""
     findings: list[Finding] = []
-
-    def _inspect(obj: Any) -> None:
-        if not isinstance(obj, dict):
-            return
+    for obj in _objects_depth_first(data):
         # Check verifySignature / verify_signature == false
         for key in ("verifySignature", "verify_signature"):
             val = obj.get(key)
@@ -275,15 +301,6 @@ def _check_jwt_validation(
                         "JWT algorithms include 'none'",
                         find_line_number(raw_text, alg),
                     ))
-        # Recurse into nested dicts
-        for v in obj.values():
-            if isinstance(v, dict):
-                _inspect(v)
-            elif isinstance(v, list):
-                for item in v:
-                    _inspect(item)
-
-    _inspect(data)
     return findings
 
 
@@ -311,7 +328,7 @@ def _check_impersonation(
 
     for key in ("url", "endpoint", "baseUrl", "base_url"):
         val = data.get(key, "")
-        if isinstance(val, str) and _HTTP_URL_RE.match(val):
+        if isinstance(val, str) and _is_http(val):
             findings.append(make_finding(
                 "AAK-A2A-007",
                 rel_path,
@@ -336,10 +353,10 @@ def scan(project_root: Path) -> tuple[list[Finding], set[str]]:
 
     for card_path in _find_agent_cards(project_root):
         try:
-            raw_text = card_path.read_text(encoding="utf-8")
+            raw_text = read_text_capped(card_path, CONFIG_MAX_BYTES, errors="replace")
             if len(raw_text) > 1_000_000:
                 continue
-            data = json.loads(raw_text)
+            data = loads_json(raw_text, card_path)
         except (json.JSONDecodeError, OSError):
             continue
 
@@ -353,10 +370,12 @@ def scan(project_root: Path) -> tuple[list[Finding], set[str]]:
         )
         scanned_files.add(rel_path)
 
-        findings.extend(_check_capabilities(data, rel_path, raw_text))
+        # The checks that report one finding per capability or skill find their
+        # lines in one pass over the card each, not one search of it per finding.
+        findings.extend(placed(raw_text, _check_capabilities(data, rel_path)))
         findings.extend(_check_authentication(data, rel_path, raw_text))
-        findings.extend(_check_skills(data, rel_path, raw_text))
-        findings.extend(_check_endpoints(data, rel_path, raw_text))
+        findings.extend(placed(raw_text, _check_skills(data, rel_path)))
+        findings.extend(placed(raw_text, _check_endpoints(data, rel_path)))
         findings.extend(_check_jwt_lifetime(data, rel_path, raw_text))
         findings.extend(_check_jwt_validation(data, rel_path, raw_text))
         findings.extend(_check_impersonation(data, rel_path, raw_text))

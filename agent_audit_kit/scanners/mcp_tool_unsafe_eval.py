@@ -25,7 +25,16 @@ from __future__ import annotations
 import ast
 from pathlib import Path
 
-from agent_audit_kit.models import Category, Finding, Severity
+from agent_audit_kit.models import Finding
+from agent_audit_kit.scanners._helpers import (
+    SOURCE_MAX_BYTES,
+    in_skip_dir,
+    make_finding,
+    parse_python,
+    read_text_capped,
+    refusing_overflow,
+    walk_tree,
+)
 
 
 _MCP_TOOL_DECORATOR_NAMES: frozenset[str] = frozenset({
@@ -117,17 +126,23 @@ class _UnsafeEvalVisitor(ast.NodeVisitor):
 def _scan_python_file(path: Path, rel: str) -> list[Finding]:
     findings: list[Finding] = []
     try:
-        src = path.read_text(encoding="utf-8", errors="replace")
+        src = read_text_capped(path, SOURCE_MAX_BYTES, errors="replace")
     except OSError:
         return findings
     if "@mcp.tool" not in src and "@server.tool" not in src and "@app.tool" not in src \
             and "@fastmcp.tool" not in src and "@tool" not in src:
         return findings
     try:
-        tree = ast.parse(src, filename=str(path))
+        tree = parse_python(src, path)
     except SyntaxError:
         return findings
+    return walk_tree(_tool_findings, tree, rel)
 
+
+def _tool_findings(tree: ast.Module, rel: str) -> list[Finding]:
+    """The findings in each MCP tool of a parsed file. Run through `walk_tree`:
+    the decorator check follows a call chain down, and the visitor recurses."""
+    findings: list[Finding] = []
     for node in ast.walk(tree):
         if not isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
             continue
@@ -140,35 +155,11 @@ def _scan_python_file(path: Path, rel: str) -> list[Finding]:
         for child in node.body:
             visitor.visit(child)
         for lineno, _call_name, evidence in visitor.findings:
-            findings.append(Finding(
+            findings.append(make_finding(
                 rule_id="AAK-MCP-TOOL-UNSAFE-EVAL-001",
-                title="Unsafe eval()/exec()/compile() inside @mcp.tool handler",
-                description=(
-                    "An MCP tool handler routes a tool-parameter value through "
-                    "`eval()`, `exec()`, `compile()`, `__import__()`, or SymPy "
-                    "`parse_expr()` without `local_dict` / `global_dict` "
-                    "pinning. This is the architectural class behind "
-                    "CVE-2026-44717 (mcp-calculate-server) and generalizes to "
-                    "any single-author MCP server with the same shape — see "
-                    "AAK-MCPCALC-CVE-2026-44717-PIN-001 for the named-product "
-                    "pin row that v0.3.18 shipped."
-                ),
-                severity=Severity.CRITICAL,
-                category=Category.TOOL_POISONING,
                 file_path=rel,
                 line_number=lineno,
                 evidence=evidence,
-                remediation=(
-                    "Replace `eval(expr)` with `ast.literal_eval(expr)` for "
-                    "trusted-literal inputs, or with SymPy "
-                    "`parse_expr(expr, local_dict={}, global_dict={}, "
-                    "evaluate=True)` and a strict symbol allow-list for math. "
-                    "Validate input length + char-set before evaluation."
-                ),
-                cve_references=["CVE-2026-44717"],
-                owasp_mcp_references=["MCP01:2025", "MCP05:2025"],
-                owasp_agentic_references=["ASI02", "ASI05"],
-                incident_references=["NVD-CVE-2026-44717"],
             ))
     return findings
 
@@ -180,10 +171,12 @@ def scan(project_root: Path) -> tuple[list[Finding], set[str]]:
     for path in project_root.rglob("*.py"):
         if not path.is_file():
             continue
-        if any(part in skip_dirs for part in path.parts):
+        if in_skip_dir(path, project_root, skip_dirs):
             continue
         rel = str(path.relative_to(project_root))
-        fires = _scan_python_file(path, rel)
+        fires: list[Finding] = []
+        with refusing_overflow(path):
+            fires = _scan_python_file(path, rel)
         if fires:
             scanned.add(rel)
             findings.extend(fires)

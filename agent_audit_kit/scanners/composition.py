@@ -62,10 +62,20 @@ import json
 import re
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Optional
+from typing import Iterator
 
 from agent_audit_kit.models import Finding
-from agent_audit_kit.scanners._helpers import SKIP_DIRS, find_line_number, make_finding
+from agent_audit_kit.scanners._helpers import (
+    find_line_number,
+    find_line_numbers,
+    in_skip_dir,
+    loads_jsonc,
+    make_finding,
+    mcp_server_maps,
+    newline_line,
+    read_text_capped,
+    strip_jsonc,
+)
 from agent_audit_kit.scanners.mcp_config import _find_mcp_configs
 from agent_audit_kit.scanners.secret_exposure import MCP_ENV_SECRET_KEYS
 from agent_audit_kit.scanners.skill_composition import (
@@ -86,13 +96,16 @@ RULE_IDS = frozenset({_RULE_CHAIN, _RULE_SHARED_STATE, _RULE_UNDERDECLARED})
 MAX_PATH_NODES = 3
 
 # Above this many components the graph is not built and this pass reports nothing.
-# Path enumeration is O(n**depth), so some bound is required; the number is set
-# from measurement rather than taste. Uncapped, one component reaching egress
-# through a config of N servers costs roughly 7ms at 60 nodes, 65ms at 200, 150ms
-# at 300 and 410ms at 500. 200 keeps the worst case inside the sub-100ms budget
-# the project advertises while putting the silent zone far beyond anything real:
-# the largest config in the 748-config public corpus is nowhere near it, and
-# AAK-MCP-004 already reports a server count above 10 as its own finding.
+# Some bound is required, since the graph has an edge for nearly every pair of
+# components; the number is set from measurement rather than taste. Enumerating
+# every path, as this pass did through 0.6.22, was cubic in the components: 200
+# servers, a third of them fetch tools, a third holding secrets and a third
+# remote, took 3.4 to 4.6 seconds, not the 65 ms this comment used to give, which
+# was measured with one untrusted source. `_chain_findings` now works through each
+# source's neighbours as sets, and the same config takes about 50 ms. 200 puts the
+# silent zone far beyond anything real: the largest config in the 748-config
+# public corpus is nowhere near it, and AAK-MCP-004 already reports a server count
+# above 10 as its own finding.
 #
 # The consequence is stated in AAK-COMPOSE-001's `limitations`, because a bound
 # that produces silence is indistinguishable from a clean result unless it is
@@ -188,10 +201,10 @@ class _Node:
     kind: str  # "skill" | "mcp-server"
     name: str
     rel: str
-    line: Optional[int]
+    line: int | None
     caps: _Caps
     container: str
-    line_end: Optional[int] = None
+    line_end: int | None = None
     inputs: frozenset[str] = frozenset()
     outputs: frozenset[str] = frozenset()
     accepts_free_text: bool = True
@@ -237,16 +250,16 @@ def _container_of(path: Path, project_root: Path) -> str:
 def _skill_nodes(project_root: Path) -> list[_Node]:
     nodes: list[_Node] = []
     for path in sorted(project_root.rglob("SKILL.md")):
-        if any(part in SKIP_DIRS for part in path.parts):
+        if in_skip_dir(path, project_root):
             continue
         skill = _extract_skill(path, project_root)
         if skill is None:
             continue
         try:
-            raw = path.read_text(encoding="utf-8", errors="replace")
+            raw = read_text_capped(path, _MAX_FILE_BYTES, errors="replace")
         except OSError:
             continue
-        fm = _parse_frontmatter(raw)
+        fm = _parse_frontmatter(raw, path)
         body = raw.split("---", 2)[-1] if raw.startswith("---") else raw
 
         declared = frozenset(skill.caps)
@@ -294,20 +307,81 @@ def _skill_nodes(project_root: Path) -> list[_Node]:
     return nodes
 
 
+def _server_key_lines(raw: str, maps: list[tuple[str, dict[str, object]]]) -> dict[str, int]:
+    """The line of each server's own key, `"name":`, inside its map.
+
+    The node's block, and so the suppression keys a finding on that server must
+    hit, starts here. The first quoted occurrence of the name is not enough: VS
+    Code's `inputs` array often sits above `servers`, and an input whose `id` is a
+    server's name put that server's block on the `inputs` line, so a finding on
+    the server's `url` line no longer covered it and its chain was reported twice.
+    The search runs in comment-stripped text, from the map's own key, and falls
+    back to the first quoted occurrence when no key form is found, as before.
+
+    A name holding a double quote gets no line (0) and no search. A JSON key
+    writes the quote escaped, so `"name":` with the quote as it stands never
+    spells that server's own key: the search could find it only inside a JSONC
+    comment, which the fallback read, or as the key of another server, as `a\\"b`
+    finds the key of a server named `a"b`. Each search also read the rest of the
+    file and failed, so 30,000 such names in a 409 KB config took 19 s.
+    """
+    text = strip_jsonc(raw)
+    lines: dict[str, int] = {}
+    for map_key, servers in maps:
+        anchor = re.search(r'"' + re.escape(map_key) + r'"\s*:', text)
+        start = anchor.end() if anchor else 0
+        names = [str(n) for n in servers if '"' not in str(n)]
+        offsets = _key_offsets(text, start, names)
+        find_line_numbers(raw, (f'"{name}"' for name in names if offsets[name] is None))
+        for n in servers:
+            name = str(n)
+            offset = offsets.get(name)
+            if offset is not None:
+                line = newline_line(text, offset)
+            elif '"' in name:
+                line = None
+            else:
+                line = find_line_number(raw, f'"{name}"')
+            lines.setdefault(name, line or 0)
+    return lines
+
+
+# A quoted string followed by a colon, tried at every quote. Each try reads to the
+# next quote and past the blanks after it, so each character is read for the one
+# quote before it.
+_QUOTED_KEY_RE = re.compile(r'(?=("[^"]*")\s*:)')
+
+
+def _key_offsets(text: str, start: int, names: list[str]) -> dict[str, int | None]:
+    """Where `"name"` followed by a colon first starts at or after `start`, per name.
+
+    A regex search per name, from `start` to that server's key, made N servers
+    cost N times the file, and a compiled pattern each. A name with no quote in
+    it is a whole quoted string, so one pass over the file finds every key of
+    that kind. A name holding a quote is not looked for (see `_server_key_lines`)
+    and gets None.
+    """
+    keyed: dict[str, int] = {}
+    for match in _QUOTED_KEY_RE.finditer(text, start):
+        keyed.setdefault(match.group(1)[1:-1], match.start())
+    return {name: None if '"' in name else keyed.get(name) for name in names}
+
+
 def _mcp_nodes(project_root: Path) -> list[_Node]:
     nodes: list[_Node] = []
     for config_path in _find_mcp_configs(project_root):
         try:
             if config_path.stat().st_size > _MAX_FILE_BYTES:
                 continue
-            raw = config_path.read_text(encoding="utf-8", errors="replace")
-            data = json.loads(raw)
+            raw = read_text_capped(config_path, _MAX_FILE_BYTES, errors="replace")
+            data = loads_jsonc(raw, config_path)
         except (OSError, json.JSONDecodeError):
             continue
-        if not isinstance(data, dict):
-            continue
-        servers = data.get("mcpServers")
-        if not isinstance(servers, dict):
+        # Both server maps: VS Code keeps its servers under `servers` in
+        # .vscode/mcp.json, and reading `mcpServers` alone left every VS Code
+        # server out of the graph.
+        maps = mcp_server_maps(data, config_path)
+        if not maps:
             continue
         try:
             rel = config_path.relative_to(project_root).as_posix()
@@ -317,9 +391,10 @@ def _mcp_nodes(project_root: Path) -> list[_Node]:
         # Where each server's block starts, so a finding anywhere inside it can be
         # matched to that server. Line-exact matching does not work: AAK-MCP-001
         # reports on the `url` line, one below the name line this node is keyed to.
-        name_lines = {
-            str(n): (find_line_number(raw, f'"{n}"') or 0) for n in servers
-        }
+        # Every entry of every map bounds a block, a non-object one included, as
+        # when only `mcpServers` was read.
+        name_lines = _server_key_lines(raw, maps)
+        find_line_numbers(raw, (name for name, line in name_lines.items() if not line and '"' not in name))
         ordered = sorted(name_lines.items(), key=lambda kv: kv[1])
         total_lines = raw.count("\n") + 1
         spans: dict[str, tuple[int, int]] = {}
@@ -327,9 +402,15 @@ def _mcp_nodes(project_root: Path) -> list[_Node]:
             end = ordered[idx + 1][1] - 1 if idx + 1 < len(ordered) else total_lines
             spans[n] = (start, max(start, end))
 
-        for name, cfg in servers.items():
-            if not isinstance(cfg, dict):
+        # A name in both maps of one file is one node, from the first map: a
+        # client loads one of the maps, and two nodes with one (file, name) key
+        # would be one component counted twice.
+        entries = [(name, cfg) for _key, servers in maps for name, cfg in servers.items()]
+        seen: set[str] = set()
+        for name, cfg in entries:
+            if not isinstance(cfg, dict) or str(name) in seen:
                 continue
+            seen.add(str(name))
             url = cfg.get("url") or cfg.get("serverUrl") or ""
             command = cfg.get("command") or ""
             # A non-list `args` (e.g. `"args": 42`) used to raise TypeError here
@@ -376,7 +457,10 @@ def _mcp_nodes(project_root: Path) -> list[_Node]:
                 kind="mcp-server",
                 name=str(name),
                 rel=rel,
-                line=spans.get(str(name), (None, None))[0] or find_line_number(raw, str(name)),
+                # A name holding a quote is given no line: see `_server_key_lines`.
+                line=spans.get(str(name), (None, None))[0] or (
+                    None if '"' in str(name) else find_line_number(raw, str(name))
+                ),
                 caps=caps,
                 container=rel,
                 line_end=spans.get(str(name), (0, 0))[1] or None,
@@ -403,10 +487,49 @@ def _body_caps(body: str, skill_dir: Path) -> set[str]:
     return {cap for cap, rx in _BODY_CAPABILITY_SIGNALS if rx.search(text)}
 
 
+# A run of path characters. Every `_STATE_PATH_RE` match ends where its run ends.
+_PATH_RUN_RE = re.compile(r"[\w./-]+")
+_WORD_OR_HYPHEN_RE = re.compile(r"[\w-]")
+
+
+def _state_path_matches(text: str) -> Iterator[str]:
+    """What ``_STATE_PATH_RE.finditer(text)`` matches, tried only where a match
+    can first succeed.
+
+    In a run of dots every `.` could open the `./`-relative arm, which reads the
+    rest of the run looking for `cache` / `state` / ...: 16,000 dots took 8.3
+    seconds, and the time grew with the square of the run. Within one stretch
+    of word characters, dots and hyphens, an opening `.` reaches only text that
+    the stretch's first opening `.` reaches too, so a later one can match only
+    if the first does, except a `.` right before a `/`, which reaches past it.
+    Only those two are tried, with `/` and `~` as before, so the matches are the
+    same, each running to the end of its run as it always did.
+    """
+    for run in _PATH_RUN_RE.finditer(text):
+        start, end = run.span()
+        candidates = [start - 1] if start and text[start - 1] == "~" else []
+        first_dot = True
+        for i in range(start, end):
+            ch = text[i]
+            if ch == "/":
+                candidates.append(i)
+                first_dot = True
+            elif ch == ".":
+                opens = i == 0 or not _WORD_OR_HYPHEN_RE.match(text, i - 1)
+                if opens and (first_dot or text[i + 1:i + 2] == "/"):
+                    candidates.append(i)
+                first_dot = first_dot and not opens
+        for i in candidates:
+            m = _STATE_PATH_RE.match(text, i)
+            if m:
+                yield m.group(0)
+                break
+
+
 def _state_paths(text: str) -> set[str]:
     out = set()
-    for m in _STATE_PATH_RE.finditer(text):
-        candidate = m.group(0).rstrip(".,;:)`'\"")
+    for candidate in _state_path_matches(text):
+        candidate = candidate.rstrip(".,;:)`'\"")
         # A bare directory prefix is not a channel; require something after it.
         if len(candidate) > 6 and not candidate.endswith("/"):
             out.add(candidate)
@@ -461,6 +584,81 @@ def _edges(nodes: list[_Node]) -> dict[tuple[str, str], set[tuple[str, str]]]:
     return adj
 
 
+def _chain_hits(
+    nodes: list[_Node],
+) -> dict[tuple[str, str], tuple[list[_Node], dict[tuple[str, str], _Node]]]:
+    """Each untrusted source's representative shortest chain and the egress nodes it reaches."""
+    if len(nodes) > _MAX_GRAPH_NODES:
+        # `_edges` gives such a graph no edges, so no chain is found; returning now
+        # also skips a bit for every component (N * N / 16 bytes of integers, 900 MB
+        # for 111,000 servers) and an empty set each.
+        return {}
+    by_key = {n.key: n for n in nodes}
+    adj = _edges(nodes)
+    # source key -> (representative shortest path, every reachable egress node)
+    hits: dict[tuple[str, str], tuple[list[_Node], dict[tuple[str, str], _Node]]] = {}
+
+    def record(path: list[_Node]) -> None:
+        rep, sinks = hits.setdefault(path[0].key, (list(path), {}))
+        if len(path) < len(rep):
+            hits[path[0].key] = (list(path), sinks)
+        sinks[path[-1].key] = path[-1]
+
+    # A chain qualifies when no node in it holds the whole chain (that is a
+    # single-artifact finding, owned by whichever rule already reports it), it
+    # starts at untrusted input, ends at egress, and a node before the egress
+    # node carries the middle role: otherwise it is a two-role pair the
+    # single-artifact rules already describe.
+    #
+    # The chains are taken in the order a depth-first walk over sorted
+    # neighbours meets them, which decides each source's representative path and
+    # the order of its egress nodes. Walking every path made a dense graph of N
+    # components cost N**MAX_PATH_NODES. The walk now stops one node short: the
+    # chains that end one step further all end at that step's egress neighbours,
+    # which are found together as a set of nodes (one bit each, in sorted key
+    # order), and an egress node the source already reaches adds nothing but a
+    # repeat, since a chain of the longest kind never replaces a shorter one.
+    # Only a node with an edge can be on a chain, so only such a node gets a bit.
+    keys = sorted({key for key, targets in adj.items() if targets}.union(*adj.values()))
+    bit = {key: 1 << index for index, key in enumerate(keys)}
+    neighbours = {key: sum(bit[b] for b in adj.get(key, ())) for key in keys}
+    egress = sum(
+        bit[key] for key in keys
+        if by_key[key].caps.performs_network_egress and not by_key[key].caps.holds_whole_chain
+    )
+
+    def extend(path: list[_Node], on_path: int, sensitive: bool, reached: list[int]) -> None:
+        # `sensitive`: a node of `path` carries the middle role.
+        for mid_key in sorted(adj.get(path[-1].key, ())):
+            mid = by_key[mid_key]
+            if bit[mid_key] & on_path or mid.caps.holds_whole_chain:
+                continue
+            if sensitive and mid.caps.performs_network_egress:
+                record([*path, mid])
+                reached[0] |= bit[mid_key]
+            if len(path) + 2 > MAX_PATH_NODES:
+                continue
+            carried = sensitive or mid.caps.touches_sensitive
+            if len(path) + 2 < MAX_PATH_NODES:
+                extend([*path, mid], on_path | bit[mid_key], carried, reached)
+            elif carried:
+                # `mid` is masked out with the rest of the path: `_edges` never links
+                # a node to itself, but a chain meets each node once whatever it does.
+                new = neighbours[mid_key] & egress & ~reached[0] & ~(on_path | bit[mid_key])
+                reached[0] |= new
+                while new:
+                    low = new & -new
+                    record([*path, mid, by_key[keys[low.bit_length() - 1]]])
+                    new ^= low
+
+    for node in nodes:
+        if node.caps.reads_untrusted_input and not node.caps.holds_whole_chain and node.key in bit:
+            found = hits.get(node.key)
+            reached = [sum(bit[key] for key in found[1]) if found else 0]
+            extend([node], bit[node.key], node.caps.touches_sensitive, reached)
+    return hits
+
+
 def _chain_findings(nodes: list[_Node]) -> list[Finding]:
     """Ordered paths of 2..MAX_PATH_NODES carrying untrusted input to egress.
 
@@ -472,45 +670,7 @@ def _chain_findings(nodes: list[_Node]) -> list[Finding]:
     findings: list[Finding] = []
     if len(nodes) < 2:
         return findings
-
-    by_key = {n.key: n for n in nodes}
-    adj = _edges(nodes)
-    # source key -> (representative shortest path, every reachable egress node)
-    hits: dict[tuple[str, str], tuple[list[_Node], dict[tuple[str, str], _Node]]] = {}
-
-    def _qualifies(path: list[_Node]) -> bool:
-        # Every node must individually pass: a node holding the whole chain is a
-        # single-artifact finding and belongs to whichever rule already owns it.
-        if any(n.caps.holds_whole_chain for n in path):
-            return False
-        if not path[0].caps.reads_untrusted_input:
-            return False
-        if not path[-1].caps.performs_network_egress:
-            return False
-        # The middle role has to be carried by somebody other than the egress
-        # node, otherwise this is a two-role pair the single-artifact rules
-        # already describe.
-        return any(n.caps.touches_sensitive for n in path[:-1])
-
-    def walk(path: list[_Node]) -> None:
-        head = path[-1]
-        if len(path) >= 2 and _qualifies(path):
-            rep, sinks = hits.setdefault(path[0].key, (list(path), {}))
-            if len(path) < len(rep):
-                hits[path[0].key] = (list(path), sinks)
-            sinks[head.key] = head
-        if len(path) >= MAX_PATH_NODES:
-            return
-        for nxt_key in sorted(adj.get(head.key, ())):
-            nxt = by_key[nxt_key]
-            if any(nxt.key == p.key for p in path):
-                continue
-            walk(path + [nxt])
-
-    for node in nodes:
-        if node.caps.reads_untrusted_input and not node.caps.holds_whole_chain:
-            walk([node])
-
+    hits = _chain_hits(nodes)
     for source_key in sorted(hits):
         path, sinks = hits[source_key]
         arrow = " -> ".join(n.label() for n in path)
@@ -659,7 +819,7 @@ def suppression_keys(finding: Finding) -> set[str]:
     component *is*, which is this module's concern.
     """
     keys: set[str] = set()
-    locations: list[tuple[str, Optional[int], Optional[int]]] = [
+    locations: list[tuple[str, int | None, int | None]] = [
         (finding.file_path, finding.line_number, None)
     ]
     for loc in finding.related_locations or []:
@@ -685,7 +845,7 @@ def suppression_keys(finding: Finding) -> set[str]:
     return keys
 
 
-def covering_keys(file_path: str, line_number: Optional[int]) -> set[str]:
+def covering_keys(file_path: str, line_number: int | None) -> set[str]:
     """Keys a non-composition finding covers, in the same vocabulary."""
     if not file_path:
         return set()

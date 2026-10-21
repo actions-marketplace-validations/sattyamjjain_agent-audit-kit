@@ -11,14 +11,18 @@ from pathlib import Path
 
 from agent_audit_kit.models import Finding
 from agent_audit_kit.scanners import _ssrf_reach
-from agent_audit_kit.scanners._helpers import find_line_number, make_finding, SKIP_DIRS
+from agent_audit_kit.scanners._helpers import find_line_number, in_skip_dir, make_finding, refusing_overflow
 
 
 _SCAN_EXTS = {".py", ".ts", ".tsx", ".js", ".jsx", ".mjs", ".go", ".rs"}
 _MAX_FILE_BYTES = 512_000
 
+# `@tool` sits outside the leading `\b`. Inside it, the boundary before `@`
+# needed a word character in front, so the alternative matched only glued to a
+# word (`x@tool`), never a decorator at the start of a line, and a file whose
+# only marker was `@tool` was never read.
 _MCP_TOOL_HINT = re.compile(
-    r"\b(@tool|createTool|McpServer|FastMCP|mcp\.tool|Server\.run_streamable_http)\b"
+    r"(?:\b(?:createTool|McpServer|FastMCP|mcp\.tool|Server\.run_streamable_http)|@tool)\b"
 )
 
 # The outbound-call, user-input and private-address patterns that used to live
@@ -36,8 +40,11 @@ _FOLLOW_REDIRECTS_RE = re.compile(
     re.IGNORECASE,
 )
 
+# A comparison of the scheme, not an assignment. `scheme\s*!?=` read
+# `scheme = "https://"` as a check and silenced AAK-SSRF-001 for the whole file,
+# while the real check `parsed.scheme == "https"` did not match it.
 _URL_SCHEME_VALIDATION_RE = re.compile(
-    r"urlparse\s*\(|scheme\s*!?=\s*['\"]https|startsWith\(['\"]https",
+    r"urlparse\s*\(|scheme\s*[!=]=\s*['\"]https|startsWith\(['\"]https",
     re.IGNORECASE,
 )
 
@@ -47,7 +54,7 @@ def _iter_source(project_root: Path) -> list[Path]:
     for path in project_root.rglob("*"):
         if not path.is_file() or path.suffix.lower() not in _SCAN_EXTS:
             continue
-        if any(part in SKIP_DIRS for part in path.parts):
+        if in_skip_dir(path, project_root):
             continue
         try:
             if path.stat().st_size > _MAX_FILE_BYTES:
@@ -84,7 +91,9 @@ def _check_file(path: Path, project_root: Path) -> list[Finding]:
     rel = str(path.relative_to(project_root))
 
     is_python = path.suffix.lower() == ".py"
-    sites = _ssrf_reach.analyze(text, is_python=is_python)
+    sites: list[_ssrf_reach.Reach] = []
+    with refusing_overflow(path):
+        sites = _ssrf_reach.analyze(text, is_python=is_python)
     if not sites:
         return findings
 

@@ -31,7 +31,16 @@ from pathlib import Path
 from typing import Any
 
 from agent_audit_kit.models import Finding
-from agent_audit_kit.scanners._helpers import find_line_number, make_finding, SKIP_DIRS
+from agent_audit_kit.scanners._helpers import (
+    CONFIG_MAX_BYTES,
+    in_skip_dir,
+    iter_mcp_servers,
+    loads_jsonc,
+    make_finding,
+    placed,
+    read_text_capped,
+    strip_vscode_variables,
+)
 
 _RULE_ID = "AAK-MCP-STDIO-LAUNCHER-INJECT-001"
 
@@ -65,33 +74,11 @@ def _find_mcp_configs(project_root: Path) -> list[Path]:
         if p.is_file() and p not in found:
             found.append(p)
     for p in project_root.rglob("*mcp*.json"):
-        try:
-            rel_parts = p.relative_to(project_root).parts
-        except ValueError:
-            continue
-        if any(part in SKIP_DIRS for part in rel_parts):
+        if in_skip_dir(p, project_root):
             continue
         if p.is_file() and p not in found:
             found.append(p)
     return found
-
-
-def _server_blocks(data: Any) -> list[tuple[str, dict[str, Any]]]:
-    """Return (server_name, server_cfg) for every MCP server entry.
-
-    Supports both the ``mcpServers`` (Claude/Cursor/…) and ``servers``
-    (VS Code) container keys.
-    """
-    out: list[tuple[str, dict[str, Any]]] = []
-    if not isinstance(data, dict):
-        return out
-    for container_key in ("mcpServers", "servers"):
-        servers = data.get(container_key)
-        if isinstance(servers, dict):
-            for name, cfg in servers.items():
-                if isinstance(cfg, dict):
-                    out.append((str(name), cfg))
-    return out
 
 
 def _argv_tokens(cfg: dict[str, Any]) -> tuple[str, list[str]]:
@@ -123,7 +110,16 @@ def _argv_tokens(cfg: dict[str, Any]) -> tuple[str, list[str]]:
 
 
 def _interpolation_hit(token: str) -> bool:
-    """True if a token carries a non-pinned template/interpolation token."""
+    """True if a token carries a non-pinned template/interpolation token.
+
+    VS Code variables are removed first. VS Code substitutes `${workspaceFolder}`,
+    `${input:token}` and their kind itself, from the workspace path, the user's
+    own prompt and their environment, and passes the result as a literal argv
+    element, so they are neither a template an adapter fills nor a value an
+    attacker reaches. On main this rule fired 32 times in 28 of 190 real
+    `.vscode/mcp.json` files, 31 of them on such a variable.
+    """
+    token = strip_vscode_variables(token)
     if "{{" in token and "}}" in token:
         return True
     if "%s" in token:
@@ -170,10 +166,10 @@ def scan(project_root: Path) -> tuple[list[Finding], set[str]]:
 
     for config_path in _find_mcp_configs(project_root):
         try:
-            raw_text = config_path.read_text(encoding="utf-8", errors="ignore")
+            raw_text = read_text_capped(config_path, CONFIG_MAX_BYTES, errors="ignore")
             if len(raw_text) > 1_000_000:
                 continue
-            data = json.loads(raw_text)
+            data = loads_jsonc(raw_text, config_path)
         except (json.JSONDecodeError, OSError):
             continue
 
@@ -184,7 +180,9 @@ def scan(project_root: Path) -> tuple[list[Finding], set[str]]:
         )
         scanned_files.add(rel_path)
 
-        for server_name, cfg in _server_blocks(data):
+        # `mcpServers` (Claude, Cursor, ...) and VS Code's `servers`.
+        unplaced: list[tuple[Finding, str]] = []
+        for server_name, cfg in iter_mcp_servers(data):
             # stdio transport only: an entry with a `url` (and no `command`)
             # is an HTTP/SSE server — out of scope for launcher injection.
             if not cfg.get("command"):
@@ -195,7 +193,7 @@ def scan(project_root: Path) -> tuple[list[Finding], set[str]]:
             reason = _evaluate_server(launcher, tokens)
             if reason is None:
                 continue
-            findings.append(make_finding(
+            unplaced.append((make_finding(
                 _RULE_ID,
                 rel_path,
                 (
@@ -203,7 +201,8 @@ def scan(project_root: Path) -> tuple[list[Finding], set[str]]:
                     f"CVE-2026-40933 class. Pin command to a concrete "
                     f"executable and pass only static literal args."
                 ),
-                find_line_number(raw_text, server_name),
-            ))
+            ), server_name))
+        # Every reported server's line in one pass over the file, not one search of it per server.
+        findings.extend(placed(raw_text, unplaced))
 
     return findings, scanned_files

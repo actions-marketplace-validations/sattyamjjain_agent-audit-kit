@@ -85,18 +85,28 @@ def format_results(
 
     if failures:
         lines.append(
-            f"{RED}{BOLD}\u26a0 INCOMPLETE SCAN: {len(failures)} scanner(s) crashed.{RESET}"
+            f"{RED}{BOLD}\u26a0 INCOMPLETE SCAN: {len(result.failed_scanners)} scanner(s) did not "
+            f"finish every file (a crash or a refused file).{RESET}"
         )
         lines.append(
-            f"{RED}  The rules they own were NOT evaluated. "
+            f"{RED}  The rules they own may be missing findings. "
             f"Absence of findings below does not mean absence of issues.{RESET}\n"
+        )
+    gaps = result.llm_gaps
+    if gaps:
+        lines.append(
+            f"{RED}{BOLD}\u26a0 INCOMPLETE LLM ANALYSIS: --llm-scan did not analyze "
+            f"every tool ({len(gaps)} AAK-LLM-002 finding(s)).{RESET}"
+        )
+        lines.append(
+            f"{RED}  A tool the model did not analyze is not a clean tool.{RESET}\n"
         )
 
     if not filtered:
         if quiet:
             return ""
         clean = f"  \u2705 No findings at or above {min_severity.value} severity.\n"
-        lines.append(clean if not failures else
+        lines.append(clean if not result.incomplete else
                      f"  {RED}No findings at or above {min_severity.value} severity, "
                      f"but the scan was incomplete (see above).{RESET}\n")
     else:
@@ -144,8 +154,8 @@ def format_results(
             # exist; when a scanner crashed, the findings it would have produced
             # are missing, so the number is an upper bound, not a measurement.
             lines.append(
-                f"{RED}  ^ UNRELIABLE: {len(failures)} scanner(s) crashed, so this is an "
-                f"upper bound, not a measurement.{RESET}"
+                f"{RED}  ^ UNRELIABLE: {len(result.failed_scanners)} scanner(s) did not finish "
+                f"every file, so this is an upper bound, not a measurement.{RESET}"
             )
 
     lines.append(f"\n{DIM}Files scanned: {result.files_scanned}{RESET}")

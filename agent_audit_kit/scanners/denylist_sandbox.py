@@ -44,7 +44,7 @@ from pathlib import Path
 
 from agent_audit_kit.models import Finding
 
-from ._helpers import SKIP_DIRS, make_finding
+from ._helpers import in_skip_dir, make_finding, parse_python, read_text_capped
 
 RULE_ID = "AAK-SANDBOX-DENYLIST-001"
 
@@ -160,7 +160,7 @@ def _reachable_primitives(denied: set[str], text: str) -> set[str]:
 
 def _analyze(text: str, rel: str) -> list[Finding]:
     try:
-        tree = ast.parse(text)
+        tree = parse_python(text, rel)
     except SyntaxError:
         return []
 
@@ -204,12 +204,12 @@ def scan(project_root: Path) -> tuple[list[Finding], set[str]]:
     findings: list[Finding] = []
     scanned: set[str] = set()
     for path in project_root.rglob("*.py"):
-        if any(part in SKIP_DIRS for part in path.parts):
+        if in_skip_dir(path, project_root):
             continue
         try:
             if path.stat().st_size > 1_000_000:
                 continue
-            text = path.read_text(encoding="utf-8", errors="replace")
+            text = read_text_capped(path, 1_000_000, errors="replace")
         except OSError:
             continue
         rel = str(path.relative_to(project_root))

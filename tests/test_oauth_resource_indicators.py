@@ -124,7 +124,9 @@ def test_rule_registered_and_shaped() -> None:
     rule = RULES[RULE]
     assert rule.severity.value == "medium"
     assert rule.category.value == "mcp-config"
-    assert "MCP01:2025" in rule.owasp_mcp_references
+    # A token not bound to its audience can be replayed at another server: OWASP
+    # MCP07 ("agents can reuse tokens or credentials issued to others").
+    assert "MCP07:2025" in rule.owasp_mcp_references
     # The remediation must carry the concrete fix: set `resource` + audience-bind.
     assert "resource" in rule.remediation
     assert "8707" in rule.remediation
@@ -174,6 +176,18 @@ def test_prm_quiet_on_remote_config_without_auth(tmp_path: Path) -> None:
     assert PRM not in _rule_ids(tmp_path, "server.mcp.json", content)
 
 
+def test_prm_quiet_on_remote_config_with_oauth_flag(tmp_path: Path) -> None:
+    """A pin, not a fix: an `--oauth` argument asks the client to run OAuth and
+    is no static credential. The inline-credential pattern had a `\\b--oauth\\b`
+    alternative that could never match an argument; it is gone, and this says
+    which reading was meant."""
+    content = json.dumps({"mcpServers": {
+        "r": {"type": "http", "url": "https://mcp.example.com/mcp", "args": ["--oauth"]},
+        "bridge": {"command": "npx", "args": ["-y", "mcp-remote", "https://mcp.example.com/mcp", "--oauth"]},
+    }})
+    assert PRM not in _rule_ids(tmp_path, "server.mcp.json", content)
+
+
 def test_prm_fires_on_server_source_bearer_without_prm(tmp_path: Path) -> None:
     content = (
         "from fastmcp import FastMCP\n"
@@ -187,6 +201,8 @@ def test_prm_rule_registered_and_shaped() -> None:
     rule = RULES[PRM]
     assert rule.severity.value == "low"
     assert rule.category.value == "mcp-config"
-    assert "MCP01:2025" in rule.owasp_mcp_references
+    # A pre-shared static credential is MCP01 (static, long-lived secrets); the
+    # missing discovery-based auth is MCP07.
+    assert {"MCP01:2025", "MCP07:2025"} == set(rule.owasp_mcp_references)
     assert "9728" in rule.remediation
     assert rule.aicm_references == ["IAM-01", "IAM-16"]

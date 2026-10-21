@@ -2,7 +2,8 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 from enum import Enum
-from typing import Optional
+
+from agent_audit_kit.redaction import redact_evidence, redact_related_locations
 
 
 class Severity(Enum):
@@ -74,7 +75,7 @@ class Finding:
     severity: Severity
     category: Category
     file_path: str
-    line_number: Optional[int] = None
+    line_number: int | None = None
     evidence: str = ""
     remediation: str = ""
     cve_references: list[str] = field(default_factory=list)
@@ -104,11 +105,37 @@ class Finding:
     # contributing artifact.
     related_locations: list[dict] = field(default_factory=list)
 
+    def __setattr__(self, name: str, value: object) -> None:
+        """Redact credentials from evidence whenever it is set.
+
+        Every formatter repeats ``evidence`` and each related location's
+        ``message``: console, JSON, SARIF (so GitHub code-scanning alerts),
+        PR summaries, notification webhooks and private advisories. Scanners
+        quote what they matched, and what they matched can hold a token, so
+        the value is redacted here, the one place every finding passes
+        through, including findings built outside ``make_finding`` and
+        evidence edited after the fact (``scan --verify-secrets`` appends to
+        it). See :mod:`agent_audit_kit.redaction` for what is masked.
+        """
+        if name == "evidence" and isinstance(value, str):
+            value = redact_evidence(value)
+        elif name == "related_locations" and isinstance(value, list):
+            value = redact_related_locations(value)
+        object.__setattr__(self, name, value)
+
 
 # The engine files this rule when a scanner raises. It is referenced by the
 # engine, the models, every formatter and the CLI exit path, so it lives here
 # rather than being spelled out as a literal in five places.
 SCANNER_FAIL_RULE_ID = "AAK-INTERNAL-SCANNER-FAIL"
+
+# `scan --llm-scan` files this for every tool it was asked to analyze and did
+# not: no credential, a failed request, a refusal, a reply cut off before the
+# verdict. It answers the same question as a crashed scanner (did the run cover
+# what it was asked to cover?), so it is exempt from the same floors and makes
+# the run INCOMPLETE the same way.
+LLM_INCOMPLETE_RULE_ID = "AAK-LLM-002"
+INCOMPLETE_RULE_IDS: frozenset[str] = frozenset({SCANNER_FAIL_RULE_ID, LLM_INCOMPLETE_RULE_ID})
 
 
 @dataclass
@@ -117,8 +144,8 @@ class ScanResult:
     files_scanned: int = 0
     rules_evaluated: int = 0
     scan_duration_ms: float = 0.0
-    score: Optional[int] = None
-    grade: Optional[str] = None
+    score: int | None = None
+    grade: str | None = None
 
     @property
     def critical_count(self) -> int:
@@ -141,7 +168,7 @@ class ScanResult:
         return sum(1 for f in self.findings if f.severity == Severity.INFO)
 
     @property
-    def max_severity(self) -> Optional[Severity]:
+    def max_severity(self) -> Severity | None:
         if not self.findings:
             return None
         return max(self.findings, key=lambda f: f.severity.numeric()).severity
@@ -160,13 +187,43 @@ class ScanResult:
         filter; this is the same exemption for the reporting floor, and it is
         done here rather than by re-grading the rule so the severity keeps
         meaning "how bad is the finding" rather than "how loudly is it shown".
+        AAK-LLM-002, a tool ``--llm-scan`` was asked to analyze and did not, is
+        exempt for the same reason.
         """
         return [
             f for f in self.findings
-            if f.severity >= min_severity or f.rule_id == SCANNER_FAIL_RULE_ID
+            if f.severity >= min_severity or f.rule_id in INCOMPLETE_RULE_IDS
         ]
 
     @property
     def scanner_failures(self) -> list[Finding]:
-        """Findings recording a scanner that raised during this run."""
+        """Findings recording a scanner that did not finish every file: one that
+        raised, or one file it refused (each refused file is a finding of its own)."""
         return [f for f in self.findings if f.rule_id == SCANNER_FAIL_RULE_ID]
+
+    @property
+    def failed_scanners(self) -> list[str]:
+        """Each scanner behind `scanner_failures` once, in the order they failed.
+
+        A scanner that refuses three files has three failures, so a count of
+        failures is not a count of scanners. The name is read back from the
+        evidence, which the engine starts `scanner='<name>' error=`.
+        """
+        names: dict[str, None] = {}
+        for f in self.scanner_failures:
+            evidence = f.evidence or ""
+            if evidence.startswith("scanner=") and " error=" in evidence:
+                names.setdefault(evidence[len("scanner="):evidence.index(" error=")].strip("'\""), None)
+            else:
+                names.setdefault("unknown", None)
+        return list(names)
+
+    @property
+    def llm_gaps(self) -> list[Finding]:
+        """Findings recording a tool that ``--llm-scan`` was asked to analyze and did not."""
+        return [f for f in self.findings if f.rule_id == LLM_INCOMPLETE_RULE_ID]
+
+    @property
+    def incomplete(self) -> bool:
+        """True when something this run was asked to evaluate was not evaluated."""
+        return any(f.rule_id in INCOMPLETE_RULE_IDS for f in self.findings)

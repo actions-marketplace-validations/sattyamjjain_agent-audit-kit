@@ -51,7 +51,14 @@ import re
 from pathlib import Path
 
 from agent_audit_kit.models import Finding
-from agent_audit_kit.scanners._helpers import make_finding, SKIP_DIRS
+from agent_audit_kit.scanners._helpers import (
+    in_skip_dir,
+    make_finding,
+    parse_python,
+    refusing_overflow,
+    sub_up_to_last,
+    unparse,
+)
 
 _RULE_ID = "AAK-MCP-SSRF-001"
 
@@ -169,11 +176,11 @@ def _is_fetch_sink(call: ast.Call, tainted: set[str]) -> bool:
     return any(_expr_uses(a, tainted) for a in args)
 
 
-def _scan_python(text: str) -> int | None:
+def _scan_python(text: str, path: Path) -> int | None:
     if not _MCP_HINT_RE.search(text):
         return None
     try:
-        tree = ast.parse(text)
+        tree = parse_python(text, path)
     except SyntaxError:
         return None
 
@@ -189,11 +196,7 @@ def _scan_python(text: str) -> int | None:
             continue
         tainted = _collect_tainted(fn, seed)
 
-        fn_src = ""
-        try:
-            fn_src = ast.unparse(fn)
-        except Exception:
-            pass
+        fn_src = unparse(fn)
         if _GUARD_RE.search(fn_src):
             continue
 
@@ -212,7 +215,7 @@ _TS_LINE = re.compile(r"//[^\n]*")
 
 
 def _strip_comments(text: str) -> str:
-    text = _TS_BLOCK.sub(lambda m: "\n" * m.group(0).count("\n"), text)
+    text = sub_up_to_last(_TS_BLOCK, lambda m: "\n" * m.group(0).count("\n"), text, "*/")
     return _TS_LINE.sub("", text)
 
 
@@ -260,11 +263,7 @@ def scan(project_root: Path) -> tuple[list[Finding], set[str]]:
         suf = path.suffix
         if suf not in _PY_SUFFIXES + _TS_SUFFIXES + _RUST_SUFFIXES:
             continue
-        try:
-            rel_parts = path.relative_to(project_root).parts
-        except ValueError:
-            continue
-        if any(part in SKIP_DIRS for part in rel_parts):
+        if in_skip_dir(path, project_root):
             continue
         if not path.is_file():
             continue
@@ -275,7 +274,12 @@ def scan(project_root: Path) -> tuple[list[Finding], set[str]]:
         except OSError:
             continue
 
-        line = _scan_python(text) if suf in _PY_SUFFIXES else _scan_regex(text)
+        line: int | None = None
+        if suf in _PY_SUFFIXES:
+            with refusing_overflow(path):
+                line = _scan_python(text, path)
+        else:
+            line = _scan_regex(text)
         if line is None:
             continue
 

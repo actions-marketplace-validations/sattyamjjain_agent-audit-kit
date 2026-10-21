@@ -22,7 +22,10 @@ FRAMEWORKS = {
             "CC6.1 - Access Control": ["ASI03", "ASI06"],
             "CC6.3 - Role-Based Access": ["ASI03"],
             "CC6.6 - System Boundaries": ["ASI05", "ASI02"],
-            "CC6.7 - Data Transmission": ["ASI03"],
+            # Transport rules (cleartext, TLS off, deprecated SSE) carry ASI07,
+            # Insecure Inter-Agent Communication. They used to carry ASI03, which
+            # is why this row read ASI03; it follows them, not the old label.
+            "CC6.7 - Data Transmission": ["ASI07"],
             "CC7.1 - Vulnerability Management": ["ASI04"],
             "CC7.2 - Incident Detection": ["ASI08", "ASI10"],
             "CC8.1 - Change Management": ["ASI04", "ASI06"],
@@ -32,7 +35,7 @@ FRAMEWORKS = {
         "name": "ISO 27001:2022",
         "controls": {
             "A.8.9 - Configuration Management": ["ASI02", "ASI05"],
-            "A.8.24 - Cryptography": ["ASI03"],
+            "A.8.24 - Cryptography": ["ASI03", "ASI07"],
             "A.8.25 - Secure Development": ["ASI05", "ASI04"],
             "A.8.28 - Secure Coding": ["ASI05", "ASI02"],
             "A.5.23 - Cloud Security": ["ASI03", "ASI04"],
@@ -45,7 +48,7 @@ FRAMEWORKS = {
             "164.312(a) - Access Control": ["ASI03", "ASI06"],
             "164.312(c) - Integrity": ["ASI04", "ASI06"],
             "164.312(d) - Authentication": ["ASI03"],
-            "164.312(e) - Transmission Security": ["ASI03"],
+            "164.312(e) - Transmission Security": ["ASI07"],
             "164.308(a)(1) - Security Management": ["ASI01", "ASI10"],
         },
     },
@@ -132,7 +135,7 @@ FRAMEWORKS = {
                     "AAK-TASKS-004",
                     "AAK-TRUST-001", "AAK-TRUST-002", "AAK-TRUST-003",
                     "AAK-TRUST-004", "AAK-TRUST-005", "AAK-TRUST-006",
-                    "AAK-TRUST-007",
+                    "AAK-TRUST-007", "AAK-TRUST-008",
                     "AAK-A2A-001", "AAK-A2A-002", "AAK-A2A-008",
                     "AAK-A2A-009", "AAK-A2A-010",
                     "AAK-MCP-ATTEST-001", "AAK-MCP-TUNNEL-001",
@@ -170,10 +173,11 @@ FRAMEWORKS = {
                 "rule_ids": [
                     "AAK-MCP-ATTEST-001",
                     "AAK-A2A-004", "AAK-A2A-005", "AAK-A2A-006", "AAK-A2A-011",
-                    "AAK-WINDSURF-001", "AAK-MCP-LINEAGE-STAINLESS-001",
+                    "AAK-MCP-LINEAGE-STAINLESS-001",
                     "AAK-MCP-TUNNEL-003",
                 ],
-                "also_covers_asi": ["ASI03", "ASI04"],
+                # ASI07 is where message integrity (TLS, replay, signing) now lives.
+                "also_covers_asi": ["ASI03", "ASI04", "ASI07"],
             },
             "Filter and monitor output pipelines and chained execution (p.12)": {
                 "rule_ids": [
@@ -202,7 +206,6 @@ FRAMEWORKS = {
                     "AAK-SPLUNK-MCP-TOKEN-LEAK-001",
                     "AAK-AGENT-001", "AAK-AGENT-002", "AAK-AGENT-003",
                     "AAK-AGENT-004",
-                    "AAK-WINDSURF-001",
                 ],
                 "also_covers_asi": ["ASI08", "ASI10"],
             },
@@ -263,16 +266,19 @@ FRAMEWORKS = {
         # Agentic Trust full-conformance work.
         "name": "MCP 2026 Roadmap",
         "controls": {
-            # Transport-flip resistance — the central hardening item.
-            "Transport Hardening (no stdio override)": ["ASI02", "ASI05", "ASI10"],
+            # Transport-flip resistance — the central hardening item. A flip to
+            # stdio is a protocol downgrade (ASI07) that ends in a spawned
+            # command (ASI05). The ASI10 these rows used to carry came from
+            # rules that were mis-tagged ASI10 and no longer are.
+            "Transport Hardening (no stdio override)": ["ASI05", "ASI07"],
             # Tool provenance / signed-tools checks.
             "Tool Provenance / Signed Tools": ["ASI04", "ASI05"],
-            # Protocol-version pinning (manifest discipline).
-            "Protocol Version Pinning": ["ASI03", "ASI04"],
+            # Protocol-version pinning (manifest discipline; downgrade resistance).
+            "Protocol Version Pinning": ["ASI04", "ASI07"],
             # Authenticated MCP endpoints, deprecate unauth STDIO.
-            "Authenticated Endpoints (STDIO deprecation)": ["ASI03", "ASI05", "ASI10"],
+            "Authenticated Endpoints (STDIO deprecation)": ["ASI03", "ASI05"],
             # Marketplace/source provenance for installed servers.
-            "Marketplace Source Provenance": ["ASI04", "ASI06"],
+            "Marketplace Source Provenance": ["ASI04"],
         },
     },
 }
@@ -339,9 +345,13 @@ def _art15_locale_subsection(result: ScanResult) -> list[str]:
                     )
         declared_str = ", ".join(sorted(all_declared)) or "n/a"
         covered_str = ", ".join(sorted(all_covered)) if all_covered else "none"
+        # A `multilingual: true` declaration names fewer locales than it
+        # claims, so "1 locale(s) (en)" misread it as a single-language agent.
+        multilingual = any("multilingual: true" in (f.evidence or "") for f in findings)
         lines.append(
-            f"      multilingual-locale-declared: "
-            f"{len(all_declared)} locale(s) ({declared_str})"
+            "      multilingual-locale-declared: "
+            + ("multilingual: true, " if multilingual else "")
+            + f"{len(all_declared)} {'named ' if multilingual else ''}locale(s) ({declared_str})"
         )
         lines.append(
             f"      multilingual-eval-coverage: not evidenced — "

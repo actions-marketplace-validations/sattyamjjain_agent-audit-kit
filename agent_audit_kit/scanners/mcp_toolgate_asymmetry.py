@@ -24,7 +24,7 @@ import re
 from pathlib import Path
 
 from agent_audit_kit.models import Finding
-from agent_audit_kit.scanners._helpers import make_finding, SKIP_DIRS
+from agent_audit_kit.scanners._helpers import in_skip_dir, make_finding, parse_python, sub_up_to_last
 
 _RULE_ID = "AAK-MCP-TOOLGATE-ASYMMETRY-001"
 
@@ -93,12 +93,12 @@ def _gate_in_body(fn: ast.AST) -> bool:
     return False
 
 
-def _scan_python(text: str) -> bool:
+def _scan_python(text: str, path: Path) -> bool:
     """Return True if a discovery-gated-but-not-exec-gated asymmetry is found."""
     if not _MCP_HINT_RE.search(text):
         return False
     try:
-        tree = ast.parse(text)
+        tree = parse_python(text, path)
     except SyntaxError:
         return False
 
@@ -149,7 +149,7 @@ _TS_LINE_COMMENT_RE = re.compile(r"//[^\n]*")
 def _strip_ts_comments(text: str) -> str:
     """Remove block + line comments so a comment mentioning the gate word
     (e.g. ``// TODO: add readOnly check``) cannot mask the asymmetry."""
-    text = _TS_BLOCK_COMMENT_RE.sub(" ", text)
+    text = sub_up_to_last(_TS_BLOCK_COMMENT_RE, " ", text, "*/")
     text = _TS_LINE_COMMENT_RE.sub(" ", text)
     return text
 
@@ -205,11 +205,7 @@ def scan(project_root: Path) -> tuple[list[Finding], set[str]]:
     for path in project_root.rglob("*"):
         if path.suffix not in _PY_SUFFIXES + _TS_SUFFIXES:
             continue
-        try:
-            rel_parts = path.relative_to(project_root).parts
-        except ValueError:
-            continue
-        if any(part in SKIP_DIRS for part in rel_parts):
+        if in_skip_dir(path, project_root):
             continue
         if not path.is_file():
             continue
@@ -221,7 +217,7 @@ def scan(project_root: Path) -> tuple[list[Finding], set[str]]:
             continue
 
         if path.suffix in _PY_SUFFIXES:
-            asymmetric = _scan_python(text)
+            asymmetric = _scan_python(text, path)
         else:
             asymmetric = _scan_ts(text)
 

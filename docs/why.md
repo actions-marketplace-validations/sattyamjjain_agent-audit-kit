@@ -59,16 +59,29 @@ goes undetected.
 Every `v*` release publishes:
 
 - **Wheel + sdist** on PyPI via OIDC Trusted Publisher
-- **Docker image** on GHCR (`ghcr.io/sattyamjjain/agent-audit-kit:<tag>`) with SLSA provenance attestation. Provenance is attached by the release flow, so it covers **version tags**; the nightly rebuild that refreshes `:latest` and `:nightly` scans the image with Trivy but attaches no attestation, so pin a version tag if you need provenance
+- **Docker image** on GHCR (`ghcr.io/sattyamjjain/agent-audit-kit:<version>`, the version without its `v`) with SLSA provenance attestation. Provenance is attached by the release flow, so it covers **version tags**; the nightly rebuild that refreshes `:latest` and `:nightly` scans the image with Trivy but attaches no attestation, so pin a version tag if you need provenance
 - **Sigstore keyless-signed rule bundle** (`rules.json` + `rules.json.sha256`)
-- **CycloneDX + SPDX SBOM** (`sbom.cdx.json`, `sbom.spdx.json`)
-- **OpenVEX 0.2.0 exploitability document** (`vex.openvex.json`) — joins to the SBOM on purl; never claims `not_affected`, which needs a reachability justification a static scan cannot establish
+- **CycloneDX + SPDX SBOM** of the package and its runtime dependencies (`sbom.cdx.json`, `sbom.spdx.json`), each Sigstore-signed. Releases through v0.6.9 attached SBOMs that listed no components: the job described this repository's MCP servers, of which it has none
 
-Verify a bundle:
+For your own project, `agent-audit-kit sbom` and `agent-audit-kit vex` emit the SBOM
+of the MCP servers it declares and an OpenVEX 0.2.0 document that joins to it on
+purl ([VEX](vex.md)). No release publishes a VEX document of its own.
+
+Verify a bundle against its signature and signer:
 
 ```bash
-agent-audit-kit verify-bundle rules.json --signature rules.json.sigstore
+pip install "agent-audit-kit[verify]"
+agent-audit-kit verify-bundle rules.json --signature rules.json.sigstore.json --tag v<version>
 ```
+
+It checks the Sigstore bundle against the file and that the signer is this
+repository's `release.yml` on that tag. Without `--tag`, any release tag is
+accepted, since the bundle does not record its own version; `--offline` uses the
+trust root that ships with sigstore. Through v0.6.9 the command could not verify
+a signature at all, so for those releases use the Sigstore CLI:
+`python -m sigstore verify identity rules.json --bundle rules.json.sigstore.json
+--cert-identity https://github.com/sattyamjjain/agent-audit-kit/.github/workflows/release.yml@refs/tags/v<version>
+--cert-oidc-issuer https://token.actions.githubusercontent.com`.
 
 ---
 ## State of MCP Security 2026

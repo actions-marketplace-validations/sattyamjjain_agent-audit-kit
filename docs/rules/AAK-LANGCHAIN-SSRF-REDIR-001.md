@@ -9,11 +9,11 @@
 | Shipped | v0.3.5 (2026-04-25) |
 | Scanner | `agent_audit_kit/scanners/ssrf_redirect.py` |
 | CWE | CWE-601 (Open Redirect) + CWE-918 (SSRF) |
-| OWASP MCP | MCP05:2025 |
-| OWASP Agentic | ASI04, ASI09 |
+| OWASP MCP | MCP05:2025 (Command Injection & Execution) |
+| OWASP Agentic | ASI02 (Tool Misuse and Exploitation) |
 | AICM | IVS-04, AIS-08 |
 | CVE | [CVE-2026-41481](https://nvd.nist.gov/vuln/detail/CVE-2026-41481) |
-| Advisory | [GHSA-fv5p-p927-qmxr](https://advisories.gitlab.com/pypi/langchain-text-splitters/GHSA-fv5p-p927-qmxr/) |
+| Advisory | [GHSA-fv5p-p927-qmxr](https://github.com/advisories/GHSA-fv5p-p927-qmxr) |
 
 ## What it catches
 
@@ -65,8 +65,9 @@ The rule also ships a pin check across `requirements*.txt`,
 - Manual redirect handling that re-validates each hop. We currently
   only check the kwargs at the fetch call site; if the caller manages
   redirects in a loop with their own validator we cannot prove safety
-  without flow analysis. False positives here can be silenced with a
-  `# aak: ignore[AAK-LANGCHAIN-SSRF-REDIR-001]` comment.
+  without flow analysis. AAK reads no per-line suppression comment, so to
+  silence a false positive, list the file under `ignore-paths` in
+  `.agent-audit-kit.yml` (or pass `--ignore-paths`).
 
 ## Remediation
 

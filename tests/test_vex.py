@@ -15,17 +15,20 @@ from pathlib import Path
 import pytest
 
 from agent_audit_kit.engine import run_scan
-from agent_audit_kit.output.sbom import emit_cyclonedx
+from agent_audit_kit.models import ScanResult
+from agent_audit_kit.output.sbom import _discover_mcp_packages, emit_cyclonedx
 from agent_audit_kit.output.vex import CONTEXT, emit_openvex
 
 FIXTURES = Path(__file__).parent / "fixtures"
 
-# Existing fixtures, one per status arm. `vulnerable` pins mcp-grafana at
-# 1.0.0 (below the 1.1.0 fix floor); `patched` pins it at 1.1.0; kong_konnect
-# pins a package the range table does not cover.
+# One fixture per status arm. `vulnerable` pins mcp-grafana at 1.0.0 (below the
+# 1.1.0 fix floor); `patched` pins it at 1.1.0; `no_range_knowledge` launches
+# mcp-gateway-registry 1.0.12, which an older supply_chain floor reports
+# (CVE-2026-14471) but the range table does not cover. That arm used the
+# kong_konnect fixture until AAK-MCP-KONG-CVE-2026-13341-001 was retired.
 AFFECTED_FIXTURE = FIXTURES / "cves" / "cve-2026-19516-mcp-grafana" / "vulnerable"
 FIXED_FIXTURE = FIXTURES / "cves" / "cve-2026-19516-mcp-grafana" / "patched"
-UNDER_INVESTIGATION_FIXTURE = FIXTURES / "kong_konnect"
+UNDER_INVESTIGATION_FIXTURE = FIXTURES / "vex" / "no_range_knowledge"
 
 PINNED_TS = datetime(2026, 9, 12, 12, 0, 0, tzinfo=timezone.utc)
 
@@ -142,7 +145,7 @@ def test_fixed_is_reachable_without_any_finding() -> None:
 
 def test_unresolvable_range_is_under_investigation() -> None:
     doc = _emit(UNDER_INVESTIGATION_FIXTURE)
-    assert _statuses(doc)["CVE-2026-13341"] == "under_investigation"
+    assert _statuses(doc)["CVE-2026-14471"] == "under_investigation"
 
 
 def test_under_investigation_carries_no_action_statement() -> None:
@@ -179,12 +182,25 @@ def _fixture_dirs() -> list[Path]:
 
 
 def test_not_affected_never_appears_in_any_emitted_document() -> None:
-    """Sweep every fixture directory in the tree, not a curated list."""
+    """Sweep every fixture directory in the tree, not a curated list.
+
+    The emitter makes its statements for the packages it discovers in the
+    directory, so where it discovers none the document has none, and the scan
+    cannot change it: the first assertion holds that, with a scan full of CVE
+    findings. Only the directories with a package are scanned. Scanning every
+    one, each file once for every directory above it, took 85 seconds, half of
+    it on the three that hold the rest, and none of those has a package.
+    """
+    rich = run_scan(AFFECTED_FIXTURE)
+    assert any(f.cve_references for f in rich.findings)
+    bare = next(d for d in _fixture_dirs() if not _discover_mcp_packages(d))
+    assert emit_openvex(bare, rich, timestamp=PINNED_TS) == emit_openvex(bare, ScanResult(), timestamp=PINNED_TS)
     checked = 0
     statements = 0
     for project in _fixture_dirs():
         try:
-            payload = emit_openvex(project, run_scan(project), timestamp=PINNED_TS)
+            result = run_scan(project) if _discover_mcp_packages(project) else ScanResult()
+            payload = emit_openvex(project, result, timestamp=PINNED_TS)
         except Exception:  # noqa: BLE001 - a fixture that cannot scan is not this test's subject
             continue
         checked += 1

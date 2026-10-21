@@ -7,8 +7,8 @@ aggregator. Hermes Agent's ``list_tools`` in ``tools/mcp_tool.py`` is the
 disclosed instance: read every tool, keep name, description and full input
 schema, return the lot. CWE-400 / CWE-789.
 
-``AAK-MCP-016`` looked like the match and is not. Its text is *"An MCP server
-endpoint accepts request bodies without a maximum-size limit"* — the **inbound
+``AAK-MCP-016`` looked like the match and is not. It reports an MCP endpoint
+that reads the whole request body with nothing limiting its size — the **inbound
 request**. This allocation is driven by the **upstream response**, a value that
 arrives from a different direction and that no body-size limit touches.
 Confirmed by scanning the disclosed shape against the whole engine before
@@ -27,7 +27,7 @@ import re
 from pathlib import Path
 
 from agent_audit_kit.models import Finding
-from agent_audit_kit.scanners._helpers import SKIP_DIRS, find_line_number, make_finding
+from agent_audit_kit.scanners._helpers import in_skip_dir, find_line_number, make_finding, sub_up_to_last
 
 _RULE_ID = "AAK-MCP-TOOLS-LIST-UNBOUNDED-001"
 
@@ -77,7 +77,7 @@ _BOUND_RE = re.compile(
 def _strip_comments(text: str, is_py: bool) -> str:
     if is_py:
         return text
-    return _TS_LINE_COMMENT_RE.sub(" ", _TS_BLOCK_COMMENT_RE.sub(" ", text))
+    return _TS_LINE_COMMENT_RE.sub(" ", sub_up_to_last(_TS_BLOCK_COMMENT_RE, " ", text, "*/"))
 
 
 def scan(project_root: Path) -> tuple[list[Finding], set[str]]:
@@ -95,11 +95,7 @@ def scan(project_root: Path) -> tuple[list[Finding], set[str]]:
     for path in project_root.rglob("*"):
         if path.suffix not in _SUFFIXES:
             continue
-        try:
-            rel_parts = path.relative_to(project_root).parts
-        except ValueError:
-            continue
-        if any(part in SKIP_DIRS for part in rel_parts):
+        if in_skip_dir(path, project_root):
             continue
         if not path.is_file():
             continue

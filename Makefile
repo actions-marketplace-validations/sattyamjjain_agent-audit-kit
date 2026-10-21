@@ -1,20 +1,23 @@
 # AgentAuditKit task runner.
 #
 # The State of MCP report is a build artifact: `make report` regenerates
-# results.json from the committed corpus manifest, deterministically and
-# offline, so the numbers in research/state-of-mcp-2026/REPORT.md cannot drift
-# from the code. `make corpus` is the single network step (refreshes the
-# manifest from the MCP Registry); it is intentionally separate from `report`.
+# results.json from the local benchmarks/data crawl (gitignored) and the
+# committed registry manifest, deterministically and offline, so the numbers in
+# research/state-of-mcp-2026/REPORT.md cannot drift from the code. `make corpus`
+# is the report's one network step (refreshes the manifest from the MCP
+# Registry); it is intentionally separate from `report`.
 
 RESEARCH := research/state-of-mcp-2026
 CORPUS   := benchmarks/data
 MANIFEST := $(RESEARCH)/corpus/registry-manifest.json
 RESULTS  := $(RESEARCH)/results.json
 
-.PHONY: report corpus report-check report-pdf report-pdf-check count-check test lint typecheck repo-description \
-        cve-latency cve-latency-check cve-latency-refresh \
+.PHONY: report corpus report-check report-pdf report-pdf-check report-figures-check count-check test lint typecheck repo-description \
+        cve-latency cve-latency-check cve-latency-queue-check cve-latency-refresh \
         remediation-corpus remediation-corpus-check \
         fp fp-check \
+        fp-instruction fp-instruction-check fp-instruction-pin fp-instruction-fetch \
+        mcptox mcptox-check mcptox-fetch \
         registry-parity cve-deferral-check
 
 ## report: regenerate results.json from the corpus + manifest (offline, deterministic)
@@ -67,13 +70,69 @@ fp:
 ## fp-check: fail if any false-positive artifact is stale vs a fresh derivation (drift guard).
 ## This is the guard that was missing: the corpus manifest grew 1,374 -> 1,641 servers, the
 ## benign slice 368 -> 536, and the published rate went on describing a slice that no longer
-## existed because nothing checked.
+## existed because nothing checked. The last line checks the hand-written RESULTS.md: its
+## Limitations kept the 2026-08-24 run's numbers under a headline reporting 2026-09-03's.
 fp-check:
 	@python benchmarks/false_positive/corpus.py --check
 	@python benchmarks/false_positive/run.py --out /tmp/aak-fp-check.json >/dev/null
 	@diff -q benchmarks/false_positive/results.json /tmp/aak-fp-check.json >/dev/null && echo "fp results are up to date" \
 	  || (echo "results.json is stale - run 'make fp', re-adjudicate by hand, and commit" && exit 1)
 	@python scripts/sync_fp_badge.py --check
+	@python scripts/check_fp_results_page.py
+	@$(MAKE) --no-print-directory fp-instruction-check
+
+## fp-instruction: re-derive the instruction-file slice (slice.json) and re-scan it
+## (results.json) from the committed manifest and the local cache. Offline once
+## `fp-instruction-fetch` has filled the cache. Like `fp`, it never touches
+## adjudication.json: a run that moves the findings needs a fresh adjudication
+## (`run.py --init-adjudication`, which refuses to overwrite a set verdict).
+fp-instruction:
+	python benchmarks/false_positive/instruction_files/corpus.py --write
+	python benchmarks/false_positive/instruction_files/run.py --write
+
+## fp-instruction-check: the instruction slice's drift guard. The manifest validates and
+## matches the scanners' instruction paths, slice.json matches a fresh derivation, the
+## scan matches results.json (only when the cache is filled; otherwise it says NOT
+## CHECKED, which is a skip and not a pass), and RESULTS.md states no rate while the
+## adjudication is pending, then exactly the adjudicated one.
+fp-instruction-check:
+	@python benchmarks/false_positive/instruction_files/corpus.py --check
+	@python benchmarks/false_positive/instruction_files/run.py --check
+	@python scripts/check_fp_instruction_page.py
+
+## fp-instruction-pin: (network, one-time) re-pin the instruction-file corpus from the
+## SENTINEL bench manifests: repository metadata and head commits through `gh api graphql`,
+## every instruction file by SHA-256. A re-pin is a corpus refresh and moves the slice.
+fp-instruction-pin:
+	python benchmarks/false_positive/instruction_files/fetch.py pin
+
+## fp-instruction-fetch: (network) fill the cache from manifest.json, verifying every SHA-256.
+## Third-party file contents live only there, never in a commit: the cache is a user cache
+## directory outside the repo ($XDG_CACHE_HOME/agent-audit-kit/fp-instruction-files, or
+## AAK_FP_INSTRUCTION_CACHE), so no scan of the repo reads it.
+fp-instruction-fetch:
+	python benchmarks/false_positive/instruction_files/fetch.py fetch
+
+## mcptox: re-measure AAK's untuned rules-only recall on MCPTox (benchmarks/mcptox/results.json).
+## Offline once the cache is filled, deterministic, ~20s. MCPTox is a public labelled set, so
+## the measurement is only worth having untuned: `run.py --write` refuses to replace it with a
+## run of a changed package unless `--supersede untuned|tuned` says which that run is.
+mcptox:
+	python benchmarks/mcptox/run.py --write
+
+## mcptox-check: RESULTS.md states only results.json's rates (offline, always runs), and a
+## fresh run of the measured package reproduces results.json. Without the cache it says NOT
+## CHECKED, and once agent_audit_kit/ has changed it says NOT COMPARED, because the published
+## recall belongs to the frozen rule set. Neither is a pass.
+mcptox-check:
+	@python scripts/check_mcptox_results_page.py
+	@python benchmarks/mcptox/run.py --check
+
+## mcptox-fetch: (network, once) download the pinned MCPTox release file and verify its size,
+## SHA-256 and git blob id. MCPTox has no license, so the file lives only in a user cache
+## outside the repo ($XDG_CACHE_HOME/agent-audit-kit/mcptox, or AAK_MCPTOX_CACHE).
+mcptox-fetch:
+	python benchmarks/mcptox/fetch.py
 
 ## count-check: fail if ANY rendered count is stale. Two guards, because they cover
 ## different halves and each one alone gives a false all-clear:
@@ -82,20 +141,32 @@ fp-check:
 ##                         __init__.py, docs/rules.md, and every <!-- rule-count --> anchor
 ## The badge sat outside check_counts.py's phrase list, so `make count-check` reported
 ## clean with a stale badge until v0.3.88. Both now run under the one target.
+## Last, the live github.com description against the rendered one (gh repo view; fails
+## on a mismatch, skipped with a message when gh is missing or not authenticated).
 count-check:
 	@PYTHONPATH=. python scripts/check_counts.py
 	@PYTHONPATH=. python scripts/sync_rule_count.py --check
-	@PYTHONPATH=. python scripts/sync_rule_doc_pages.py --check
+	@PYTHONPATH=. python scripts/render_repo_metadata.py --check-live sattyamjjain/agent-audit-kit
 
-## cve-latency: regenerate docs/cve-latency.md from the ledger (offline, deterministic)
+## cve-latency: regenerate docs/cve-latency.md from the ledger. Not offline: the
+## open-queue row reads the live cve-response tracker via gh (read=no without
+## it); run the script with --issues-json FILE to render a fixed queue.
 cve-latency:
 	python scripts/cve_latency.py
 
-## cve-latency-check: fail if docs/cve-latency.md is stale vs the ledger (drift guard, runs on tag)
+## cve-latency-check: fail if docs/cve-latency.md is stale vs the ledger (drift guard,
+## offline: pytest runs it every time and release.yml on every tag)
 cve-latency-check:
 	@python scripts/cve_latency.py --check
 
-## cve-latency-refresh: top up docs/data/cve-published.json from NVD (the one network step)
+## cve-latency-queue-check: fail if the published open-queue row disagrees with
+## the tracker (network). Deliberately NOT part of cve-latency-check: that one
+## runs in pytest and on every tag, and a published number must not gate a
+## release. Runs on the daily CVE cron beside the ageing gate.
+cve-latency-queue-check:
+	@python scripts/cve_latency.py --check-queue
+
+## cve-latency-refresh: top up docs/data/cve-published.json from NVD (network)
 cve-latency-refresh:
 	python scripts/cve_latency.py --refresh
 
@@ -104,8 +175,8 @@ remediation-corpus:
 	python scripts/gen_remediation_key_corpus.py
 
 ## remediation-corpus-check: fail if remediation-key-corpus.json is stale vs benchmarks/data.
-## Also asserted by tests/test_remediation_keys_are_real.py, so CI covers it via pytest;
-## this target is for regenerating locally without running the suite.
+## tests/test_remediation_keys_are_real.py runs the same comparison but skips without the
+## gitignored benchmarks/data crawl, so CI never does: run this locally when a rule change can move it.
 remediation-corpus-check:
 	@python scripts/gen_remediation_key_corpus.py --check
 

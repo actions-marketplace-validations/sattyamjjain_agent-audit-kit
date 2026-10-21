@@ -36,13 +36,21 @@ analysis cover in-body behaviour).
 
 from __future__ import annotations
 
+import re
 from pathlib import Path
 from urllib.parse import urlparse
 
 import yaml
 
 from agent_audit_kit.models import Finding
-from agent_audit_kit.scanners._helpers import SKIP_DIRS, make_finding
+from agent_audit_kit.scanners._helpers import (
+    CONFIG_MAX_BYTES,
+    in_skip_dir,
+    load_yaml,
+    make_finding,
+    read_text_capped,
+    url_hosts,
+)
 
 _RULE_ID = "AAK-AGENT-COMPOSE-001"
 
@@ -75,16 +83,33 @@ _PROJECT_OVERRIDE = ".aak/composition-boundaries.yaml"
 _MAX_FILE_BYTES = 512_000
 
 
-def _parse_frontmatter(text: str) -> dict:
-    """Parse the YAML frontmatter block of a SKILL.md, tolerant of no block."""
+# The line that closes a frontmatter block: `---` alone, with trailing blanks
+# and a CR allowed. The block used to end at the next `---` anywhere, so
+# `description: Deploy the app --- fast` cut the block short and every key
+# after it, `hooks` and `allowed-tools` included, was never read.
+_FRONTMATTER_CLOSE_RE = re.compile(r"^---[ \t]*\r?$", re.MULTILINE)
+
+
+def _parse_frontmatter(text: str, path: Path | None = None) -> dict:
+    """Parse the YAML frontmatter block of a SKILL.md, tolerant of no block.
+
+    The block opens with `---` at the start of the file and closes at the next
+    line that is `---` alone. It is read with the shared bounded loader,
+    `_helpers.load_yaml`, so a block nested past `YAML_MAX_NESTING` levels
+    (`YAML_MAX_FLOW_NESTING` of brackets), or one that YAML aliases grow past
+    its bound, is refused against `path` and reads as no frontmatter, as
+    invalid YAML does. The refusal is reported (a client may load what AAK
+    refused), while invalid YAML is not. PyYAML composes recursively, and
+    `RecursionError` is no YAMLError, so 2,000 `[` used to take down every
+    scanner that called this; the loader stops a block long before that.
+    """
     if not text.startswith("---"):
         return {}
-    try:
-        _, fm, _ = text.split("---", 2)
-    except ValueError:
+    close = _FRONTMATTER_CLOSE_RE.search(text, 3)
+    if close is None:
         return {}
     try:
-        data = yaml.safe_load(fm)
+        data = load_yaml(text[3:close.start()], path)
     except yaml.YAMLError:
         return {}
     return data if isinstance(data, dict) else {}
@@ -104,11 +129,31 @@ def _as_list(value: object) -> list[str]:
 
 
 def _host(dest: str) -> str:
-    """Normalise a declared egress destination to a bare host for allowlisting."""
+    """Normalise a declared egress destination to a bare host for allowlisting.
+
+    An http(s) or ws(s) URL is read by `url_hosts`, so its host is the one a
+    client connects to. `urlparse` kept a backslash inside the authority, so
+    `https://evil.example\\@docs.python.org/` came out as an allowlisted
+    `docs.python.org` while the agent's fetch tool, which parses as Node does,
+    went to evil.example. When the readings disagree the whole destination is
+    returned, which no allowlist entry (an exact host) matches. Any other scheme
+    (`s3://`, `ftp://`) is read by `urlparse` as before, and a malformed
+    authority such as `http://[::1/`, which made it raise and took the scanner
+    down, falls back to the destination itself.
+    """
     dest = dest.strip()
-    if "://" in dest:
-        return (urlparse(dest).hostname or dest).lower()
-    return dest.split("/")[0].lower()
+    if "://" not in dest:
+        return dest.split("/")[0].lower()
+    hosts = url_hosts(dest)
+    if len(hosts) > 1:
+        return dest.lower()
+    if hosts:
+        return hosts[0]
+    try:
+        host = urlparse(dest).hostname
+    except ValueError:
+        host = None
+    return (host or dest).lower()
 
 
 class _Skill:
@@ -126,10 +171,10 @@ def _extract_skill(path: Path, project_root: Path) -> _Skill | None:
     try:
         if path.stat().st_size > _MAX_FILE_BYTES:
             return None
-        raw = path.read_text(encoding="utf-8", errors="replace")
+        raw = read_text_capped(path, _MAX_FILE_BYTES, errors="replace")
     except OSError:
         return None
-    fm = _parse_frontmatter(raw)
+    fm = _parse_frontmatter(raw, path)
     rel = path.relative_to(project_root).as_posix()
     skill = _Skill(path, rel, 1)
 
@@ -155,10 +200,12 @@ def _load_boundaries(project_root: Path) -> tuple[list[dict], set[str]]:
     override = project_root / _PROJECT_OVERRIDE
     src = override if override.is_file() else _DEFAULT_BOUNDARIES
     try:
-        data = yaml.safe_load(src.read_text(encoding="utf-8")) or {}
+        data = load_yaml(read_text_capped(src, CONFIG_MAX_BYTES, errors="replace"), src) or {}
     except (OSError, yaml.YAMLError):
         return [], set()
-    boundaries = data.get("boundaries", []) if isinstance(data, dict) else []
+    if not isinstance(data, dict):
+        return [], set()
+    boundaries = data.get("boundaries", [])
     allowlist = {h.lower() for h in _as_list(data.get("egress_allowlist"))}
     return [b for b in boundaries if isinstance(b, dict)], allowlist
 
@@ -168,7 +215,7 @@ def _skill_sets(project_root: Path) -> dict[Path, list[_Skill]]:
     skill subdirs). Skills in the same container load into one context."""
     sets: dict[Path, list[_Skill]] = {}
     for path in project_root.rglob("SKILL.md"):
-        if any(part in SKIP_DIRS for part in path.parts):
+        if in_skip_dir(path, project_root):
             continue
         skill = _extract_skill(path, project_root)
         if skill is None:

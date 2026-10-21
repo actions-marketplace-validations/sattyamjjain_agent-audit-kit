@@ -127,6 +127,15 @@ PATTERNS: tuple[tuple[re.Pattern[str], str], ...] = (
     # engine registers), so it needs its own canonical entry rather than reusing
     # one.
     (re.compile(r"\b(\d+)\s+\.py files on disk\b", re.I), "scanner_files"),
+    # "**348** rules, **103** scanners" in docs/launch/CHECKLIST.md: emphasis on
+    # the number alone. Every phrasing above wants the noun straight after the
+    # digits, and the corroboration sweep's `\s+` cannot step over `**` either,
+    # so the row read 348 against a live 362 with both guards clean. The phrase
+    # blind spot again, in a markup form. Rules and scanners only: those are the
+    # headline counts, and a bolded per-language "**2** scanners" is worth a
+    # human's look should one ever appear.
+    (re.compile(r"\*\*(\d+)\*\*\s+rules?\b", re.I), "rules"),
+    (re.compile(r"\*\*(\d+)\*\*\s+scanners?\b", re.I), "scanners"),
 )
 
 
@@ -275,6 +284,9 @@ SWEEP_ALLOW: dict[tuple[str, str], str] = {
         "sentence exists to describe that bug, so correcting it would erase the point",
     ("docs/RELEASING.md", "13 scanners"):
         "same sentence as above",
+    ("docs/research-log.md", "395 rules"):
+        "the 2026-10-15 OWASP remap entry (#971): references changed on 350 of the "
+        "395 rules the registry held that day, a dated record and not a live count",
 }
 
 # A number introduced by a threshold operator states a bar, not a count:

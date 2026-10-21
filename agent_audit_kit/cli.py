@@ -16,6 +16,7 @@ from agent_audit_kit.commands._common import (
     _load_config,
     _to_list,
 )
+from agent_audit_kit.commands.install_precommit import install_precommit_cmd
 from agent_audit_kit.commands.scan import scan_cmd
 from agent_audit_kit.engine import run_scan
 
@@ -26,6 +27,7 @@ __all__ = [
     "cli",
     "main",
     "scan_cmd",
+    "install_precommit_cmd",
     "SEVERITY_MAP",
     "FAIL_ON_CHOICES",
     "EXIT_PASS",
@@ -65,14 +67,20 @@ def cli(ctx: click.Context, emit_coverage: bool, coverage_format: str) -> None:
         ctx.invoke(scan_cmd)
 
 
-# Registered rather than decorated: the command lives in
-# agent_audit_kit/commands/scan.py, and a `@cli.command` there would need to
-# import this module, which imports it. See issue #701.
+# Registered rather than decorated: these commands live in
+# agent_audit_kit/commands/, and a `@cli.command` there would need to import
+# this module, which imports them. See issue #701.
 cli.add_command(scan_cmd)
+cli.add_command(install_precommit_cmd)
 
 
 @cli.command("discover")
 @click.version_option(version=__version__)
+@click.argument(
+    "path",
+    required=False,
+    type=click.Path(exists=True, file_okay=False, resolve_path=True),
+)
 @click.option("--verbose", "-v", is_flag=True, default=False)
 @click.option(
     "--format",
@@ -81,14 +89,23 @@ cli.add_command(scan_cmd)
     default="console",
     help="Output format. JSON emits a stable schema for programmatic use.",
 )
-def discover_cmd(verbose: bool, output_format: str) -> None:
-    """Discover all AI agent configurations on this machine."""
+def discover_cmd(path: str | None, verbose: bool, output_format: str) -> None:
+    """Discover AI agent configurations.
+
+    Without PATH, lists the home-directory configs on this machine. With
+    PATH, also checks that project for each platform's own config files
+    (.mcp.json, .cursor/mcp.json, .vscode/mcp.json, ...).
+    """
     from dataclasses import asdict
     import json as _json
 
     from agent_audit_kit.discovery import discover_agents
 
-    agents = discover_agents(verbose=verbose)
+    # Project-level configs (discovery.AGENT_CONFIGS) are only read under a
+    # project root. Until PATH existed the command never passed one, so the
+    # per-platform list was reachable from tests alone and `discover` saw
+    # nothing but the home directory.
+    agents = discover_agents(project_root=Path(path) if path else None, verbose=verbose)
 
     if output_format == "json":
         # Stable schema: {"count": int, "agents": [{...DiscoveredAgent}]}
@@ -116,11 +133,22 @@ def discover_cmd(verbose: bool, output_format: str) -> None:
 @click.version_option(version=__version__)
 @click.argument("path", default=".", type=click.Path(exists=True, file_okay=False, resolve_path=True))
 def pin_cmd(path: str) -> None:
-    """Pin current MCP tool definitions for rug pull detection."""
-    from agent_audit_kit.pinning import create_pins
+    """Pin current MCP tool definitions for rug pull detection.
+
+    Exits 2 when the pin file cannot be written inside the project, for
+    instance because `.agent-audit-kit` is a link that leads out of it.
+    """
+    from agent_audit_kit.fix import _PartlyWritten
+    from agent_audit_kit.pinning import PIN_FILE, PinWriteError, create_pins
 
     project_root = Path(path)
-    count = create_pins(project_root)
+    try:
+        count = create_pins(project_root)
+    except PinWriteError as exc:
+        # A write that failed part way says so itself; anything else wrote nothing.
+        tail = "" if isinstance(exc.args[0], _PartlyWritten) else f" {PIN_FILE} was not written."
+        click.echo(f"Cannot pin: {exc}.{tail}", err=True)
+        sys.exit(EXIT_ERROR)
     click.echo(f"Pinned {count} tool definition(s) to .agent-audit-kit/tool-pins.json")
 
 
@@ -128,17 +156,40 @@ def pin_cmd(path: str) -> None:
 @click.version_option(version=__version__)
 @click.argument("path", default=".", type=click.Path(exists=True, file_okay=False, resolve_path=True))
 def verify_cmd(path: str) -> None:
-    """Verify MCP tool definitions against pinned hashes."""
-    from agent_audit_kit.pinning import verify_pins
+    """Verify MCP tool definitions against pinned hashes.
+
+    Exits 1 when a tool changed, was added or was removed, 2 when the pin file
+    cannot be read or the check fails, and 0 when every tool matches its pin.
+    """
+    from agent_audit_kit.pinning import PinFileError, verify_pins
 
     project_root = Path(path)
-    findings = verify_pins(project_root)
+    try:
+        findings = verify_pins(project_root)
+    except PinFileError as exc:
+        # This printed "All tool definitions match their pins." and exited 0:
+        # nothing had been compared, because the pin file did not parse.
+        click.echo(f"Cannot verify: {exc}. No tool definition was compared with its pin.", err=True)
+        sys.exit(EXIT_ERROR)
+    except Exception as exc:  # noqa: BLE001
+        # A check that failed for another reason, such as an MCP config it
+        # could not decode, ended in a traceback and exit 1, the code for
+        # drift, while `watch --once` reported the same failure and exited 2.
+        click.echo(
+            f"Cannot verify: the check raised {type(exc).__name__}: {exc}. "
+            "No tool definition was compared with its pin.",
+            err=True,
+        )
+        sys.exit(EXIT_ERROR)
     if not findings:
         click.echo("All tool definitions match their pins.")
     else:
         click.echo(f"{len(findings)} tool definition change(s) detected:")
         for f in findings:
             click.echo(f"  {f.severity.value.upper()}: {f.title} -- {f.evidence}")
+        # This exited 0 after listing the changes, so the "in CI, verify nothing
+        # changed" step in docs/cli.md could never fail a job.
+        sys.exit(EXIT_FINDINGS)
 
 
 @cli.command("fix")
@@ -235,8 +286,9 @@ def score_cmd(path: str, badge: bool, aivss: bool, output_file: str | None) -> N
     if failures:
         click.echo(
             click.style(
-                f"WARNING: {len(failures)} scanner(s) crashed during this scan, so "
-                f"this grade is an upper bound, not a measurement.",
+                f"WARNING: {len(result.failed_scanners)} scanner(s) did not finish every "
+                "file during this scan (a crash or a refused file), so this grade is an "
+                "upper bound, not a measurement.",
                 fg="red",
                 bold=True,
             ),
@@ -310,11 +362,11 @@ def corpus_cmd() -> None:
 @click.option("--ipi", "update_ipi", is_flag=True, default=False, help="Update the wild IPI payload corpus.")
 @click.option("--fhi", "update_fhi", is_flag=True, default=False, help="Update the FHI universal-suffix corpus.")
 @click.option("--all", "update_all", is_flag=True, default=False, help="Update every corpus listed in the manifest.")
-@click.option("--manifest", "manifest_url", default=None, help="Override the manifest URL (default: gh-pages).")
+@click.option("--manifest", "manifest_url", default=None, help="Override the manifest URL (default: public/corpora/manifest.json on main).")
 def corpus_update_cmd(
     update_ipi: bool, update_fhi: bool, update_all: bool, manifest_url: str | None
 ) -> None:
-    """Pull a signed corpus manifest and refresh local data files."""
+    """Pull the corpus manifest and refresh local data files (SHA-256 pinned)."""
     from agent_audit_kit.corpus.manifest import (
         CorpusVerificationError,
         fetch_and_verify,
@@ -469,11 +521,17 @@ def suggest_cmd(
     if auto_pr:
         from agent_audit_kit.autopr import AutoPrError, open_auto_pr, plan_auto_pr
 
-        plan = plan_auto_pr(Path(project_path))
+        try:
+            plan = plan_auto_pr(Path(project_path))
+        except AutoPrError as exc:
+            click.echo(f"suggest --auto-pr: {exc}", err=True)
+            sys.exit(EXIT_ERROR)
         for fix in plan.fixes:
             click.echo(f"  + {fix.rule_id}  {fix.file_path}", err=True)
+        for fix in plan.unchanged:
+            click.echo(f"  = {fix.rule_id}  {fix.file_path}  (changes nothing: {fix.description})", err=True)
         for fix in plan.blocked:
-            click.echo(f"  - {fix.rule_id}  {fix.file_path}  (not allow-listed)", err=True)
+            click.echo(f"  - {fix.rule_id}  {fix.file_path}  ({plan.blocked_reason(fix)})", err=True)
         if dry_run:
             verdict = "would open" if plan.is_runnable else "would refuse"
             click.echo(
@@ -514,10 +572,12 @@ def suggest_cmd(
     for fix in fixes:
         click.echo(f"  {fix.rule_id}  {fix.file_path}", err=True)
     if not dry_run:
+        # This also said "log written to .agent-audit-kit/fix-log.json". `run_fixes`
+        # now refuses a log that would land outside the project, and says so on
+        # stderr, so the claim would contradict that line.
         click.echo(
-            "suggest: log written to .agent-audit-kit/fix-log.json. Review the "
-            "diff before committing — these are mechanical edits, not reviewed "
-            "changes.",
+            "suggest: review the diff before committing — these are mechanical "
+            "edits, not reviewed changes.",
             err=True,
         )
 
@@ -531,9 +591,16 @@ def suggest_cmd(
               help="HTTP endpoint to POST a Slack-shaped JSON when drift is detected. "
                    "Falls back to $AAK_WEBHOOK_URL.")
 @click.option("--once", is_flag=True, default=False,
-              help="Run a single check and exit (useful for cron/CI).")
+              help="Run a single check and exit (useful for cron/CI): 1 on drift, "
+                   "2 when the pin file is unreadable or the check failed, 0 otherwise.")
 def watch_cmd(path: str, interval_seconds: int, webhook_url: str | None, once: bool) -> None:
-    """Continuously monitor pinned tool surface for drift (Ctrl-C to stop)."""
+    """Continuously monitor pinned tool surface for drift (Ctrl-C to stop).
+
+    With `--once`, exits as `verify` does: 1 when a tool changed, was added or
+    was removed, 2 when the pin file cannot be read or the check fails, and 0
+    otherwise. Without it, a drift is reported and the watch goes on; it exits
+    0 when stopped.
+    """
     from agent_audit_kit.watch import run_watch
 
     result = run_watch(
@@ -543,9 +610,16 @@ def watch_cmd(path: str, interval_seconds: int, webhook_url: str | None, once: b
         max_iterations=1 if once else None,
     )
     click.echo(
-        f"watch: exited after {result.iterations} iteration(s), {result.drift_events} drift event(s).",
+        f"watch: exited after {result.iterations} iteration(s), {result.drift_events} drift event(s), "
+        f"{result.unverified} not verified.",
         err=True,
     )
+    # `--once` is the form the help offers for cron and CI, and it exited 0
+    # after printing a drift, so a job built on it could never fail.
+    if once and result.drift_events:
+        sys.exit(EXIT_FINDINGS)
+    if once and result.unverified:
+        sys.exit(EXIT_ERROR)
 
 
 @cli.command("notify")
@@ -612,34 +686,6 @@ def notify_cmd(path: str, config_path: str | None, dry_run: bool) -> None:
             click.echo(f"  {kind}: posted {count} finding(s)")
 
 
-@cli.command("install-precommit")
-@click.version_option(version=__version__)
-@click.argument("path", default=".", type=click.Path(exists=True, file_okay=False, resolve_path=True))
-def install_precommit_cmd(path: str) -> None:
-    """Add an agent-audit-kit entry to the project's .pre-commit-config.yaml."""
-    project = Path(path)
-    cfg_path = project / ".pre-commit-config.yaml"
-    snippet = (
-        "  - repo: https://github.com/sattyamjjain/agent-audit-kit\n"
-        "    rev: v0.3.0\n"
-        "    hooks:\n"
-        "      - id: agent-audit-kit\n"
-    )
-    if cfg_path.is_file():
-        existing = cfg_path.read_text(encoding="utf-8")
-        if "agent-audit-kit" in existing:
-            click.echo("agent-audit-kit hook already configured in .pre-commit-config.yaml")
-            return
-        if "repos:" in existing:
-            cfg_path.write_text(existing.rstrip() + "\n" + snippet, encoding="utf-8")
-        else:
-            cfg_path.write_text("repos:\n" + snippet, encoding="utf-8")
-    else:
-        cfg_path.write_text("repos:\n" + snippet, encoding="utf-8")
-    click.echo(f"added agent-audit-kit pre-commit hook to {cfg_path.relative_to(project)}")
-    click.echo("next: run `pre-commit install`")
-
-
 @cli.command("export-rules")
 @click.version_option(version=__version__)
 @click.option("--out", "-o", "output_file", type=click.Path(), required=True,
@@ -681,12 +727,17 @@ def scanners_cmd(as_json: bool) -> None:
 @click.version_option(version=__version__)
 @click.argument("bundle", type=click.Path(exists=True, dir_okay=False))
 @click.option("--signature", "-s", "sig_path", type=click.Path(exists=True, dir_okay=False),
-              default=None, help="Sigstore signature bundle.")
-def verify_bundle_cmd(bundle: str, sig_path: str | None) -> None:
-    """Verify a rule bundle's SHA-256 (optionally against a Sigstore signature)."""
+              default=None, help="The Sigstore bundle published beside it, e.g. rules.json.sigstore.json.")
+@click.option("--tag", default=None,
+              help="Release tag the file came from (vX.Y.Z): pins the signer to that release. "
+                   "Without it, release.yml on any version tag is accepted.")
+@click.option("--offline", is_flag=True, default=False,
+              help="Use the trust root bundled with sigstore instead of refreshing it.")
+def verify_bundle_cmd(bundle: str, sig_path: str | None, tag: str | None, offline: bool) -> None:
+    """Verify a release file's SHA-256, or its Sigstore signature and signer."""
     from agent_audit_kit.bundle import verify_bundle
 
-    ok, message = verify_bundle(Path(bundle), Path(sig_path) if sig_path else None)
+    ok, message = verify_bundle(Path(bundle), Path(sig_path) if sig_path else None, tag=tag, offline=offline)
     click.echo(message)
     if not ok:
         sys.exit(EXIT_ERROR)
@@ -815,7 +866,13 @@ def vex_cmd(path: str, vex_format: str, output_file: str | None) -> None:
 )
 @click.option("--output", "-o", "output_file", type=click.Path(), default=None)
 def report_cmd(path: str, framework: str, report_format: str, output_file: str | None) -> None:
-    """Produce an auditor-ready compliance report (EU AI Act Article 15 etc.)."""
+    """Produce an auditor-ready compliance report (EU AI Act Article 15 etc.).
+
+    Without --output, the PDF (or, without reportlab, its text fallback) goes into
+    the current directory; exits 2, leaving that file as it was, when it cannot be
+    written inside the directory, for instance because it is a link that leads out
+    of it.
+    """
     # The standards crosswalk is a static rule→control mapping — no scan needed.
     if framework == "standards-crosswalk":
         from agent_audit_kit.output.crosswalk import render_markdown, render_text
@@ -828,17 +885,27 @@ def report_cmd(path: str, framework: str, report_format: str, output_file: str |
             click.echo(text)
         return
 
-    from agent_audit_kit.output.pdf_report import emit_pdf, _text_report
+    from agent_audit_kit.fix import _PartlyWritten
+    from agent_audit_kit.output.pdf_report import ReportWriteError, emit_pdf, emit_pdf_in, _text_report
 
     project = Path(path)
     result = run_scan(project_root=project)
 
     if report_format == "pdf":
-        out = Path(output_file or f"aak-compliance-{framework}.pdf")
-        ok, msg = emit_pdf(result, framework, out)
+        if output_file:
+            ok, msg = emit_pdf(result, framework, Path(output_file))
+        else:
+            try:
+                # "." rather than the current directory's path, so the file is opened
+                # from the directory itself and no directory above it can move the write.
+                ok, msg = emit_pdf_in(result, framework, Path("."))
+            except ReportWriteError as exc:
+                tail = "" if isinstance(exc.reason, _PartlyWritten) else f" {exc.name} was not changed."
+                click.echo(f"Cannot write the report: {exc}.{tail}", err=True)
+                sys.exit(EXIT_ERROR)
         click.echo(msg, err=True)
         if not ok:
-            # Fallback text already written by emit_pdf; nothing else to do.
+            # The text fallback is already written; nothing else to do.
             return
     else:
         text = _text_report(result, framework)
@@ -966,7 +1033,13 @@ def pipelock_cmd() -> None:
 def pipelock_import_cmd(
     policy_path: str, output_file: str | None, dry_run: bool
 ) -> None:
-    """Translate a Pipelock v2.3 YAML policy → .agent-audit-kit.yml."""
+    """Translate a Pipelock v2.3 YAML policy → .agent-audit-kit.yml.
+
+    Without --output, the result goes to .agent-audit-kit.yml in the current
+    directory; exits 2, leaving that file as it was, when it cannot be written
+    inside the directory, for instance because it is a link that leads out of it.
+    """
+    from agent_audit_kit.fix import _as_written, _PartlyWritten, _write_inside_project
     from agent_audit_kit.translators.pipelock import translate
 
     policy = Path(policy_path)
@@ -974,8 +1047,23 @@ def pipelock_import_cmd(
     if dry_run:
         click.echo(out_text)
         return
-    target = Path(output_file or ".agent-audit-kit.yml")
-    target.write_text(out_text, encoding="utf-8")
+    if output_file:
+        # A path the user names is theirs, like `scan -o`, and is written as named.
+        target = Path(output_file)
+        target.write_text(out_text, encoding="utf-8")
+    else:
+        # The default target is whatever the current directory holds under this
+        # name, which a cloned repository decides: `Path.write_text` followed a link
+        # there out of the project, created the file behind a dangling one and
+        # blocked forever on a FIFO. It is written as `aak fix` writes, with the
+        # current directory as the project, and by its relative name, so it is
+        # opened from the directory itself and no directory above it can move it.
+        target = Path(".agent-audit-kit.yml")
+        refused = _write_inside_project(target, _as_written(out_text), Path("."))
+        if refused is not None:
+            tail = "" if isinstance(refused, _PartlyWritten) else f" {target} was not changed."
+            click.echo(f"Cannot import the policy: {refused}.{tail}", err=True)
+            sys.exit(EXIT_ERROR)
     click.echo(f"wrote {target}", err=True)
 
 

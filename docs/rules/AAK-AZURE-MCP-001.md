@@ -9,10 +9,10 @@
 | Shipped | v0.3.5 (2026-04-25) |
 | Scanner | `agent_audit_kit/scanners/supply_chain.py` (extension) |
 | CWE | CWE-306 (Missing Authentication for Critical Function) |
-| OWASP MCP | MCP02:2025 |
-| OWASP Agentic | ASI04 |
+| OWASP MCP | MCP07:2025 (Insufficient Authentication & Authorization) |
+| OWASP Agentic | ASI03 (Identity and Privilege Abuse) |
 | AICM | IAM-01, IAM-16 |
-| CVE | [CVE-2026-32211](https://dev.to/michael_onyekwere/cve-2026-32211-what-the-azure-mcp-server-flaw-means-for-your-agent-security-14db) (CVSS 9.1) |
+| CVE | [CVE-2026-32211](https://nvd.nist.gov/vuln/detail/CVE-2026-32211) (CVSS 9.1; [write-up on dev.to](https://dev.to/michael_onyekwere/cve-2026-32211-what-the-azure-mcp-server-flaw-means-for-your-agent-security-14db)) |
 | Incident | MSRC-2026-04-03-AZUREMCP |
 
 ## What it catches

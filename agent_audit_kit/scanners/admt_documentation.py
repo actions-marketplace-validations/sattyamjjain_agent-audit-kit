@@ -64,10 +64,17 @@ import ast
 import json
 import re
 from pathlib import Path
-from typing import Iterable, Optional
+from typing import Any, Iterable
 
 from agent_audit_kit.models import Finding
-from agent_audit_kit.scanners._helpers import make_finding, SKIP_DIRS
+from agent_audit_kit.scanners._helpers import (
+    in_skip_dir,
+    loads_jsonc,
+    make_finding,
+    mcp_server_maps,
+    parse_python,
+    read_text_capped,
+)
 
 _DECL_EXTS = {".py"}
 _DOC_EXTS = {".md", ".txt", ".rst", ".html"}
@@ -175,10 +182,27 @@ _HUMAN_REVIEW_RE = re.compile(
 
 
 def _iter_files(project_root: Path, exts: set[str]) -> Iterable[Path]:
+    """Matching files, in a stable order that does not depend on the filesystem.
+
+    `rglob` yields in `os.scandir` order, which differs between filesystems and,
+    on ext4, shifts as a directory's contents change. That was invisible until
+    it mattered, and then it mattered a lot: `_find_declaration` and
+    `_find_documentation` each return the FIRST match in this stream, so on a
+    tree holding more than one candidate the scanner's whole answer was decided
+    by traversal order. Scanning this repository produced no findings on macOS
+    and three on an ext4 runner — same commit, same files, same code.
+
+    That is a determinism bug in a scanner that advertises determinism, and no
+    existing test could see it: the determinism test scans twice in one process
+    on one filesystem, where the order is stable but arbitrary. Sorting on the
+    relative POSIX path makes the answer a property of the tree rather than of
+    the disk it is checked out on.
+    """
+    matched: list[Path] = []
     for path in project_root.rglob("*"):
         if not path.is_file():
             continue
-        if any(part in SKIP_DIRS for part in path.parts):
+        if in_skip_dir(path, project_root):
             continue
         if path.suffix.lower() not in exts:
             continue
@@ -187,12 +211,23 @@ def _iter_files(project_root: Path, exts: set[str]) -> Iterable[Path]:
                 continue
         except OSError:
             continue
-        yield path
+        matched.append(path)
+    # Keyed on the path relative to the root, so an identical tree sorts
+    # identically regardless of where it is checked out.
+    matched.sort(key=lambda p: _sort_key(p, project_root))
+    return matched
+
+
+def _sort_key(path: Path, project_root: Path) -> str:
+    try:
+        return path.relative_to(project_root).as_posix()
+    except ValueError:  # pragma: no cover - path is always under the root
+        return path.as_posix()
 
 
 def _read(path: Path) -> str:
     try:
-        return path.read_text(encoding="utf-8", errors="replace")
+        return read_text_capped(path, _MAX_FILE_BYTES, errors="replace")
     except OSError:
         return ""
 
@@ -226,7 +261,7 @@ def _mcp_config_paths(project_root: Path) -> list[Path]:
     for path in sorted(project_root.rglob("*")):
         if path in seen or not path.is_file() or path.name not in basenames:
             continue
-        if any(part in SKIP_DIRS for part in path.parts):
+        if in_skip_dir(path, project_root):
             continue
         try:
             if path.stat().st_size > _MAX_FILE_BYTES:
@@ -238,36 +273,44 @@ def _mcp_config_paths(project_root: Path) -> list[Path]:
     return out
 
 
+def _server_declarations(cfg: dict[str, Any]) -> list[str]:
+    """The text one server object declares about itself: its description fields
+    and the name and description of each tool it lists."""
+    parts: list[str] = []
+    for key in ("description", "displayName", "title", "instructions"):
+        value = cfg.get(key)
+        if isinstance(value, str):
+            parts.append(value)
+    tools = cfg.get("tools")
+    if isinstance(tools, list):
+        for tool in tools:
+            if isinstance(tool, dict):
+                for key in ("name", "description"):
+                    value = tool.get(key)
+                    if isinstance(value, str):
+                        parts.append(value)
+    return parts
+
+
 def _mcp_descriptions(project_root: Path) -> list[tuple[str, str]]:
     """(relative path, declaration text) for MCP server names + descriptions."""
     out: list[tuple[str, str]] = []
     for path in _mcp_config_paths(project_root):
         name = str(path.relative_to(project_root))
         try:
-            data = json.loads(_read(path))
+            data = loads_jsonc(_read(path), path)
         except (json.JSONDecodeError, ValueError):
             continue
-        if not isinstance(data, dict):
-            continue
-        servers = data.get("mcpServers")
-        if not isinstance(servers, dict):
-            continue
         parts: list[str] = []
-        for server_name, cfg in servers.items():
-            parts.append(str(server_name))
-            if isinstance(cfg, dict):
-                for key in ("description", "displayName", "title", "instructions"):
-                    value = cfg.get(key)
-                    if isinstance(value, str):
-                        parts.append(value)
-                tools = cfg.get("tools")
-                if isinstance(tools, list):
-                    for tool in tools:
-                        if isinstance(tool, dict):
-                            for key in ("name", "description"):
-                                value = tool.get(key)
-                                if isinstance(value, str):
-                                    parts.append(value)
+        # Both server maps: VS Code keeps its servers under `servers` in
+        # .vscode/mcp.json, and reading `mcpServers` alone never read a
+        # declaration there. Every entry's name counts, as before, an entry that
+        # is not an object included.
+        for _key, servers in mcp_server_maps(data):
+            for server_name, cfg in servers.items():
+                parts.append(str(server_name))
+                if isinstance(cfg, dict):
+                    parts.extend(_server_declarations(cfg))
         if parts:
             out.append((name, "\n".join(parts)))
     return out
@@ -303,8 +346,8 @@ def _tool_declarations(path: Path) -> Iterable[str]:
     6-1-1702(3) and (5) actually test.
     """
     try:
-        tree = ast.parse(_read(path))
-    except (SyntaxError, ValueError, RecursionError):
+        tree = parse_python(_read(path), path)
+    except (SyntaxError, ValueError):
         return
     for node in ast.walk(tree):
         if not isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
@@ -315,7 +358,7 @@ def _tool_declarations(path: Path) -> Iterable[str]:
         yield f"{node.name}\n{doc}"
 
 
-def _find_declaration(project_root: Path) -> Optional[tuple[str, str]]:
+def _find_declaration(project_root: Path) -> tuple[str, str] | None:
     """First declaration of a covered-domain consequential decision, or None.
 
     Returns (relative path, the matching text) so the finding can quote the
@@ -340,9 +383,9 @@ def _find_declaration(project_root: Path) -> Optional[tuple[str, str]]:
     return None
 
 
-def _find_documentation(project_root: Path) -> Optional[tuple[str, str]]:
+def _find_documentation(project_root: Path) -> tuple[str, str] | None:
     """The developer-documentation file, by name hint or by content."""
-    by_content: Optional[tuple[str, str]] = None
+    by_content: tuple[str, str] | None = None
     for path in _iter_files(project_root, _DOC_EXTS):
         rel = str(path.relative_to(project_root))
         text = _read(path)

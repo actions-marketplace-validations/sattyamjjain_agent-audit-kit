@@ -2,6 +2,9 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
+from typing import Any
+
+import pytest
 
 from agent_audit_kit.scanners.transport_security import scan
 
@@ -194,6 +197,50 @@ def test_sse_transport_field_flagged(tmp_path: Path) -> None:
     assert len(transport_003) >= 1, "transport: sse should trigger AAK-TRANSPORT-003"
 
 
+@pytest.mark.parametrize("value", ["sse", "SSE", "Sse"])
+def test_sse_type_field_flagged(tmp_path: Path, value: str) -> None:
+    """`type` is the key Claude Code and VS Code declare a transport under.
+
+    The rule read `transport` alone, so a `type: sse` server at a URL without a
+    whole-word `/sse` passed: 11 of the 47 State of MCP configs that declare SSE.
+    """
+    _write_mcp_config(tmp_path, {"x": {"type": value, "url": "https://mcp.example.com/events"}})
+    hits = [f for f in scan(tmp_path)[0] if f.rule_id == "AAK-TRANSPORT-003"]
+    assert [f.evidence for f in hits] == ["Server 'x' type: sse (deprecated)"]
+
+
+@pytest.mark.parametrize("key", ["type", "transport"])
+def test_a_declared_sse_server_at_an_sse_url_is_reported_once(tmp_path: Path, key: str) -> None:
+    """One server, one finding: the declaring key is the evidence, the URL is not a second."""
+    _write_mcp_config(tmp_path, {"x": {key: "sse", "url": "https://mcp.example.com/sse"}})
+    hits = [f for f in scan(tmp_path)[0] if f.rule_id == "AAK-TRANSPORT-003"]
+    assert [f.evidence for f in hits] == [f"Server 'x' {key}: sse (deprecated)"]
+
+
+def test_another_transport_type_is_not_sse(tmp_path: Path) -> None:
+    _write_mcp_config(tmp_path, {
+        "h": {"type": "http", "url": "https://mcp.example.com/mcp"},
+        "s": {"type": "streamable-http", "url": "https://mcp.example.com/stream"},
+    })
+    assert not [f for f in scan(tmp_path)[0] if f.rule_id == "AAK-TRANSPORT-003"]
+
+
+def test_a_declared_sse_finding_sits_on_its_own_server(tmp_path: Path) -> None:
+    """The line is the server's `url` line, not the file's first "sse".
+
+    An earlier server named `assessment` holds an "sse" too, and the old search
+    put the finding on its line.
+    """
+    text = json.dumps({"mcpServers": {
+        "assessment": {"type": "http", "url": "https://grader.example.com/mcp"},
+        "events": {"type": "sse", "url": "https://mcp.example.com/events"},
+    }}, indent=2)
+    (tmp_path / ".mcp.json").write_text(text, encoding="utf-8")
+    (hit,) = [f for f in scan(tmp_path)[0] if f.rule_id == "AAK-TRANSPORT-003"]
+    lines = text.splitlines()
+    assert "https://mcp.example.com/events" in lines[hit.line_number - 1]
+
+
 def test_various_token_query_params(tmp_path: Path) -> None:
     """Various credential-like query params should trigger AAK-TRANSPORT-004."""
     servers = {
@@ -255,3 +302,86 @@ def test_empty_mcpservers_block(tmp_path: Path) -> None:
     findings, scanned = scan(tmp_path)
     assert ".mcp.json" in scanned
     assert len(findings) == 0
+
+
+# ---------------------------------------------------------------------------
+# VS Code's `.vscode/mcp.json` keeps its servers under `servers`. This scanner
+# read only `mcpServers` until mcp_server_maps, so a cleartext VS Code server,
+# or one with TLS checking off, came back clean.
+# ---------------------------------------------------------------------------
+
+
+def _write_vscode(root: Path, servers: dict[str, Any]) -> None:
+    vscode = root / ".vscode"
+    vscode.mkdir(exist_ok=True)
+    (vscode / "mcp.json").write_text(json.dumps({"servers": servers}), encoding="utf-8")
+
+
+@pytest.mark.parametrize(("rule_id", "server"), [
+    ("AAK-TRANSPORT-001", {"type": "http", "url": "http://mcp.example.com/mcp"}),
+    ("AAK-TRANSPORT-002", {"type": "stdio", "command": "node", "args": ["server.js"],
+                           "env": {"NODE_TLS_REJECT_UNAUTHORIZED": "0"}}),
+    ("AAK-TRANSPORT-003", {"type": "sse", "url": "https://mcp.example.com/sse"}),
+    ("AAK-TRANSPORT-004", {"type": "http", "url": "https://mcp.example.com/mcp?token=abc123"}),
+])
+def test_a_vscode_server_is_read(tmp_path: Path, rule_id: str, server: dict[str, Any]) -> None:
+    _write_vscode(tmp_path, {"x": server})
+    hits = [f for f in scan(tmp_path)[0] if f.rule_id == rule_id]
+    assert [f.file_path for f in hits] == [".vscode/mcp.json"]
+
+
+def test_a_loopback_vscode_server_is_not_cleartext(tmp_path: Path) -> None:
+    _write_vscode(tmp_path, {"x": {"type": "http", "url": "http://localhost:3000/mcp"}})
+    assert scan(tmp_path)[0] == []
+
+
+@pytest.mark.parametrize(("url", "fires"), [
+    # The exemption is the one AAK-MCP-001 and 009 share: all of 127.0.0.0/8,
+    # where the old anchored regex knew 127.0.0.1 alone.
+    ("http://127.0.0.2:8080/mcp", False),
+    ("ws://[::1]:9000/mcp", False),
+    ("http://localhost.evil.example/mcp", True),
+    ("http://127.0.0.1@evil.example/mcp", True),
+])
+def test_the_loopback_exemption_is_the_shared_one(tmp_path: Path, url: str, fires: bool) -> None:
+    _write_mcp_config(tmp_path, {"x": {"url": url}})
+    hits = [f for f in scan(tmp_path)[0] if f.rule_id == "AAK-TRANSPORT-001"]
+    assert bool(hits) is fires
+
+
+@pytest.mark.parametrize(("url", "scheme"), [
+    (" http://mcp.example.com/mcp", "http"),        # Node strips leading spaces and C0 controls
+    ("\x00http://mcp.example.com/mcp", "http"),
+    ("h\tttp://mcp.example.com/mcp", "http"),       # and removes every tab and newline
+    ("http\n://mcp.example.com/mcp", "http"),
+    ("http:/mcp.example.com/mcp", "http"),           # and skips any run of slashes and backslashes
+    ("http:mcp.example.com/mcp", "http"),
+    ("HTTP:\\\\mcp.example.com\\mcp", "http"),
+    ("ws:/mcp.example.com/mcp", "ws"),
+])
+def test_every_spelling_a_client_opens_as_cleartext_fires(tmp_path: Path, url: str, scheme: str) -> None:
+    """`^(?:http|ws)://` read the text, not the URL. Each of these is a cleartext
+    URL to Node's `new URL()`, which Claude Code and VS Code connect with, and
+    none of them fired."""
+    _write_mcp_config(tmp_path, {"x": {"url": url}})
+    hits = [f for f in scan(tmp_path)[0] if f.rule_id == "AAK-TRANSPORT-001"]
+    assert len(hits) == 1
+    assert f"cleartext {scheme}://" in hits[0].evidence
+
+
+@pytest.mark.parametrize("url", [" https://mcp.example.com/mcp", "HTTPS:/mcp.example.com/mcp", "wss:mcp.example.com"])
+def test_an_encrypted_url_in_another_spelling_does_not_fire(tmp_path: Path, url: str) -> None:
+    _write_mcp_config(tmp_path, {"x": {"url": url}})
+    assert not [f for f in scan(tmp_path)[0] if f.rule_id == "AAK-TRANSPORT-001"]
+
+
+def test_a_backslash_url_is_loopback_only_when_every_reader_agrees(tmp_path: Path) -> None:
+    """localhost to Node, mcp.example.com to curl and httpx: not exempt."""
+    _write_mcp_config(tmp_path, {"x": {"url": "http://localhost\\@mcp.example.com/mcp"}})
+    assert [f for f in scan(tmp_path)[0] if f.rule_id == "AAK-TRANSPORT-001"]
+
+
+def test_a_top_level_array_is_skipped_not_a_crash(tmp_path: Path) -> None:
+    """`data.get` on a JSON array raised AttributeError and failed the scanner."""
+    (tmp_path / ".mcp.json").write_text("[1, 2]", encoding="utf-8")
+    assert scan(tmp_path) == ([], {".mcp.json"})

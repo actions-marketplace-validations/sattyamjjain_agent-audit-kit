@@ -1,9 +1,9 @@
 """Scanner for 2026 MCP authentication-bypass patterns.
 
-Fires AAK-MCP-011..020. Walks Python/TS/JS source files that look like MCP
-server implementations plus relevant config files, matching against regex
-patterns drawn from CVE-2026-33032 (Nginx-UI, CVSS 9.8) and the 30+ MCP
-CVEs disclosed in Jan–Feb 2026.
+Fires AAK-MCP-011 to -015, -017 and -018. Walks Python/TS/JS source files
+that look like MCP server implementations plus relevant config files,
+matching against regex patterns drawn from CVE-2026-33032 (Nginx-UI, CVSS
+9.8) and the 30+ MCP CVEs disclosed in Jan–Feb 2026.
 
 Pattern-based, not taint-based. See `typescript_pattern_scan.py` for the
 caveats on what regex detection can and cannot prove.
@@ -15,14 +15,18 @@ import re
 from pathlib import Path
 
 from agent_audit_kit.models import Finding
-from agent_audit_kit.scanners._helpers import find_line_number, make_finding, SKIP_DIRS
+from agent_audit_kit.scanners._helpers import find_line_number, make_finding, in_skip_dir
 
 
 _SCAN_EXTS = {".py", ".ts", ".tsx", ".js", ".jsx", ".mjs", ".go"}
 _MAX_FILE_BYTES = 512_000
 
+# `@tool` sits outside the leading `\b`: a boundary before `@` needs a word
+# character in front, so inside it a `@tool` decorator at the start of a line
+# never matched, and a file whose only marker it was went unread.
 _MCP_SERVER_HINT = re.compile(
-    r"\b(createServer|McpServer|@tool|mcp\.ServeHTTP|FastMCP|Server\.run_streamable_http)\b"
+    r"(?:\b(?:createServer|McpServer|createMcpHandler|mcp\.ServeHTTP|FastMCP|"
+    r"Server\.run_streamable_http)|@tool)\b"
 )
 
 # AAK-MCP-013: CORS wildcard combined with credentials
@@ -49,6 +53,88 @@ _RESOURCE_OPEN_RE = re.compile(
     re.IGNORECASE,
 )
 
+# AAK-MCP-015, TypeScript tool-handler arm (CVE-2026-94044). The regex above wants
+# the request value as the direct first argument of `open` / `fs.readFile`. The
+# commonest form of this bug routes it through `path.join` into a variable first,
+# and `fs.writeFile` was not a sink at all, so a full scan of the upstream
+# app/api/mcp/route.ts reported nothing. This arm follows a name a tool handler
+# destructures (`async ({ filePath }) =>`) through one `path.join` / `path.resolve`
+# to an fs read or write, and stays silent when the joined path is checked in
+# between. Regex and proximity, not data flow, like the language arms of the
+# STDIO command-injection family.
+_TS_EXTS = frozenset({".ts", ".tsx", ".js", ".jsx", ".mjs"})
+_TS_HANDLER_PARAMS_RE = re.compile(r"\(\s*\{([^{}()]*)\}\s*(?::[^()=]*)?\)\s*=>")
+_TS_JOIN_ARGS = r"\(((?:[^()]|\([^()]*\))*)\)"
+_TS_JOIN_ASSIGN_RE = re.compile(
+    r"\b(?:const|let|var)\s+(\w+)\s*=\s*path\.(join|resolve)\s*" + _TS_JOIN_ARGS
+)
+_TS_FS_SINK = (
+    r"fs\.(?:promises\.)?(readFile|readFileSync|writeFile|writeFileSync|appendFile|"
+    r"appendFileSync|createReadStream|createWriteStream|unlink|unlinkSync|rm|rmSync)"
+)
+_TS_INLINE_SINK_RE = re.compile(
+    _TS_FS_SINK + r"\s*\(\s*path\.(join|resolve)\s*" + _TS_JOIN_ARGS
+)
+# One handler body: a sink further away than this is not read as the same flow.
+_TS_FLOW_WINDOW = 800
+
+
+def _ts_handler_params(text: str) -> set[str]:
+    """Local names tool handlers destructure: `({ filePath, content: body })`."""
+    names: set[str] = set()
+    for m in _TS_HANDLER_PARAMS_RE.finditer(text):
+        for item in m.group(1).split(","):
+            local = item.split("=")[0].split(":")[-1].strip()
+            if re.fullmatch(r"[A-Za-z_$][\w$]*", local):
+                names.add(local)
+    return names
+
+
+def _ts_is_guarded(between: str, var: str) -> bool:
+    """A containment check on ``var`` between the join and its sink.
+
+    `startsWith` against a base, `path.relative`, `realpath`, or any `if` naming
+    the variable that throws or returns, which is how a helper such as
+    `if (!inside(fullPath)) throw` reads. Deliberately generous: a check this
+    does not understand silences the arm rather than accusing a guarded handler.
+    """
+    v = re.escape(var)
+    return bool(
+        re.search(rf"\b{v}\s*\.\s*startsWith\s*\(", between)
+        or re.search(rf"path\.relative\s*\([^)]*\b{v}\b", between)
+        or re.search(rf"realpath\w*\s*\(\s*{v}\b", between)
+        or re.search(rf"\bif\s*\([^;{{]*\b{v}\b[^;{{]*\)\s*\{{?\s*(?:throw|return)\b", between)
+    )
+
+
+def _ts_tool_path_traversal(text: str) -> list[tuple[int, str]]:
+    """``(offset, evidence)`` for each tool argument joined onto a path and read
+    or written with no containment check in between."""
+    names = _ts_handler_params(text)
+    if not names:
+        return []
+    arg_re = re.compile(r"\b(?:" + "|".join(map(re.escape, sorted(names))) + r")\b")
+    hits: list[tuple[int, str]] = []
+    for m in _TS_JOIN_ASSIGN_RE.finditer(text):
+        var, fn, args = m.group(1), m.group(2), m.group(3)
+        if not arg_re.search(args) or "basename(" in args:
+            continue
+        window = text[m.end(): m.end() + _TS_FLOW_WINDOW]
+        sink = re.search(_TS_FS_SINK + r"\s*\(\s*" + re.escape(var) + r"\b", window)
+        if sink is None or _ts_is_guarded(window[: sink.start()], var):
+            continue
+        hits.append((m.start(), (
+            f"`{var} = path.{fn}({args[:80]})` reaches `fs.{sink.group(1)}` "
+            "with no containment check"
+        )))
+    for m in _TS_INLINE_SINK_RE.finditer(text):
+        sink_name, fn, args = m.group(1), m.group(2), m.group(3)
+        if arg_re.search(args) and "basename(" not in args:
+            hits.append((m.start(), (
+                f"`fs.{sink_name}(path.{fn}({args[:80]}))` with no containment check"
+            )))
+    return hits
+
 # AAK-MCP-017: plain HTTP (not HTTPS) bind in server config
 _PLAIN_HTTP_BIND_RE = re.compile(
     r"""(?:listen|bind|serve)\s*\(\s*['"]?http://[^'"\s]*[0-9.]+""",
@@ -61,11 +147,44 @@ _ALLOWLIST_EMPTY_RE = re.compile(
     re.IGNORECASE,
 )
 
-# AAK-MCP-011 Python FastAPI / aiohttp handler without Depends(auth) or similar
-_FASTAPI_HANDLER_NO_AUTH_RE = re.compile(
-    r"""@app\.(?:get|post|put|patch|delete)\(\s*['"]/mcp[^'"]*['"][^)]*\)\s*(?:async\s+)?def\s+\w+\([^)]*\)\s*(?::|\s*->)""",
-    re.IGNORECASE | re.DOTALL,
+# AAK-MCP-011 Python FastAPI / aiohttp handler without Depends(auth) or similar:
+# an `@app.<verb>("/mcp...")` route whose decorator closes at its first `)` and
+# is followed by the `def` it decorates.
+_FASTAPI_MCP_ROUTE_RE = re.compile(
+    r"""@app\.(?:get|post|put|patch|delete)\(\s*['"]/mcp[^'"]*['"]""",
+    re.IGNORECASE,
 )
+_FASTAPI_ROUTE_DEF_RE = re.compile(
+    r"""\)\s*(?:async\s+)?def\s+\w+\([^)]*\)\s*(?::|->)""",
+    re.IGNORECASE,
+)
+
+
+def _first_fastapi_mcp_handler(text: str) -> tuple[int, int] | None:
+    """Span of the first MCP route with the `def` it decorates.
+
+    This was one DOTALL pattern, `<route>[^)]*\\)\\s*(?:async\\s+)?def...`.
+    Every route before the same `)` read to it, so a file of routes and no
+    `)` took the square of its length, and each `def` check depends only on
+    that `)`, so it is made once per `)`. `\\s*(?::|\\s*->)` became
+    `\\s*(?::|->)`: the second `\\s*` only split a run of blanks every way.
+    """
+    tried_close = close = -1
+    pos = 0
+    while True:
+        route = _FASTAPI_MCP_ROUTE_RE.search(text, pos)
+        if route is None:
+            return None
+        if route.end() > close:
+            close = text.find(")", route.end())
+            if close < 0:
+                return None
+        if close != tried_close:
+            handler = _FASTAPI_ROUTE_DEF_RE.match(text, close)
+            if handler:
+                return route.start(), handler.end()
+            tried_close = close
+        pos = route.start() + 1
 
 # AAK-MCP-018: no rate limit mention near handler
 _RATELIMIT_HINT_RE = re.compile(
@@ -79,7 +198,7 @@ def _iter_source(project_root: Path) -> list[Path]:
     for path in project_root.rglob("*"):
         if not path.is_file() or path.suffix.lower() not in _SCAN_EXTS:
             continue
-        if any(part in SKIP_DIRS for part in path.parts):
+        if in_skip_dir(path, project_root):
             continue
         try:
             if path.stat().st_size > _MAX_FILE_BYTES:
@@ -132,6 +251,23 @@ def _check_file(path: Path, project_root: Path) -> list[Finding]:
             )
         )
 
+    if path.suffix.lower() in _TS_EXTS:
+        # A line the direct-argument regex above already reported is not repeated.
+        reported = {f.line_number for f in findings if f.rule_id == "AAK-MCP-015"}
+        for offset, evidence in _ts_tool_path_traversal(text):
+            line = text.count("\n", 0, offset) + 1
+            if line in reported:
+                continue
+            reported.add(line)
+            findings.append(
+                make_finding(
+                    "AAK-MCP-015",
+                    rel,
+                    f"Tool argument joined onto a path: {evidence}",
+                    line_number=line,
+                )
+            )
+
     if _PLAIN_HTTP_BIND_RE.search(text):
         findings.append(
             make_finding(
@@ -152,9 +288,10 @@ def _check_file(path: Path, project_root: Path) -> list[Finding]:
             )
         )
 
-    if _FASTAPI_HANDLER_NO_AUTH_RE.search(text):
-        snippet = _FASTAPI_HANDLER_NO_AUTH_RE.search(text)
-        surrounding = text[max(0, (snippet.start() if snippet else 0) - 200) : (snippet.end() if snippet else 0)] if snippet else ""
+    handler = _first_fastapi_mcp_handler(text)
+    if handler:
+        start, end = handler
+        surrounding = text[max(0, start - 200) : end]
         if "Depends(" not in surrounding and "@require_auth" not in surrounding:
             findings.append(
                 make_finding(

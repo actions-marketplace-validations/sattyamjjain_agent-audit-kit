@@ -34,7 +34,7 @@ import re
 from pathlib import Path
 
 from agent_audit_kit.models import Finding
-from agent_audit_kit.scanners._helpers import find_line_number, make_finding, SKIP_DIRS
+from agent_audit_kit.scanners._helpers import find_line_number, in_skip_dir, make_finding, parse_python
 
 _RULE_ID = "AAK-SKILL-UNTRUSTED-EXEC-PATH"
 
@@ -65,8 +65,11 @@ _PIN_RE = re.compile(
 )
 
 # Shell: a PATH prepend with a non-absolute element, or sourcing a workspace .env.
+# The line after `export PATH=<non-abs>` stops at the next such export, which
+# reads on itself: with `[^\n]*` alone a line of them and no `:$PATH` was read to
+# its end once per export.
 _SH_TAINT_PATH_RE = re.compile(
-    r"export\s+PATH=(?![\"']?/)[^\n]*:\$PATH"     # PATH=<non-abs>:$PATH
+    r"export\s+PATH=(?![\"']?/)(?:(?!export\s+PATH=(?![\"']?/))[^\n])*:\$PATH"     # PATH=<non-abs>:$PATH
     r"|PATH=\.[:/]"                                 # PATH=.: or PATH=./...
     r"|export\s+PATH=\$\(pwd\)|export\s+PATH=\$PWD",
 )
@@ -164,9 +167,9 @@ def _command_expr(call: ast.Call) -> ast.AST | None:
     return None
 
 
-def _scan_python(text: str) -> int | None:
+def _scan_python(text: str, path: Path) -> int | None:
     try:
-        tree = ast.parse(text)
+        tree = parse_python(text, path)
     except SyntaxError:
         return None
 
@@ -267,11 +270,7 @@ def scan(project_root: Path) -> tuple[list[Finding], set[str]]:
     for path in project_root.rglob("*"):
         if path.suffix not in _PY_SUFFIXES + _SH_SUFFIXES:
             continue
-        try:
-            rel_parts = path.relative_to(project_root).parts
-        except ValueError:
-            continue
-        if any(part in SKIP_DIRS for part in rel_parts):
+        if in_skip_dir(path, project_root):
             continue
         if not path.is_file():
             continue
@@ -286,7 +285,7 @@ def scan(project_root: Path) -> tuple[list[Finding], set[str]]:
             continue
 
         line = (
-            _scan_python(text) if path.suffix in _PY_SUFFIXES
+            _scan_python(text, path) if path.suffix in _PY_SUFFIXES
             else _scan_shell(text)
         )
         if line is None:

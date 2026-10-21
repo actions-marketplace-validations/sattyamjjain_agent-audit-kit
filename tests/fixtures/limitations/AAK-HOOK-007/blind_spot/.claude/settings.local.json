@@ -1,0 +1,42 @@
+{
+  "hooks": {
+    "Stop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "echo local0"
+          },
+          {
+            "type": "command",
+            "command": "echo local1"
+          },
+          {
+            "type": "command",
+            "command": "echo local2"
+          },
+          {
+            "type": "command",
+            "command": "echo local3"
+          },
+          {
+            "type": "command",
+            "command": "echo local4"
+          },
+          {
+            "type": "command",
+            "command": "echo local5"
+          },
+          {
+            "type": "command",
+            "command": "echo local6"
+          },
+          {
+            "type": "command",
+            "command": "echo local7"
+          }
+        ]
+      }
+    ]
+  }
+}

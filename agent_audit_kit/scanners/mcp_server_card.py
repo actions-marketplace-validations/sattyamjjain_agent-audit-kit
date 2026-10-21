@@ -40,7 +40,15 @@ from pathlib import Path
 from typing import Any
 
 from agent_audit_kit.models import Finding
-from agent_audit_kit.scanners._helpers import find_line_number, make_finding, SKIP_DIRS
+from agent_audit_kit.scanners._helpers import (
+    find_line_number,
+    in_skip_dir,
+    loads_json,
+    make_finding,
+    placed,
+    read_text_capped,
+    url_readings,
+)
 
 # Reuse the tool-poisoning detectors — do NOT duplicate the regexes.
 from agent_audit_kit.scanners.tool_poisoning import (
@@ -64,6 +72,18 @@ _CARD_NAME_RE = re.compile(
 )
 _STDIO_TRANSPORTS = {"stdio", "local"}
 _REMOTE_TRANSPORTS = {"http", "https", "sse", "streamable-http", "streamable_http", "ws", "wss"}
+
+
+def _is_remote_endpoint(endpoint: str) -> bool:
+    """True when a card's advertised endpoint is a network URL.
+
+    A case-sensitive prefix test alone missed `HTTPS://mcp.example/` and
+    ` https://mcp.example/`, both of which a client's `new URL()` opens over the
+    network, so a card advertising one with `authentication.required: false`
+    and no transport `type` passed. `url_readings` reads them; the prefix test
+    still answers first.
+    """
+    return endpoint.startswith(("http://", "https://", "ws")) or bool(url_readings(endpoint))
 _PROVENANCE_FIELDS = ("signature", "signatures", "provenance", "attestation",
                       "publisher", "publisherId", "publisher_id", "verified")
 _PLACEHOLDER = {"", "todo", "changeme", "none", "null", "unsigned", "n/a",
@@ -97,6 +117,7 @@ def _audit_card(data: dict, rel_path: str, raw_text: str) -> list[Finding]:
     # ---- (a) AAK-MCP-CARD-001: tool-description poisoning (reused detectors)
     tools = data.get("tools")
     if isinstance(tools, list):
+        unplaced: list[tuple[Finding, str]] = []
         for tool in tools:
             if not isinstance(tool, dict):
                 continue
@@ -114,7 +135,7 @@ def _audit_card(data: dict, rel_path: str, raw_text: str) -> list[Finding]:
             if _BASE64_RE.search(desc) or _HEX_SEQUENCE_RE.search(desc):
                 reasons.append("encoded-payload")
             if reasons:
-                findings.append(make_finding(
+                unplaced.append((make_finding(
                     _CARD_POISON,
                     rel_path,
                     (
@@ -122,8 +143,9 @@ def _audit_card(data: dict, rel_path: str, raw_text: str) -> list[Finding]:
                         f"({', '.join(reasons)}) — a client that trusts the card "
                         f"ingests the injected instructions before connecting."
                     ),
-                    find_line_number(raw_text, name),
-                ))
+                ), name))
+        # Every poisoned tool's line in one pass over the file, not one search of it per tool.
+        findings.extend(placed(raw_text, unplaced))
 
     # ---- (b) AAK-MCP-CARD-002: transport vs capability/auth mismatch
     transport = data.get("transport")
@@ -136,7 +158,7 @@ def _audit_card(data: dict, rel_path: str, raw_text: str) -> list[Finding]:
         ttype = transport.lower()
     auth = data.get("authentication")
     auth_required = auth.get("required") if isinstance(auth, dict) else None
-    is_remote = ttype in _REMOTE_TRANSPORTS or endpoint.startswith(("http://", "https://", "ws"))
+    is_remote = ttype in _REMOTE_TRANSPORTS or _is_remote_endpoint(endpoint)
     if is_remote and auth_required is False:
         findings.append(make_finding(
             _CARD_MISMATCH,
@@ -148,7 +170,7 @@ def _audit_card(data: dict, rel_path: str, raw_text: str) -> list[Finding]:
             ),
             find_line_number(raw_text, "authentication") or find_line_number(raw_text, "transport"),
         ))
-    if ttype in _STDIO_TRANSPORTS and endpoint.startswith(("http://", "https://", "ws")):
+    if ttype in _STDIO_TRANSPORTS and _is_remote_endpoint(endpoint):
         findings.append(make_finding(
             _CARD_MISMATCH,
             rel_path,
@@ -228,7 +250,7 @@ def fetch_card(base_url: str, timeout: int = 15) -> dict | None:
     try:
         req = urllib.request.Request(url, headers={"Accept": "application/json"})
         with urllib.request.urlopen(req, timeout=timeout) as resp:  # noqa: S310 (opt-in)
-            data = json.loads(resp.read().decode("utf-8", errors="ignore"))
+            data = loads_json(resp.read().decode("utf-8", errors="ignore"), url)
         return data if isinstance(data, dict) else None
     except Exception:
         return None
@@ -254,11 +276,7 @@ def scan(project_root: Path) -> tuple[list[Finding], set[str]]:
     for path in project_root.rglob("*"):
         if path.suffix not in _JSON_SUFFIXES:
             continue
-        try:
-            rel_parts = path.relative_to(project_root).parts
-        except ValueError:
-            continue
-        if any(part in SKIP_DIRS for part in rel_parts):
+        if in_skip_dir(path, project_root):
             continue
         if not path.is_file():
             continue
@@ -266,7 +284,7 @@ def scan(project_root: Path) -> tuple[list[Finding], set[str]]:
         try:
             if path.stat().st_size > 1_000_000:
                 continue
-            raw = path.read_text(encoding="utf-8", errors="ignore")
+            raw = read_text_capped(path, 1_000_000, errors="ignore")
         except OSError:
             continue
 
@@ -275,7 +293,7 @@ def scan(project_root: Path) -> tuple[list[Finding], set[str]]:
         if not named and "serverInfo" not in raw and '"tools"' not in raw:
             continue
         try:
-            data = json.loads(raw)
+            data = loads_json(raw, path)
         except ValueError:
             continue
         if not (named and isinstance(data, dict)) and not _looks_like_card(data):

@@ -92,6 +92,14 @@ def test_contextforge_rule_cites_all_five_cves() -> None:
         # subprocess.Popen, CRITICAL 10.0) is fixed at 1.0.2, below the 1.0.9
         # floor, so it joined the same rule rather than gaining a pin.
         "CVE-2026-53710",
+        # 2026-10-15: CVE-2026-53709 (the published default JWT key, CRITICAL 9.8,
+        # fixed 1.0.2) and CVE-2026-53711 (Admin UI stored XSS, fixed 0.3.1), both
+        # below the floor. tests/test_cve_triage_2026_10_15.py holds their proof.
+        "CVE-2026-53709",
+        "CVE-2026-53711",
+        # 2026-10-20: CVE-2026-8355 (an OAuth token-URL SSRF, fixed 1.0.6), below
+        # the floor too. tests/test_cve_triage_2026_10_20.py holds its proof.
+        "CVE-2026-8355",
     }
 
 
@@ -198,20 +206,37 @@ def test_awslabs_postgres_floor(tmp_path: Path, version: str, fires: bool) -> No
     ("0.8.3", True),
     ("0.1.1", True),    # lowest npm release the introduced bound still covers
     ("0.30.0", True),   # CVE-2026-86439's fix, but CVE-2026-88938 still applies
-    ("0.33.0", True),   # newest published release, and itself affected
+    ("0.33.0", True),   # the last release CVE-2026-88938 names
+    ("0.34.1", True),   # newer, and not confirmed fixed by the advisory or NVD
 ])
 def test_knowns_fires_on_every_published_version(
     tmp_path: Path, version: str, fires: bool
 ) -> None:
     """0.30.0 and 0.33.0 used to be asserted NOT to fire.
 
-    CVE-2026-88938 (2026-09-10) is scoped "through 0.33.0" and 0.33.0 is the
-    newest release on npm, so there is no version left that clears the rule. The
-    pin is presence-only and this test says so rather than being deleted: if a
-    fix ships and someone restores a floor, the new patched version belongs here
-    as a False.
+    CVE-2026-88938 (2026-09-10) is scoped "through 0.33.0", and its advisory
+    (GHSA-5cj9-fcqq-g2h7) names no patched version. npm has published 0.34.0 and
+    0.34.1 since, and neither source says they fix it, so no version clears the
+    rule. The pin is presence-only and this test says so rather than being
+    deleted: if a fix is confirmed and someone restores a floor, the patched
+    version belongs here as a False.
     """
     assert (KNOWNS in _npm(tmp_path, knowns=version)) is fires
+
+
+def test_knowns_evidence_names_no_newest_release(tmp_path: Path) -> None:
+    """The evidence said "0.33.0 is newest and affected" after npm published
+    0.34.0 and 0.34.1 (2026-09-22, 2026-09-28). A newest version goes stale with
+    every release, so the text names the advisory's range instead."""
+    (tmp_path / "package.json").write_text(
+        json.dumps({"dependencies": {"knowns": "0.34.1"}}), encoding="utf-8"
+    )
+    evidence = [f.evidence for f in pins.scan(tmp_path)[0] if f.rule_id == KNOWNS]
+    assert len(evidence) == 1
+    assert "newest" not in evidence[0]
+    assert "through 0.33.0" in evidence[0]
+    rule = RULES[KNOWNS]
+    assert "newest" not in rule.description and "newest" not in rule.remediation
 
 
 def test_knowns_pin_is_presence_only_because_no_fix_exists() -> None:
@@ -264,10 +289,11 @@ def test_langflow_versions_the_old_floor_called_patched(tmp_path: Path, version:
 
 @pytest.mark.parametrize("version,fires", [
     # 1.11.3 was the floor until 2026-09-11. CVE-2026-85025 / CVE-2026-78575 /
-    # CVE-2026-81941 are all scoped 1.0.0-1.11.5, so it fires now and 1.11.6 is
-    # the release that clears the rule.
+    # CVE-2026-81941 are all scoped 1.0.0-1.11.5, which made 1.11.6 the release
+    # that cleared the rule until 2026-10-05, when CVE-2026-101861 (1.0.16-1.11.6)
+    # moved the floor to 1.12.0.
     ("1.10.1", True), ("1.11.3", True), ("1.11.5", True),
-    ("1.11.6", False), ("1.12.0", False), ("0.9.9", False),
+    ("1.11.6", True), ("1.12.0", False), ("0.9.9", False),
 ])
 def test_langflow_floor_bounds(tmp_path: Path, version: str, fires: bool) -> None:
     assert (LANGFLOW in _pypi(tmp_path, f"langflow=={version}")) is fires

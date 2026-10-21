@@ -6,21 +6,21 @@
 
 | Category | Rules |
 |----------|-------|
-| Supply Chain | 117 |
-| MCP Configuration | 68 |
-| Tool Poisoning | 31 |
+| Supply Chain | 171 |
+| MCP Configuration | 67 |
+| Tool Poisoning | 32 |
+| Agent Config | 19 |
 | Legal Compliance | 19 |
-| Agent Config | 18 |
 | Secret Exposure | 18 |
-| Hook Injection | 17 |
-| Trust Boundaries | 17 |
+| Trust Boundaries | 18 |
+| Hook Injection | 16 |
 | Transport Security | 15 |
 | Taint Analysis | 14 |
 | A2A Protocol | 13 |
 | MCP Server Card | 4 |
 | Agentic Skills (AST10) | 3 |
 | Composition | 3 |
-| **Total** | **357** |
+| **Total** | **412** |
 
 <!-- END rules-summary -->
 
@@ -71,6 +71,8 @@ _Counts are generated from the rule registry; run `agent-audit-kit export-rules`
 > in [issue #742](https://github.com/sattyamjjain/agent-audit-kit/issues/742).
 
 ## Full Rule List
+
+Every rule has its own page, with its description, remediation, limitations and references: see [Per-rule pages](rules/index.md).
 
 Run `agent-audit-kit scan . --owasp-report` for a complete mapping of rules to OWASP frameworks.
 

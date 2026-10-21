@@ -28,13 +28,19 @@ same way). Treat a finding as a prompt to look, not a verdict.
 
 from __future__ import annotations
 
-import json
 from pathlib import Path
 
 import yaml
 
 from agent_audit_kit.models import Finding
-from agent_audit_kit.scanners._helpers import SKIP_DIRS, make_finding
+from agent_audit_kit.scanners._helpers import (
+    CONFIG_MAX_BYTES,
+    in_skip_dir,
+    load_yaml,
+    loads_json,
+    make_finding,
+    read_text_capped,
+)
 from agent_audit_kit.scanners.skill_composition import (
     _DEFAULT_BOUNDARIES,
     _PROJECT_OVERRIDE,
@@ -67,7 +73,7 @@ def _load_session_config(project_root: Path) -> tuple[list[str], set[str]]:
     override = project_root / _PROJECT_OVERRIDE
     src = override if override.is_file() else _DEFAULT_BOUNDARIES
     try:
-        data = yaml.safe_load(src.read_text(encoding="utf-8")) or {}
+        data = load_yaml(read_text_capped(src, CONFIG_MAX_BYTES, errors="replace"), src) or {}
     except (OSError, yaml.YAMLError):
         data = {}
     if not isinstance(data, dict):
@@ -99,12 +105,12 @@ def _transcripts(project_root: Path) -> list[tuple[str, list[dict]]]:
         for path in sessions_dir.rglob("*.json"):
             seen.add(path)
     for path in sorted(seen):
-        if any(part in SKIP_DIRS for part in path.parts):
+        if in_skip_dir(path, project_root):
             continue
         try:
             if path.stat().st_size > _MAX_FILE_BYTES:
                 continue
-            raw = json.loads(path.read_text(encoding="utf-8"))
+            raw = loads_json(read_text_capped(path, _MAX_FILE_BYTES), path)
         except (OSError, ValueError):
             continue
         calls = _calls(raw)
@@ -145,11 +151,19 @@ def _same_tool_runs(calls: list[dict]) -> list[list[tuple[int, dict]]]:
     return runs
 
 
+def _fqdn_host(dest: str) -> str:
+    """`skill_composition._host` without a root dot: `attacker.example.` is the
+    fully qualified spelling of attacker.example, and a client connects to the
+    same host. A reassembled URL whose host ended in a dot used to be skipped,
+    so a splice could finish its host with one and go unreported."""
+    return _host(dest).rstrip(".")
+
+
 def _complete_external_url(frag: str, allowlist: set[str]) -> bool:
     if "://" not in frag:
         return False
-    host = _host(frag)
-    return bool(host) and "." in host and not host.endswith(".") and host not in allowlist
+    host = _fqdn_host(frag)
+    return bool(host) and "." in host and host not in allowlist
 
 
 def scan(project_root: Path) -> tuple[list[Finding], set[str]]:
@@ -184,10 +198,10 @@ def scan(project_root: Path) -> tuple[list[Finding], set[str]]:
             else:  # net
                 if "://" not in reassembled:
                     continue
-                host = _host(reassembled)
-                if not host or "." not in host or host.endswith(".") or host in allowlist:
+                host = _fqdn_host(reassembled)
+                if not host or "." not in host or host in allowlist:
                     continue
-                if any(_complete_external_url(f, allowlist) and _host(f) == host for f in frags):
+                if any(_complete_external_url(f, allowlist) and _fqdn_host(f) == host for f in frags):
                     continue
                 findings.append(_finding(rel, run, tool, reassembled, f"non-allowlisted host {host!r}", frags))
 

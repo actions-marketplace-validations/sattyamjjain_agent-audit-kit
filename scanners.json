@@ -39,6 +39,10 @@
       "name": "Capability-graph composition (AAK-COMPOSE-001/002/003)"
     },
     {
+      "module": "container_image_pins",
+      "name": "Container image tag pins for image-only MCP platforms (Obot, MetaMCP, heym, mcp-filesystem-server, Dify, mcp-k6)"
+    },
+    {
       "module": "crewai_rce_chain",
       "name": "CrewAI four-CVE chain (CERT/CC VU#221883)"
     },
@@ -100,7 +104,7 @@
     },
     {
       "module": "jvm_mcp_sdk_pins",
-      "name": "JVM MCP SDK pins in Gradle / Maven manifests (CVE-2026-53937)"
+      "name": "JVM MCP SDK pins in Gradle / Maven manifests (CVE-2026-53937, CVE-2026-108714)"
     },
     {
       "module": "langchain_prompt_loader",
@@ -200,7 +204,7 @@
     },
     {
       "module": "mcp_sampling_capability",
-      "name": "MCP `sampling` capability consent guard (MCP07:2025)"
+      "name": "MCP `sampling` capability consent guard"
     },
     {
       "module": "mcp_sdk_hardening",
@@ -277,10 +281,6 @@
     {
       "module": "openapi_smells",
       "name": "OpenAPI smells for MCP-on-REST (Hermes paper, arXiv:2605.14312)"
-    },
-    {
-      "module": "openclaw_privesc",
-      "name": "OpenClaw missing-role privesc (provisional)"
     },
     {
       "module": "pin_drift",

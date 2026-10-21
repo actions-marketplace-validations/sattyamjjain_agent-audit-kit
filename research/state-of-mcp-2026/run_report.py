@@ -48,8 +48,11 @@ from agent_audit_kit.scanners.oauth_misconfig import (
 from agent_audit_kit.scoring import compute_score
 
 # Findings AAK reports that are advisory *posture* signals, not exploitable
-# misconfigurations. Excluded from the "top misconfigurations" headline so the
-# story isn't inflated (documented in REPORT.md).
+# misconfigurations. Excluded from the "top misconfigurations" headline and from
+# the OWASP MCP hit-rate tally so the story isn't inflated (documented in
+# REPORT.md). The tally counted them until report v1.1: AAK-MCP-ATTEST-001
+# fires on nearly every config, so under #971's mapping it alone put MCP04 at
+# 99.9% of the corpus.
 _ADVISORY_RULES = frozenset({"AAK-MCP-ATTEST-001", "AAK-MCP-007"})
 
 # The remote MCP server "no authentication" rule.
@@ -104,11 +107,22 @@ def _content_key(text: str) -> str | None:
     return hashlib.sha256(blob.encode("utf-8")).hexdigest()
 
 
+# The name each config is scanned under. `.mcp.json` is the name the crawl
+# files came from and one that every scanner reading MCP configs opens. Up to
+# v1.0 the harness wrote `config.mcp.json`, which seven scanners never open:
+# they read `.mcp.json`, `mcp.json` and the client-specific paths by name, the
+# supply-chain scanner and the CVE pin table among them, so their rules were
+# never measured on the corpus. And AAK-SECRET-007, which stands down on
+# `.mcp.json` because AAK-MCP-003 reports the same env literal there, counted
+# every env secret a second time.
+SCAN_FILENAME = ".mcp.json"
+
+
 def _scan_text(text: str) -> Any:
     """Scan one config in isolation via engine.run_scan + scoring.compute_score."""
     tmp = Path(tempfile.mkdtemp(prefix="aak-somcp-"))
     try:
-        (tmp / "config.mcp.json").write_text(text, encoding="utf-8")
+        (tmp / SCAN_FILENAME).write_text(text, encoding="utf-8")
         result = run_scan(tmp)
         compute_score(result)
         return result
@@ -226,7 +240,7 @@ def aggregate(corpus: Path, registry_manifest: Path | None) -> dict[str, Any]:
             cats_here.add(f.category.value)
             rules_here.add(f.rule_id)
             rule = RULES.get(f.rule_id)
-            if rule:
+            if rule and f.rule_id not in _ADVISORY_RULES:
                 owasp_here.update(rule.owasp_mcp_references)
         for c in cats_here:
             category_configs[c] += 1
@@ -302,6 +316,12 @@ def aggregate(corpus: Path, registry_manifest: Path | None) -> dict[str, Any]:
             "removal_clock_features_measured_from_config": _metric(removal_clock, total),
         },
         "top_misconfigurations": top_misconfig,
+        # Every rule that fired, advisory ones included: the source for a
+        # per-rule figure outside the top ten, which REPORT.md states for rules
+        # that left it (AAK-MCP-009, AAK-SECRET-007 in v1.1).
+        "rule_hit_rate": {
+            rid: {"configs": n, "pct": _pct(n)} for rid, n in _ranked(rule_configs)
+        },
         "excluded_advisory_rules": sorted(_ADVISORY_RULES),
     }
 

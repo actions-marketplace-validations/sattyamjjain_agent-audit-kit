@@ -1,7 +1,7 @@
 # Benign-slice HIGH/CRITICAL false-positive rate — AgentAuditKit
 
 > Generated from `benchmarks/false_positive/run.py` over a benign slice derived
-> by `corpus.py`. Run date **2026-09-03**. Offline, deterministic, no LLM.
+> by `corpus.py`. Run date **2026-10-15**. Offline, deterministic, no LLM.
 > Reproduce: `make fp` (or `python benchmarks/false_positive/run.py`).
 > The slice itself is committed as [`benign-slice.json`](benign-slice.json), so
 > which servers were measured is checkable without running anything.
@@ -21,18 +21,27 @@ that the scanner is never wrong. What the run does establish is narrower and
 still worth having — across 536 curated benign configs the scanner raised
 exactly one high-severity finding, and that finding was correct.
 
-**No rule changed in this run.** The 2026-08-24 measurement left 2 false
-positives and 1 ambiguous verdict, and all three were corpus-attributable: root
-cause B below. Regenerating the manifest from the same cached 2026-07-26
+**The 2026-10-15 run changes the harness, not the slice or the result.** For
+State of MCP report v1.1 each config is scanned as `.mcp.json`, the name every
+scanner reads (the harness wrote `config.mcp.json`, which the supply-chain scanner
+and the CVE pin table never open), a registry config launches the package version
+its record states instead of an unpinned `npx -y <package>`, and
+`AAK-TRANSPORT-003` reads the `"type": "sse"` the conversion writes. The slice is
+the same 536 servers, and its one HIGH/CRITICAL finding is the same finding with
+the same verdict. Only lower severities move: see the findings profile.
+
+**The 2026-09-03 run, which set this rate, changed no rule.** The 2026-08-24
+measurement left 2 false positives and 1 ambiguous verdict, and all three were
+corpus-attributable: root cause B below. Regenerating the manifest from the same cached 2026-07-26
 registry snapshot clears all three. 3 of 1,641 configs change, 0 `auth_mode`s
 change, the slice stays at 536, and `AAK-MCP-001` is untouched — so the rate
 moves for exactly one reason, which is what the previous run said it wanted and
 deliberately would not bundle.
 
-The 2026-08-24 pair of numbers (untuned **4 / 6 = 66.7%**, post-fix
-**2 / 4 = 50.0%**) stays in [`triage.md`](triage.md) and the history table below.
-That run was itself a large regression against the 0.0% published on 2026-07-22,
-for a reason worth keeping on the record: **the 0.0% was never re-measured after
+The 2026-08-24 numbers, untuned and post-fix, stay in [`triage.md`](triage.md)
+and the history table below; this page's body states only the run it reports.
+That run was itself a large regression against the rate published on 2026-07-22,
+for a reason worth keeping on the record: **that rate was never re-measured after
 the corpus grew.** The manifest went from 1,374 to 1,641 registry servers and the
 benign slice from 368 to 536, and nothing re-ran the benchmark. The published
 number described a slice that no longer existed. There is now a drift guard
@@ -40,11 +49,11 @@ number described a slice that no longer existed. There is now a drift guard
 
 ### How to read the badge
 
-The README badge reads `benign-slice 536 configs · HIGH/CRIT FP 0/1`. The two
+The README badge reads `benign-slice 536 MCP configs · HIGH/CRIT FP 0/1`. The two
 numbers answer different questions and both are needed:
 
-- **536** is how many benign configs were scanned. This is the sample size of
-  the *measurement*.
+- **536** is how many benign MCP server configs were scanned. This is the sample
+  size of the *measurement*, and "MCP" is its scope: see the last limitation.
 - **0/1** is how many of the HIGH/CRITICAL findings raised on those 536 configs
   were wrong. The denominator is small because the scanner is quiet on benign
   input — 1 high-severity finding across 536 configs — not because little was
@@ -54,7 +63,7 @@ The ratio is back to `0/1`, and that string has been wrong on this badge before,
 so it is worth being explicit about what is different. The 2026-07-22 badge read
 `0/1 (n=1)`, which reads as "one thing was tested." It was not: 368 configs were
 tested and exactly one high-severity finding came out of them. The label now
-carries the slice size, so the badge says `benign-slice 536 configs` next to
+carries the slice size, so the badge says `benign-slice 536 MCP configs` next to
 `HIGH/CRIT FP 0/1` and the sample size is not recoverable only by opening this
 file. The failure that badge had was presentational; the number was right.
 
@@ -119,14 +128,14 @@ drifts from a fresh derivation.
 
 ## Findings profile (n = 536)
 
-1,158 findings total (2.16 per config), almost all low-severity / advisory:
+1,038 findings total (1.94 per config), almost all low-severity / advisory:
 
 | Severity | Findings |
 |----------|---------:|
 | critical | 1 |
 | high | 0 |
-| medium | 665 |
-| low | 492 |
+| medium | 668 |
+| low | 369 |
 
 ### Noisiest rules overall (all severities)
 
@@ -135,20 +144,24 @@ drifts from a fresh derivation.
 | `AAK-MCP-ATTEST-001` | MEDIUM | 536 | Advisory-posture rule — fires on every config (no attestation); excluded from the report headline as advisory. |
 | `AAK-OAUTH-008` | LOW | 369 | Expected on static-credential servers (no RFC 9728 discovery). |
 | `AAK-MCP-005` | MEDIUM | 123 | `npx`/`uvx` fetch-and-execute — a real supply-chain pattern, MEDIUM. |
-| `AAK-MCP-007` | LOW | 123 | Advisory-posture. |
 | `AAK-MCP-006` | MEDIUM | 4 | Advisory-posture. |
+| `AAK-TRANSPORT-003` | MEDIUM | 4 | Deprecated SSE transport (`"type": "sse"`, or `/sse` in the URL). |
+| `AAK-AIACT50-001` | MEDIUM | 1 | EU AI Act Art. 50 transparency evidence; the pack reads `.mcp.json` only. |
 | `AAK-MCP-001` | **CRITICAL** | 1 | The only HIGH/CRITICAL rule that fired — adjudicated below. |
 
-Total findings are unchanged at 1,158: the corpus fix moved 3 findings rather
-than removing them. The three configs that regained their declared
-`Authorization` header stopped firing `AAK-MCP-001` (CRITICAL, 4 → 1) and
-started firing `AAK-OAUTH-008` (LOW, 366 → 369), which is the expected posture
-finding for a static-credential server with no RFC 9728 discovery. The scanner
-did not go quieter; it went **more accurate**, and the severity mix is the
-evidence.
+Total findings fell from 1,158 on 2026-09-03 to 1,038, all of it below HIGH.
+The 123 package configs lost `AAK-MCP-007` (LOW, no version pin): they now launch
+the release their registry record states, which satisfies `AAK-SUPPLY-001` too.
+One config gained `AAK-AIACT50-001` (MEDIUM), from a scanner the old file name
+hid, and two SSE servers gained `AAK-TRANSPORT-003` (MEDIUM), which now reads the
+`type` key. On 2026-09-03 the corpus fix had moved 3 findings without removing any: the
+three configs that regained their declared `Authorization` header stopped firing
+`AAK-MCP-001` (CRITICAL, 4 → 1) and started firing `AAK-OAUTH-008` (LOW, 366 → 369),
+the expected posture finding for a static-credential server with no RFC 9728
+discovery.
 
 The MEDIUM count is inflated by one advisory rule (`AAK-MCP-ATTEST-001`) that
-fires on 100% of configs by design; it is not an exploitable misconfiguration.
+fires on every config by design; it is not an exploitable misconfiguration.
 Only `AAK-MCP-001` produced HIGH/CRITICAL findings, so it is the whole of the FP
 surface here — as it was in both previous runs.
 
@@ -227,6 +240,16 @@ would have caught this from the committed data alone: **no server labelled
 the class was missing — `_to_config` and `_auth_mode` read the same record and
 disagreed about it, and nothing compared their answers.
 
+## Instruction-file slice (pending adjudication)
+
+The rules that read `CLAUDE.md`, `AGENTS.md` and the other instruction files are
+measured on a separate benign slice, built the same way as this one: a pinned
+corpus, a pre-registered predicate, the shipped engine, and a human adjudication
+no script writes. Its page is
+[`instruction_files/RESULTS.md`](instruction_files/RESULTS.md). Its findings are
+listed for adjudication and not yet adjudicated, so it states no false-positive
+rate, and neither does this page.
+
 ## Limitations (stated plainly)
 
 - **"Benign" is a proxy.** A declared-auth, active, non-CVE registry server is a
@@ -236,21 +259,37 @@ disagreed about it, and nothing compared their answers.
 - **Single rater, no inter-rater agreement.** All verdicts are the maintainer's.
   There is no second independent adjudicator, so no agreement statistic is
   reported.
-- **Small adjudication denominator → wide interval.** 6 HIGH/CRITICAL findings
-  across 536 configs gives a Wilson 95% CI of [30.0%, 90.3%] on the FP rate. The
-  point estimate (66.7%) should not be read as precise; the interval is the
-  honest summary. The *slice* is large; the number of high-severity findings it
-  provokes is small, and that is what bounds the precision of this rate.
+- **Small adjudication denominator → wide interval.** 1 HIGH/CRITICAL finding
+  across 536 configs, adjudicated 0 / 1 false positives, gives a Wilson 95% CI of
+  [0.0%, 79.3%] on the FP rate. The point estimate (0.0%) should not be read as
+  precise; the interval is the honest summary. The *slice* is large; the number
+  of high-severity findings it provokes is small, and that is what bounds the
+  precision of this rate.
 - **Config-level + conversion fidelity.** Registry servers are converted to
-  `.mcp.json` shape from their `remotes`/`packages` metadata (**first remote
-  only**), so a multi-remote server's auth can be under-represented. This is no
-  longer hypothetical — see root cause B above.
-- **Snapshot vs live drift.** The manifest is a 2026-07-26 snapshot. Servers
-  republish, and at least one (`app.thoughtspot/mcp-server`) has changed version
-  since, which is why its finding is adjudicated ambiguous rather than guessed at.
+  `.mcp.json` shape from their `remotes`/`packages` metadata, one remote per
+  server: the **first remote that declares headers**, or the first remote when
+  none does. A package server launches the version its record states (since
+  2026-10-15; before that the conversion dropped it), and each config is scanned
+  as `.mcp.json`. It was the first remote only until the 2026-08-24 fix (root cause B
+  above). A server whose first header-declaring remote is not the one carrying
+  its credential is still under-represented, and its other remotes are not
+  scanned at all.
+- **Snapshot vs live drift.** The manifest is a 2026-07-26 snapshot, and servers
+  republish after it, so a finding describes a server as it was on that date.
+  `app.thoughtspot/mcp-server`, adjudicated ambiguous on 2026-08-24 for exactly
+  this reason, now resolves from the cached snapshot to its `/bearer/mcp`
+  remote and no longer fires.
 - **Scope is HIGH/CRITICAL.** MEDIUM/LOW findings (the bulk of the volume) are not
   adjudicated here; this measures the false-positive rate of the severities that
   drive operational action.
+- **MCP server configs only.** The slice is built from MCP Registry server
+  records, so the rate covers MCP server configs and nothing else. Instruction
+  files (`CLAUDE.md`, `AGENTS.md` and the like) are not in it; they have their
+  own slice, [`instruction_files/`](instruction_files/RESULTS.md), built from the
+  930-repository corpus of the outside report
+  ([#771](https://github.com/sattyamjjain/agent-audit-kit/issues/771)) that
+  exposed `AAK-AGENT-002` on them, fixed in v0.6.8. That slice is pending
+  adjudication, so there is still no false-positive rate for instruction files.
 
 ## History
 
@@ -261,3 +300,4 @@ disagreed about it, and nothing compared their answers.
 | 2026-08-24 | 536 | 6 | 4 / 6 | 66.7% | Slice grew 368→536; `-Token`/`-Secret` families unrecognised, plus 2 first-remote conversion artifacts. **Untuned.** |
 | 2026-08-24 (post-fix) | 536 | 4 | 2 / 4 | 50.0% | Header family extended to `-token`/`-secret`. Both remaining FPs are corpus conversion artifacts that clear on the next `make corpus`. |
 | 2026-09-03 | 536 | 1 | 0 / 1 | 0.0% | Corpus regenerated from the cached 2026-07-26 snapshot with the fixed `_to_config`. **No rule changed.** 3/1,641 configs moved, 0 `auth_mode`s; the 2 FPs and the 1 ambiguous all clear. Wilson 95% CI [0.0%, 79.3%]. |
+| 2026-10-15 | 536 | 1 | 0 / 1 | 0.0% | Report v1.1 harness: scanned as `.mcp.json`, package configs launch their stated version. The HIGH/CRITICAL finding and its verdict are unchanged; total findings 1,158 → 1,038, all below HIGH. |

@@ -10,7 +10,10 @@ logging pass). AAK-OAUTH-006 covers the RC's actual new OAuth requirement — RF
 
 from __future__ import annotations
 
+import time
 from pathlib import Path
+
+import pytest
 
 from agent_audit_kit.engine import run_scan
 from agent_audit_kit.rules.builtin import RULES
@@ -40,7 +43,21 @@ def test_deprecated_rules_registered_and_accurate() -> None:
         assert "SEP-2577" in rule.description
         assert "SEP-2596" in rule.description
         assert feature in rule.description
-        assert "MCP07:2025" in rule.owasp_mcp_references
+
+
+def test_deprecated_rules_name_the_owasp_risk_their_description_gives() -> None:
+    """Each rule's OWASP id follows the security reason the description states.
+
+    All three carried MCP07 (authentication) before the October 2026 remap, which
+    none of them is about. Roots leaked the workspace layout to every server
+    (MCP10, over-sharing); sampling let a server drive the host LLM (MCP06,
+    intent flow subversion); logging was redundant and names no OWASP risk.
+    """
+    assert RULES[ROOTS].owasp_mcp_references == ["MCP10:2025"]
+    assert RULES[SAMPLING].owasp_mcp_references == ["MCP06:2025"]
+    assert RULES[SAMPLING].owasp_agentic_references == ["ASI01"]
+    assert RULES[LOGGING].owasp_mcp_references == []
+    assert RULES[LOGGING].owasp_agentic_references == []
 
 
 def test_oauth006_registered_and_accurate() -> None:
@@ -49,7 +66,9 @@ def test_oauth006_registered_and_accurate() -> None:
     assert rule.severity.value == "medium"
     assert "RFC 9207" in rule.description
     assert "iss" in rule.description
-    assert "MCP01:2025" in rule.owasp_mcp_references
+    # A mix-up-attack defence in the OAuth flow is OWASP MCP07 (Insufficient
+    # Authentication & Authorization); MCP01 is about how tokens are stored.
+    assert "MCP07:2025" in rule.owasp_mcp_references
 
 
 # ---------------------------------------------------------------------------
@@ -145,3 +164,22 @@ def test_non_oauth_code_param_passes(tmp_path: Path) -> None:
         "    return code\n"
     )
     assert OAUTH_ISS not in _oauth_ids(tmp_path, "misc.py", src)
+
+
+@pytest.mark.parametrize(("text", "found"), [
+    ("capabilities: { roots: { listChanged: true } }", {ROOTS: 1}),
+    ("server.capabilities = {\n  sampling: {}\n}", {SAMPLING: 1}),
+    ("x\nServerCapabilities(logging=LoggingCapability())", {LOGGING: 2}),
+    ("capabilities: { tools: {} }", {}),
+])
+def test_weak_markers_keep_their_shape(text: str, found: dict[str, int]) -> None:
+    assert mcp_deprecated_features._check_text(text, True) == found
+
+
+def test_a_file_of_unclosed_capability_blocks_reads_in_linear_time() -> None:
+    """900 KB of `capabilities: {` and no `}`. Each opener read the rest of
+    the file: 40 KB took 0.70 seconds and the time grew with the square. The
+    bound is loose for slow CI runners."""
+    started = time.perf_counter()
+    mcp_deprecated_features._check_text("capabilities: {" * 60_000, True)
+    assert time.perf_counter() - started < 5.0

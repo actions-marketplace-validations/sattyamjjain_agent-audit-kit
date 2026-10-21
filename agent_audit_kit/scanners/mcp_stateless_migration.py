@@ -23,13 +23,14 @@ surfaces four migration smells:
   `ip_hash`, K8s `sessionAffinity: ClientIP`, Traefik / ALB sticky
   cookies) or handler code reads a shared session store keyed on a
   per-connection id used across requests.
-* 004 (LOW) — client file calls `tools/list` / `list_tools` in a hot
-  path with no caching marker (`lru_cache`, `ttl`, `cache`, …) anywhere
-  in the file, and the same file participates in per-session state.
+* 004 (LOW) — client file calls `tools/list` / `list_tools` at least
+  twice with no caching marker (`lru_cache`, `TTLCache`, `ttlMs`, …)
+  anywhere in the file, and the same file names the session
+  (`session_id` / `Mcp-Session-Id`).
 
-Source-side rules (001, 002, 004) are gated on a declared MCP SDK in the
-project manifest, matching the established `mcp_sampling_capability` and
-`mcp_sdk_hardening` pattern — this keeps the AAK self-scan quiet on its
+Source-side rules (001, 002, 004) are gated on a declared MCP SDK in a
+root manifest (`_helpers.declares_mcp_sdk`, shared with
+`mcp_sampling_capability`) — this keeps the AAK self-scan quiet on its
 own scanner sources and avoids firing on prose mentions in unrelated
 projects.
 
@@ -44,7 +45,6 @@ Suppression: opt in via `.agent-audit-kit.yml` with
 
 from __future__ import annotations
 
-import json
 import re
 from pathlib import Path
 
@@ -52,96 +52,18 @@ import yaml
 
 from agent_audit_kit.models import Finding
 
-from ._helpers import SKIP_DIRS, make_finding
-
-# --------------------------------------------------------------------------
-# SDK declaration gate (mirrors mcp_sampling_capability._declares_sdk)
-# --------------------------------------------------------------------------
-
-_PY_SDK_NAMES = (
-    "mcp",
-    "modelcontextprotocol",
-    "model-context-protocol",
+from ._helpers import (
+    CONFIG_MAX_BYTES,
+    SOURCE_MAX_BYTES,
+    declares_mcp_sdk,
+    in_skip_dir,
+    load_yaml,
+    make_finding,
+    read_text_capped,
 )
-_TS_SDK_NAMES = (
-    "@modelcontextprotocol/sdk",
-    "@anthropic-ai/mcp",
-    "@anthropic-ai/claude-agent-sdk",
-)
-_JAVA_SDK_TOKEN = "io.modelcontextprotocol"
-_RUST_SDK_TOKENS = ("mcp", "modelcontextprotocol")
 
 _LANG_EXTS = (".py", ".ts", ".tsx", ".js", ".mjs", ".cjs", ".java", ".kt", ".rs")
 _INFRA_EXTS = (".yaml", ".yml", ".conf", ".toml")
-
-
-def _declares_sdk(project_root: Path) -> tuple[bool, list[str]]:
-    manifests: list[str] = []
-    declared = False
-
-    pyproject = project_root / "pyproject.toml"
-    if pyproject.is_file():
-        try:
-            text = pyproject.read_text(encoding="utf-8", errors="replace")
-        except OSError:
-            text = ""
-        if any(f'"{n}"' in text or f"'{n}'" in text for n in _PY_SDK_NAMES):
-            declared = True
-            manifests.append("pyproject.toml")
-
-    for req in project_root.glob("requirements*.txt"):
-        try:
-            text = req.read_text(encoding="utf-8", errors="replace")
-        except OSError:
-            continue
-        for line in text.splitlines():
-            name = (
-                line.split("#", 1)[0].strip().split("[")[0]
-                .split("=")[0].split(">")[0].split("<")[0].strip()
-            )
-            if name in _PY_SDK_NAMES:
-                declared = True
-                manifests.append(str(req.relative_to(project_root)))
-                break
-
-    pkg = project_root / "package.json"
-    if pkg.is_file():
-        try:
-            data = json.loads(pkg.read_text(encoding="utf-8", errors="replace"))
-        except json.JSONDecodeError:
-            data = {}
-        if isinstance(data, dict):
-            for section in ("dependencies", "devDependencies", "peerDependencies"):
-                deps = data.get(section) or {}
-                if isinstance(deps, dict) and any(n in deps for n in _TS_SDK_NAMES):
-                    declared = True
-                    manifests.append("package.json")
-                    break
-
-    for maven in ("pom.xml", "build.gradle", "build.gradle.kts"):
-        p = project_root / maven
-        if p.is_file():
-            try:
-                text = p.read_text(encoding="utf-8", errors="replace")
-            except OSError:
-                continue
-            if _JAVA_SDK_TOKEN in text:
-                declared = True
-                manifests.append(maven)
-
-    cargo = project_root / "Cargo.toml"
-    if cargo.is_file():
-        try:
-            text = cargo.read_text(encoding="utf-8", errors="replace")
-        except OSError:
-            text = ""
-        for tok in _RUST_SDK_TOKENS:
-            if re.search(rf"^\s*{re.escape(tok)}\s*=", text, re.MULTILINE):
-                declared = True
-                manifests.append("Cargo.toml")
-                break
-
-    return declared, manifests
 
 
 def _accepts_risk(project_root: Path) -> bool:
@@ -149,8 +71,8 @@ def _accepts_risk(project_root: Path) -> bool:
     if not cfg.is_file():
         return False
     try:
-        data = yaml.safe_load(cfg.read_text(encoding="utf-8")) or {}
-    except yaml.YAMLError:
+        data = load_yaml(read_text_capped(cfg, CONFIG_MAX_BYTES, errors="replace"), cfg) or {}
+    except (yaml.YAMLError, OSError):
         return False
     if not isinstance(data, dict):
         return False
@@ -181,7 +103,7 @@ def _scan_001_session_id(source_files: list[Path]) -> list[tuple[Path, int]]:
     hits: list[tuple[Path, int]] = []
     for path in source_files:
         try:
-            text = path.read_text(encoding="utf-8", errors="replace")
+            text = read_text_capped(path, SOURCE_MAX_BYTES, errors="replace")
         except OSError:
             continue
         m = _SESSION_ID_RE.search(text) or _SESSION_ID_CONST_RE.search(text)
@@ -208,7 +130,7 @@ def _scan_002_tasks_list(source_files: list[Path]) -> list[tuple[Path, int]]:
     hits: list[tuple[Path, int]] = []
     for path in source_files:
         try:
-            text = path.read_text(encoding="utf-8", errors="replace")
+            text = read_text_capped(path, SOURCE_MAX_BYTES, errors="replace")
         except OSError:
             continue
         m = _TASKS_LIST_LITERAL_RE.search(text) or _TASKS_LIST_CALL_RE.search(text)
@@ -225,12 +147,19 @@ def _scan_002_tasks_list(source_files: list[Path]) -> list[tuple[Path, int]]:
 
 # Infrastructure-level sticky-session markers. Kept narrow so generic
 # K8s manifests / nginx configs in unrelated projects don't fire.
+# Indentation is `[^\S\n]*`, whitespace other than a newline, not `\s*`. With
+# `^\s*` every line start in a run of blank lines could reach across the rest of
+# the run, so each one rescanned it and the time grew with the square of the
+# run. The match also started at the first blank line above the directive, so
+# the finding named that line instead of the `ip_hash;` / `sticky` line.
+# Traefik's `sticky:` split its run the same way between `\s*` and `\n\s*`; the
+# first newline now ends the leading part. A file matches exactly when it did.
 _STICKY_PATTERNS: tuple[tuple[str, re.Pattern[str]], ...] = (
-    ("nginx ip_hash", re.compile(r"^\s*ip_hash\s*;", re.MULTILINE)),
-    ("nginx sticky", re.compile(r"^\s*sticky\s+(?:cookie|route|learn)", re.MULTILINE)),
+    ("nginx ip_hash", re.compile(r"^[^\S\n]*ip_hash\s*;", re.MULTILINE)),
+    ("nginx sticky", re.compile(r"^[^\S\n]*sticky\s+(?:cookie|route|learn)", re.MULTILINE)),
     ("k8s sessionAffinity", re.compile(r"\bsessionAffinity\s*:\s*ClientIP\b")),
     ("ALB sticky", re.compile(r"stickiness\.enabled\s*=\s*true", re.IGNORECASE)),
-    ("Traefik sticky", re.compile(r"sticky\s*:\s*\n\s*cookie\s*:", re.MULTILINE)),
+    ("Traefik sticky", re.compile(r"sticky\s*:[^\S\n]*\n\s*cookie\s*:", re.MULTILINE)),
 )
 
 # Code-side: a function that reads a shared store keyed on a session id
@@ -266,10 +195,10 @@ def _scan_003_sticky(
     for path in project_root.rglob("*"):
         if not path.is_file():
             continue
-        if any(part in SKIP_DIRS for part in path.parts):
+        if in_skip_dir(path, project_root):
             continue
         try:
-            text = path.read_text(encoding="utf-8", errors="replace")
+            text = read_text_capped(path, CONFIG_MAX_BYTES, errors="replace")
         except OSError:
             continue
 
@@ -329,16 +258,18 @@ _CACHE_MARKERS_RE = re.compile(
 
 
 def _scan_004_no_cache(source_files: list[Path]) -> list[tuple[Path, int]]:
-    """A file fires when (a) it calls `tools/list` (or alias) at least
-    twice OR inside an `async`/`def` body that takes per-request inputs,
-    (b) it has no cache marker anywhere in the file, AND (c) it also
-    references session state (`session_id`, `Mcp-Session-Id`, or a
-    `session.` attribute access). The triple conjunction keeps the LOW-
-    severity advisory tight."""
+    """A file fires when (a) it calls `tools/list` (`"tools/list"`,
+    `list_tools(` or `.tools.list(`) at least twice, (b) it has no cache
+    marker anywhere in the file, AND (c) it names the session
+    (`session_id`, `MCP_SESSION_ID` or the `Mcp-Session-Id` header). The
+    triple conjunction keeps the LOW-severity advisory tight. A single call
+    inside a per-request handler is not counted, and neither is a
+    `session.` attribute access; this docstring used to promise both, and
+    the rule's stated limitation says "at least twice"."""
     hits: list[tuple[Path, int]] = []
     for path in source_files:
         try:
-            text = path.read_text(encoding="utf-8", errors="replace")
+            text = read_text_capped(path, SOURCE_MAX_BYTES, errors="replace")
         except OSError:
             continue
         calls = list(_TOOLS_LIST_CALL_RE.finditer(text))
@@ -369,7 +300,7 @@ def _collect_source_files(project_root: Path) -> list[Path]:
             continue
         if path.suffix not in _LANG_EXTS:
             continue
-        if any(part in SKIP_DIRS for part in path.parts):
+        if in_skip_dir(path, project_root):
             continue
         out.append(path)
     return out
@@ -387,7 +318,7 @@ def scan(project_root: Path) -> tuple[list[Finding], set[str]]:
         scanned.add(".agent-audit-kit.yml")
         return findings, scanned
 
-    sdk_declared, manifests = _declares_sdk(project_root)
+    sdk_declared, manifests = declares_mcp_sdk(project_root)
 
     # 003 fires on infra files regardless of SDK (with content gate) and
     # on code files only when the SDK is declared.

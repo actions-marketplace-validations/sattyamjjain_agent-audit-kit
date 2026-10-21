@@ -20,6 +20,7 @@ future contributor "fixing" the gap by adding the pin that looked obvious.
 
 from __future__ import annotations
 
+import re
 from pathlib import Path
 
 import pytest
@@ -75,10 +76,17 @@ def _ids(tmp_path: Path, name: str, content: str) -> set[str]:
 def _row_for(cve: str) -> str:
     """The 2026-08-21 ledger row for ``cve``, scoped to this batch's section."""
     text = LEDGER.read_text(encoding="utf-8")
-    # Anchored on the full heading, not the date: a later same-day section
-    # ("## 2026-08-21 (later): ...") is inserted above this one, and a prefix
-    # split silently started returning that section instead.
-    section = text.split("## 2026-08-21: seven advisories", 1)[1].split("\n## ", 1)[0]
+    # Anchored on the date AND the title, not the date alone: a later same-day
+    # section ("## 2026-08-21 (v0.3.86, later): ...") sits above this one, and a
+    # prefix split silently started returning that section instead. The
+    # parenthesised label is skipped rather than matched, because it is release
+    # metadata a section gains when it ships and twenty-two were backfilled at
+    # once -- pinning it made this fail on a change it has no stake in.
+    match = re.search(
+        r"^##\s+2026-08-21(?:\s*\([^)]*\))?\s*:\s*seven advisories", text, re.M
+    )
+    assert match, "ledger has no 2026-08-21 'seven advisories' section"
+    section = text[match.end():].split("\n## ", 1)[0]
     rows = [ln for ln in section.splitlines() if ln.startswith("|") and cve in ln]
     assert rows, f"{cve} has no row in the 2026-08-21 ledger section"
     return rows[0]
@@ -116,15 +124,13 @@ def test_marimo_pin_has_no_lower_bound() -> None:
     assert pin.introduced is None
 
 
-def test_marimo_regex_is_bounded_and_stays_off_lookalikes(tmp_path: Path) -> None:
-    """The 0.3.82 ``cline`` regression, held for this name."""
-    pin = next(p for p in _PINS if p.rule_id == MARIMO_RULE)
-    assert pin.regexes, "marimo must carry an explicit bounded regex"
+def test_marimo_matches_the_whole_name_and_stays_off_lookalikes(tmp_path: Path) -> None:
+    """The 0.3.82 ``cline`` regression, held for this name: a longer name is
+    another package, and a comment naming the project is not a declaration."""
     assert MARIMO_RULE not in _ids(
-        tmp_path, "requirements.txt", "marimo-extras==0.1.0\nsubmarimo==0.2.0\n"
+        tmp_path, "requirements.txt",
+        "# see marimo-team/marimo 0.23.10 for details\nmarimo-extras==0.1.0\nsubmarimo==0.2.0\n",
     )
-    patterns = list(pin.compiled())
-    assert not any(rx.search("see marimo-team/marimo for details") for rx in patterns)
 
 
 def test_marimo_remediation_says_do_not_open_untrusted_notebooks() -> None:
@@ -217,9 +223,14 @@ def test_n8n_floor_moved_rather_than_gaining_a_fifth_pin(tmp_path: Path) -> None
 
     Updated 2026-09-04: the claim under test is "no new *rule id* for n8n", not "no
     second arm". CVE-2026-85166 fixes on two lines (< 2.35.4, and 2.36.x < 2.36.2),
-    so this rule now carries two arms the way AAK-MCP-N8N-CVE-2026-65594-001
-    already did. That is still one finding per dependency, which is what the test
-    was defending; asserting the arm *count* conflated the two.
+    so this rule carried two arms then, the way AAK-MCP-N8N-CVE-2026-65594-001
+    did. That is still one finding per versioned dependency, which is what the
+    test was defending; asserting the arm *count* conflated the two.
+
+    Updated 2026-10-16: CVE-2026-110842 moved the floor again, to 2.41.4, with the
+    2.42.0 release as a further range on the same row instead of a second row, and
+    AAK-MCP-N8N-CVE-2026-65594-001 folded its two rows the same way, so an
+    unversioned n8n is no longer reported twice by either rule.
     """
     n8n_rule_ids = {p.rule_id for p in _PINS if p.display == "n8n"}
     assert n8n_rule_ids == {
@@ -228,10 +239,10 @@ def test_n8n_floor_moved_rather_than_gaining_a_fifth_pin(tmp_path: Path) -> None
         N8N_RULE,
     }, "a fourth n8n rule id would report the same dependency one more time"
     floors = {p.floor for p in _PINS if p.rule_id == N8N_RULE}
-    assert floors == {(2, 35, 4), (2, 36, 2)}
+    assert floors == {(2, 41, 4)}
     assert N8N_RULE in _ids(tmp_path, "package.json", '{"dependencies":{"n8n":"2.33.5"}}')
     assert N8N_RULE not in _ids(
-        tmp_path, "package.json", '{"dependencies":{"n8n":"2.35.4"}}'
+        tmp_path, "package.json", '{"dependencies":{"n8n":"2.41.4"}}'
     )
 
 
@@ -309,7 +320,12 @@ def test_spring_ai_row_names_the_ecosystem_boundary() -> None:
     earlier ones to learn why a CVSS 7.5 is out of scope.
     """
     text = LEDGER.read_text(encoding="utf-8")
-    section = text.split("## 2026-08-21 (later)", 1)[1].split("\n## ", 1)[0]
+    # The "(later)" qualifier now shares its parentheses with a version label,
+    # as "(v0.3.86, later)". Match the qualifier inside the label rather than
+    # the literal "(later)".
+    match = re.search(r"^##\s+2026-08-21\s*\([^)]*\blater\b[^)]*\)", text, re.M)
+    assert match, "ledger has no 2026-08-21 'later' section"
+    section = text[match.end():].split("\n## ", 1)[0]
     row = next(ln for ln in section.splitlines() if "CVE-2026-59279" in ln and ln.startswith("|"))
     assert "Out of scope" in row
     assert "Maven" in row

@@ -70,7 +70,7 @@ _OPTIONAL_SCANNERS: list[tuple[str, str, list[str]]] = [
      "MCP-configured destination unguarded: absence or guard-application asymmetry "
      "(CVE-2026-86122 / CVE-2026-85666)", []),
     ("denylist_sandbox", "Deny-list used as a Python sandbox boundary (CVE-2026-81096)", []),
-    ("jvm_mcp_sdk_pins", "JVM MCP SDK pins in Gradle / Maven manifests (CVE-2026-53937)", []),
+    ("jvm_mcp_sdk_pins", "JVM MCP SDK pins in Gradle / Maven manifests (CVE-2026-53937, CVE-2026-108714)", []),
     ("toxic_flow", "Toxic-flow source/sink pair scoring", []),
     ("mcp_stdio_params", "MCP StdioServerParameters config-to-spawn taint (OX-MCP-2026-04-25)", []),
     ("mcp_marketplace_fetch", "MCP marketplace-fetch → StdioServerParameters", []),
@@ -87,7 +87,6 @@ _OPTIONAL_SCANNERS: list[tuple[str, str, list[str]]] = [
     ("social_agent_hijack", "Social-agent auto-reply hijack (BHASIA 2026)", []),
     ("crewai_rce_chain", "CrewAI four-CVE chain (CERT/CC VU#221883)", []),
     ("langchain_prompt_loader", "LangChain load_prompt path traversal (CVE-2026-34070)", []),
-    ("openclaw_privesc", "OpenClaw missing-role privesc (provisional)", []),
     ("docsgpt_transport_flip", "DocsGPT MCP transport-flip MITM (OX-MCP-2026-05-01)", []),
     ("gpt_researcher_transport_flip", "GPT-Researcher MCP transport-flip MITM (OX-MCP-2026-05-01)", []),
     ("mcp_tool_unsafe_eval", "Unsafe eval/exec inside @mcp.tool handler (CVE-2026-44717 class)", []),
@@ -96,7 +95,7 @@ _OPTIONAL_SCANNERS: list[tuple[str, str, list[str]]] = [
     ("stainless_lineage", "Stainless-generator provenance (Anthropic acquisition 2026-05-18)", []),
     ("skill_lifecycle_attribution", "Skill lifecycle outcome-attribution (SkillsVote, arXiv:2605.18401)", []),
     ("agent_harness_shared_state", "Multi-agent shared-state lock (Code-as-Harness, arXiv:2605.18747)", []),
-    ("mcp_sampling_capability", "MCP `sampling` capability consent guard (MCP07:2025)", []),
+    ("mcp_sampling_capability", "MCP `sampling` capability consent guard", []),
     ("mcp_stateless_migration", "MCP 2026-07-28 stateless-migration smells (SEP-2567/1442/2575)", []),
     ("eu_ai_act_art15_locale", "EU AI Act Art. 15 multilingual-eval coverage (advisory)", []),
     ("mcp_tunnel", "MCP Tunnels gateway config + credential exposure (Anthropic 2026-05-19 research preview)", []),
@@ -125,6 +124,7 @@ _OPTIONAL_SCANNERS: list[tuple[str, str, list[str]]] = [
     ("mcp_routing_desync", "MCP 2026-07-28 routable-header ↔ body desync (SEP-2243)", []),
     ("mcp_apps_ui", "MCP Apps UI iframe sandbox / sanitization (SEP-1865)", []),
     ("mcp_cve_pins_2026_07", "MCP/agent CVE version-pins — 2026-07 disclosure wave", []),
+    ("container_image_pins", "Container image tag pins for image-only MCP platforms (Obot, MetaMCP, heym, mcp-filesystem-server, Dify, mcp-k6)", []),
 ]
 
 
@@ -211,6 +211,42 @@ def _scanner_fail_finding(scanner_name: str, exc: BaseException) -> Finding:
     )
 
 
+def _refused_file_findings(scanner_name: str, refused: dict[str, str], project_root: Path) -> list[Finding]:
+    """One INFO finding per file a scanner refused (see
+    `scanners._helpers.refuse`), filed against that file.
+
+    The scanner-failure rule, not a new one: the condition is the scanner not
+    evaluating its rules on that file, which is what the rule records, and the
+    rule carries what makes that impossible to miss. It is kept through
+    `--rules` filters and severity floors, and `aak scan` exits 1 as
+    INCOMPLETE unless `--allow-scanner-failure`. The evidence starts
+    `scanner='<name>' error=`, the prefix the JSON report reads the scanner's
+    name back from, and names the file and the reason.
+    """
+    from agent_audit_kit.scanners._helpers import _parts_below
+
+    rule = get_rule(SCANNER_FAIL_RULE_ID)
+    findings: list[Finding] = []
+    for path, reason in refused.items():
+        parts = _parts_below(Path(path), project_root)
+        shown = "/".join(parts) if parts else path
+        findings.append(Finding(
+            rule_id=rule.rule_id,
+            title=rule.title,
+            description=rule.description,
+            severity=Severity.INFO,
+            category=Category.AGENT_CONFIG,
+            file_path=shown,
+            line_number=None,
+            evidence=(
+                f"scanner={scanner_name!r} error=RefusedFile: {shown}: {reason}; "
+                "the rules it owns were not evaluated on this file"
+            ),
+            remediation=rule.remediation,
+        ))
+    return findings
+
+
 def run_scan(
     project_root: Path,
     include_user_config: bool = False,
@@ -240,6 +276,11 @@ def run_scan(
         "ignore_paths": ignore_paths,
     }
 
+    # A file a scanner's parser refuses (nested too deep, YAML aliases grown too
+    # large) costs that file alone: the scanner goes on, and each refusal is
+    # reported against its file (see `scanners._helpers.refuse`).
+    from agent_audit_kit.scanners._helpers import collecting_refusals
+
     for reg in _get_registry(strict_loading=strict_loading):
         _log(f"Scanning {reg.name}...")
         scanner_kwargs: dict[str, Any] = {"project_root": project_root}
@@ -247,15 +288,19 @@ def run_scan(
             if key in kwargs_map:
                 scanner_kwargs[key] = kwargs_map[key]
         try:
-            findings, files = reg.scan_fn(**scanner_kwargs)
+            with collecting_refusals() as refused:
+                findings, files = reg.scan_fn(**scanner_kwargs)
         except Exception as exc:  # noqa: BLE001 — intentional broad catch; see docstring
             _log(f"  {reg.name}: CRASHED ({type(exc).__name__}: {exc})")
             _log(traceback.format_exc())
             all_findings.append(_scanner_fail_finding(reg.name, exc))
             continue
         all_findings.extend(findings)
+        all_findings.extend(_refused_file_findings(reg.name, refused, project_root))
         all_scanned_files.update(files)
         _log(f"  {reg.name}: {len(files)} files, {len(findings)} findings")
+        for path, reason in refused.items():
+            _log(f"  {reg.name}: refused {path}: {reason}")
 
     # Apply global ignore_paths filter. Historically ignore_paths was
     # threaded only into secret_exposure (the only scanner that took
@@ -282,7 +327,9 @@ def run_scan(
             continue
         kept.append(finding)
 
-    result.findings.extend(_drop_covered_composition_findings(kept))
+    result.findings.extend(
+        _drop_launches_supply_chain_reports(_drop_covered_composition_findings(kept))
+    )
 
     result.files_scanned = len(all_scanned_files)
     result.scan_duration_ms = (time.monotonic() - start) * 1000
@@ -347,3 +394,58 @@ def _drop_covered_composition_findings(findings: list[Finding]) -> list[Finding]
         f for f in findings
         if f.category is not Category.COMPOSITION or not _is_covered(f)
     ]
+
+
+def _drop_launches_supply_chain_reports(findings: list[Finding]) -> list[Finding]:
+    """Stand AAK-MCP-007 down on a launch AAK-SUPPLY-001 reports in the same run.
+
+    Both rules report one fact, a server launch that fetches a package without
+    pinning it (`npx -y pkg`, `uvx pkg`). AAK-SUPPLY-001 reads the launcher's
+    grammar and judges the package spec; AAK-MCP-007 is the older reading,
+    every argument without an `@`. On a config both read, one fix came back
+    as two findings at two severities.
+
+    The answer needs the assembled list, as the composition pass above does: a
+    scanner sees neither its peers' findings nor the active rule set. Dropping
+    AAK-MCP-007 at its source would take it from a user who runs `--rules
+    AAK-MCP-007` or excludes AAK-SUPPLY-001. Here it runs after the `--rules`,
+    `--exclude-rules` and `ignore_paths` filter, so AAK-MCP-007 stands down
+    only for an AAK-SUPPLY-001 finding that is going to be reported.
+    `scan --diff` keeps or drops a whole file, and both findings sit in the
+    same one, so it cannot split the pair either. Dropping adds no result and
+    leaves AAK-SUPPLY-001's fingerprints alone (SARIF fingerprints read neither
+    the evidence nor the severity), so a baseline diff shows the AAK-MCP-007
+    entry resolved while AAK-SUPPLY-001 still reports the launch.
+
+    A launch is the same when the file and the `Server '<name>' arg: <spec>`
+    head of the evidence match (`_launchers.launch_subject`). The line is no
+    key: both rules point at the first line holding the spec, so two servers
+    launching one package share it. AAK-MCP-007 keeps every finding
+    AAK-SUPPLY-001 does not match, which covers the configs it alone reads
+    (`.windsurf/mcp.json`, any `*mcp*.json` below the root) and arguments
+    AAK-SUPPLY-001 does not judge as a package.
+
+    As in the composition pass, it stands down only for a finding at or above
+    its own severity, so the `--severity` floor can never hide a launch that
+    AAK-MCP-007 alone would have shown.
+    """
+    from agent_audit_kit.scanners._launchers import launch_subject
+
+    reported: dict[tuple[str, str], int] = {}
+    for f in findings:
+        if f.rule_id != "AAK-SUPPLY-001":
+            continue
+        subject = launch_subject(f.evidence)
+        if subject is not None:
+            key = (f.file_path, subject)
+            reported[key] = max(reported.get(key, 0), f.severity.numeric())
+    if not reported:
+        return findings
+
+    def _reported(finding: Finding) -> bool:
+        subject = launch_subject(finding.evidence)
+        if subject is None:
+            return False
+        return reported.get((finding.file_path, subject), 0) >= finding.severity.numeric()
+
+    return [f for f in findings if f.rule_id != "AAK-MCP-007" or not _reported(f)]

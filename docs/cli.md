@@ -10,7 +10,8 @@ Nothing here was cut; it is the same content with a home of its own.
 |---------|-------------|
 | `agent-audit-kit scan .` | Full security scan |
 | `agent-audit-kit scan . --ci` | CI mode: SARIF + `--fail-on high` |
-| `agent-audit-kit discover` | Find all AI agent configs on the machine |
+| `agent-audit-kit discover` | Find the AI agent configs in your home directory |
+| `agent-audit-kit discover .` | Same, plus the project's own per-platform configs (`.mcp.json`, `.cursor/mcp.json`, ...) |
 | `agent-audit-kit pin .` | Pin tool definitions (SHA-256 hashes) |
 | `agent-audit-kit verify .` | Check tools against pins (detect rug pulls) |
 | `agent-audit-kit fix . --dry-run` | Auto-fix common misconfigurations |
@@ -21,7 +22,7 @@ Nothing here was cut; it is the same content with a home of its own.
 | `agent-audit-kit proxy --port 8765 --target URL` | Start MCP interception proxy |
 | `agent-audit-kit kill` | Terminate running proxy |
 | `agent-audit-kit export-rules --out rules.json` | Write deterministic rule bundle + SHA-256 (Sigstore-signable) |
-| `agent-audit-kit verify-bundle rules.json [--signature sig]` | Verify bundle digest or Sigstore signature |
+| `agent-audit-kit verify-bundle rules.json [--signature rules.json.sigstore.json] [--tag vX.Y.Z]` | Verify the bundle's digest, or its Sigstore signature and that release.yml signed it (needs `[verify]`) |
 | `agent-audit-kit sbom . --format {cyclonedx,spdx}` | Emit CycloneDX 1.5 / SPDX 2.3 SBOM for MCP deps |
 | `agent-audit-kit vex .` | Emit an OpenVEX 0.2.0 exploitability document, joined to the SBOM on purl |
 | `agent-audit-kit report . --framework FRAMEWORK --format pdf` | Auditor-ready compliance report (EU AI Act / SOC 2 / ISO 27001 / HIPAA / NIST AI RMF) |
@@ -44,9 +45,11 @@ Nothing here was cut; it is the same content with a home of its own.
 | `--score` | | Show security score and grade |
 | `--owasp-report` | | Generate OWASP coverage matrix |
 | `--compliance FRAMEWORK` | | Compliance report: `eu-ai-act`, `soc2`, `iso27001`, `hipaa`, `nist-ai-rmf`, `mcp-2026-roadmap` |
-| `--verify-secrets` | | Probe APIs to check if leaked keys are live (opt-in) |
+| `--verify-secrets` | | Ask Anthropic, OpenAI, GitHub and GitLab whether leaked keys are live (opt-in, network; AWS and GCP keys are reported but not checked) |
 | `--diff BASE_REF` | | Only report findings in files changed since BASE_REF |
-| `--llm-scan` | | Local LLM semantic analysis via Ollama (opt-in) |
+| `--llm-scan` | | Ask a model whether each tool's metadata tries to manipulate the agent (opt-in; sends that text to the provider). See [LLM scan](llm-scan.md) |
+| `--llm MODEL` | `ollama/gemma2:2b` | Model for `--llm-scan`: `claude-*` (`ANTHROPIC_API_KEY`), `gpt-*` (`OPENAI_API_KEY`), `gemini-*` (`GEMINI_API_KEY`) or `ollama/<model>` (local) |
+| `--allow-scanner-failure` | | Exit 0 even when a scanner crashed or `--llm-scan` left a tool unanalyzed |
 | `--sessions PATH` | | Run the session-scoped rules over agent transcripts — OpenAI Agents SDK traces, LangGraph checkpoints, JSONL. See [Session transcripts](https://github.com/sattyamjjain/agent-audit-kit/blob/main/docs/session-transcripts.md) |
 | `--strict-loading` | | Fail loudly if any optional scanner module can't be imported (default: silently skip) |
 | `--verbose` / `-v` | | Detailed scan progress |
@@ -71,7 +74,8 @@ ignore-paths:
   - vendor/
   - third_party/
 exclude-rules:
-  - AAK-MCP-007    # We intentionally don't pin npx versions
+  - AAK-SUPPLY-001  # We intentionally don't pin npx versions
+  - AAK-MCP-007     # (reports the same launches once AAK-SUPPLY-001 is excluded)
 include-user-config: false
 ```
 
@@ -109,7 +113,7 @@ permissions:
 
 steps:
   - uses: actions/checkout@v4
-  - uses: sattyamjjain/agent-audit-kit@v0.6.7
+  - uses: sattyamjjain/agent-audit-kit@v0.6.23
     id: scan
     with:
       fail-on: high
@@ -127,6 +131,15 @@ links** via the rule-level `help`; per-finding remediation is in result
 `artifactChanges`, so emitting prose there would make Code Scanning reject the
 upload.)
 
+Each finding quotes what its rule matched as evidence, and every format repeats
+it: the console, JSON, SARIF, the PR summary and `aak notify`. A credential in
+that quote is masked before any formatter sees it, keeping the shape so the
+finding still reads: `?token=***`, `https://***@host`, `--api-key ***`,
+`GITHUB_TOKEN=***`, `Authorization: Bearer ***`, `sk-proj-***`. Placeholders
+such as `${GITHUB_TOKEN}` are shown as written, because several rules exist to
+tell a placeholder from a literal. Releases through 0.6.20 quoted credentials
+as written, so SARIF uploaded by those versions can hold them.
+
 ---
 ## Tool Pinning & Rug Pull Detection
 
@@ -140,6 +153,8 @@ agent-audit-kit pin .
 agent-audit-kit verify .
 ```
 
-Detects: tool definitions changed (AAK-RUGPULL-001), new tools added (AAK-RUGPULL-002), tools removed (AAK-RUGPULL-003).
+Detects: tool definitions changed (AAK-RUGPULL-001), new tools added (AAK-RUGPULL-002), tools removed (AAK-RUGPULL-003). `verify` exits 1 when it finds any of them and 0 when every tool matches its pin, so the CI line above fails the job on drift. `watch --once` exits the same way (through 0.6.22 it exited 0 after printing a drift); the long-running `watch` reports each drift and keeps watching.
+
+A pin file that exists but cannot be read (not valid JSON, not UTF-8, not a map of pins) is never a pass: `verify` and `watch --once` exit 2, `watch` prints "not verified", and `scan` files `AAK-INTERNAL-SCANNER-FAIL` against the pin file and exits 1 as incomplete. Restore the file from git rather than re-pinning blind: `pin` accepts whatever the config declares now. `verify` and `watch --once` also exit 2 when the check itself fails, as on an MCP config they cannot decode.
 
 ---

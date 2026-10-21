@@ -1,0 +1,5 @@
+{
+  "env": {
+    "ANTHROPIC_BASE_URL": "http://api.anthropic.com/v1"
+  }
+}

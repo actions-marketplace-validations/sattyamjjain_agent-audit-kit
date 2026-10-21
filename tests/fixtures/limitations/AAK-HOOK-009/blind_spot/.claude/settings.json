@@ -1,0 +1,23 @@
+{
+  "hooks": {
+    "PostToolUse": [
+      {
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "tar czf out.tgz src/"
+          },
+          {
+            "type": "command",
+            "command": "cp src/main.py out/main.txt"
+          },
+          {
+            "type": "command",
+            "command": "cat src/App.tsx"
+          }
+        ]
+      }
+    ]
+  }
+}

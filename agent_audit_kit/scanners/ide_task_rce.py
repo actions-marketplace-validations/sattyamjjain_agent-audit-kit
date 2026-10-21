@@ -19,23 +19,29 @@ Detections:
   exactly where an auto-run task would hide).
 
 These files are JSONC (VS Code permits comments and trailing commas), so a plain
-`json.loads` raises on real-world files; comments and trailing commas are
-stripped first, respecting string context so a `//` inside a URL survives.
+`json.loads` raises on real-world files. They are read with `_helpers.loads_jsonc`,
+the reader the MCP config scanners share, which strips comments and trailing
+commas outside strings, so a `//` inside a URL survives.
 """
 
 from __future__ import annotations
 
 import json
 import re
+from dataclasses import replace
 from pathlib import Path
 from typing import Iterable
 
 from agent_audit_kit.models import Finding, Severity
-from agent_audit_kit.rules.builtin import get_rule
 from agent_audit_kit.scanners._helpers import (
+    CONFIG_MAX_BYTES,
     INTERPOLATION_RE,
-    SKIP_DIRS,
-    find_line_number,
+    find_line_numbers,
+    in_skip_dir,
+    loads_jsonc,
+    make_finding,
+    placed,
+    read_text_capped,
 )
 
 _VSCODE_DIR = ".vscode"
@@ -61,12 +67,36 @@ _PIPE_TO_SHELL_RE = re.compile(
     re.IGNORECASE,
 )
 # An interpreter invoked on a script path inside the repo, e.g. `python ./x.py`,
-# `node scripts/setup.js`, `bash ./install.sh`.
+# `node scripts/setup.js`, `bash ./install.sh`. The path is read lazily up to a
+# `[\w-]\.<ext>`: written `\.?[\w./\\-]*[\w-]+\.<ext>`, every split of a long
+# path with no such extension was tried, so the time grew with the square of the
+# path. Both forms match the same commands.
 _INTERP_REPO_PATH_RE = re.compile(
     r"\b(?:python[23]?|node|deno|bun|ruby|perl|php|bash|sh|zsh)\b\s+"
-    r"\.?[\w./\\-]*[\w-]+\.(?:py|js|cjs|mjs|ts|rb|pl|php|sh|bash|zsh|ps1)\b",
+    r"[\w./\\-]*?[\w-]\.(?:py|js|cjs|mjs|ts|rb|pl|php|sh|bash|zsh|ps1)\b",
     re.IGNORECASE,
 )
+
+# The VS Code variables that stand for a workspace folder: `${workspaceFolder}`,
+# scoped `${workspaceFolder:api}` in a multi-root workspace, the deprecated
+# `${workspaceRoot}` and `${fileWorkspaceFolder}`. VS Code replaces each with
+# the folder's path before the task runs, so `bash ${workspaceFolder}/x.sh`
+# runs the repo's own `./x.sh`. The path class cannot start with `$` or `{`,
+# so the interpreter-on-a-repo-script shape never saw one, and the
+# preLaunchTask chain (AAK-IDE-TASK-003) went silent with it. Other variables
+# (`${userHome}`, `${env:HOME}`) point outside the workspace and are left as
+# they are. The scope class excludes both braces, so an unclosed
+# `${workspaceFolder:` reads only to the next brace and a crafted run of them
+# stays linear, as `_helpers._VSCODE_VARIABLE_RE` does.
+_WORKSPACE_FOLDER_RE = re.compile(
+    r"\$\{(?:workspaceFolder(?::[^{}]*)?|workspaceRoot|fileWorkspaceFolder)\}"
+)
+
+
+def _workspace_relative(command: str) -> str:
+    """``command`` with each workspace-folder variable written as ``.``, the
+    folder a task's relative path starts from, for the repo-script check."""
+    return _WORKSPACE_FOLDER_RE.sub(".", command)
 
 
 def _finding(
@@ -76,74 +106,19 @@ def _finding(
     line_number: int | None = None,
     severity: Severity | None = None,
 ) -> Finding:
-    """Like ``_helpers.make_finding`` but with an optional severity override.
+    """``_helpers.make_finding`` with an optional severity override.
 
     AAK-IDE-TASK-001 is HIGH by default and escalates to CRITICAL when the
     auto-run command is a shell / interpreter / network fetch, so the finding's
-    severity can differ from the rule's registered default.
+    severity can differ from the rule's registered default. Every other field
+    comes from ``make_finding``: this used to copy the registry field by field
+    and missed ``owasp_ast_references``, which a field-by-field copy always
+    risks.
     """
-    rule = get_rule(rule_id)
-    return Finding(
-        rule_id=rule_id,
-        title=rule.title,
-        description=rule.description,
-        severity=severity or rule.severity,
-        category=rule.category,
-        file_path=file_path,
-        line_number=line_number,
-        evidence=evidence,
-        remediation=rule.remediation,
-        cve_references=rule.cve_references,
-        owasp_mcp_references=rule.owasp_mcp_references,
-        owasp_agentic_references=rule.owasp_agentic_references,
-        adversa_references=rule.adversa_references,
-        incident_references=rule.incident_references,
-        aicm_references=rule.aicm_references,
-    )
-
-
-def _strip_jsonc(text: str) -> str:
-    """Strip `//` and `/* */` comments and trailing commas, respecting strings.
-
-    A naive strip would corrupt `"https://example.com"`; this walks the text and
-    only treats `//` / `/*` as comments when not inside a double-quoted string.
-    """
-    out: list[str] = []
-    i, n = 0, len(text)
-    in_str = False
-    while i < n:
-        c = text[i]
-        if in_str:
-            out.append(c)
-            if c == "\\" and i + 1 < n:
-                out.append(text[i + 1])
-                i += 2
-                continue
-            if c == '"':
-                in_str = False
-            i += 1
-            continue
-        if c == '"':
-            in_str = True
-            out.append(c)
-            i += 1
-            continue
-        if c == "/" and i + 1 < n and text[i + 1] == "/":
-            while i < n and text[i] != "\n":
-                i += 1
-            continue
-        if c == "/" and i + 1 < n and text[i + 1] == "*":
-            i += 2
-            while i + 1 < n and not (text[i] == "*" and text[i + 1] == "/"):
-                i += 1
-            i += 2
-            continue
-        out.append(c)
-        i += 1
-    stripped = "".join(out)
-    # Trailing commas before a closing } or ].
-    stripped = re.sub(r",(\s*[}\]])", r"\1", stripped)
-    return stripped
+    finding = make_finding(rule_id, file_path, evidence, line_number)
+    if severity is not None:
+        finding = replace(finding, severity=severity)
+    return finding
 
 
 def _flatten_strings(value: object) -> list[str]:
@@ -152,24 +127,39 @@ def _flatten_strings(value: object) -> list[str]:
     VS Code allows `command` as a string or a platform object
     (`{"windows": ..., "linux": ...}`), and `args` as strings or
     `{"value": ..., "quoting": ...}` objects.
+
+    The strings come out depth first in document order, as they did when this
+    recursed, one frame per level: a task nested past the recursion limit,
+    which JSON's parser reads on Python 3.12 and later (about 10,000 levels),
+    took the whole scanner down. The walk keeps its own stack.
     """
     out: list[str] = []
-    if isinstance(value, str):
-        out.append(value)
-    elif isinstance(value, dict):
-        for v in value.values():
-            out.extend(_flatten_strings(v))
-    elif isinstance(value, list):
-        for v in value:
-            out.extend(_flatten_strings(v))
+    stack: list[object] = [value]
+    while stack:
+        node = stack.pop()
+        if isinstance(node, str):
+            out.append(node)
+        elif isinstance(node, dict):
+            stack.extend(reversed(node.values()))
+        elif isinstance(node, list):
+            stack.extend(reversed(node))
     return out
+
+
+def _anchor(task: dict) -> str:
+    """What a task's findings are placed by: its label, else its command line."""
+    label = task.get("label")
+    if isinstance(label, str) and label:
+        return label
+    joined = " ".join(_flatten_strings(task.get("command")) + _flatten_strings(task.get("args")))
+    return joined.strip()[:60]
 
 
 def _iter_config_files(project_root: Path, name: str) -> Iterable[Path]:
     for path in project_root.rglob(name):
         if path.parent.name != _VSCODE_DIR:
             continue
-        if any(part in SKIP_DIRS for part in path.parts):
+        if in_skip_dir(path, project_root):
             continue
         if path.is_file():
             yield path
@@ -178,11 +168,11 @@ def _iter_config_files(project_root: Path, name: str) -> Iterable[Path]:
 def _parse(path: Path, rel: str) -> tuple[object | None, Finding | None]:
     """Return (data, None) on success, or (None, parse-failure finding)."""
     try:
-        raw = path.read_text(encoding="utf-8", errors="replace")
+        raw = read_text_capped(path, CONFIG_MAX_BYTES, errors="replace")
     except OSError:
         return None, None
     try:
-        return json.loads(_strip_jsonc(raw)), None
+        return loads_jsonc(raw, path), None
     except (json.JSONDecodeError, ValueError) as exc:
         return None, _finding(
             "AAK-IDE-TASK-004",
@@ -211,7 +201,7 @@ def _scan_tasks(path: Path, rel: str) -> tuple[list[Finding], set[str]]:
     if not isinstance(data, dict):
         return [], set()
     raw = path.read_text(encoding="utf-8", errors="replace")
-    findings: list[Finding] = []
+    unplaced: list[tuple[Finding, str]] = []
     flagged: set[str] = set()
     tasks = data.get("tasks")
     if not isinstance(tasks, list):
@@ -224,8 +214,7 @@ def _scan_tasks(path: Path, rel: str) -> tuple[list[Finding], set[str]]:
         joined = " ".join(
             _flatten_strings(task.get("command")) + _flatten_strings(task.get("args"))
         ).strip()
-        anchor = label_str or joined[:60]
-        line = find_line_number(raw, anchor) if anchor else 1
+        anchor = _anchor(task)
 
         run_on = ""
         run_options = task.get("runOptions")
@@ -240,37 +229,43 @@ def _scan_tasks(path: Path, rel: str) -> tuple[list[Finding], set[str]]:
                 if critical
                 else "runs on folder open"
             )
-            findings.append(
+            unplaced.append((
                 _finding(
                     "AAK-IDE-TASK-001",
                     rel,
                     f"task {label_str or '(unlabelled)'!r} auto-executes on folderOpen "
                     f"and {why}: {joined!r}",
-                    line_number=line,
                     severity=sev,
-                )
-            )
+                ),
+                anchor,
+            ))
             if label_str:
                 flagged.add(label_str)
 
         if joined and (
             _PIPE_TO_SHELL_RE.search(joined)
-            or _INTERP_REPO_PATH_RE.search(joined)
+            or _INTERP_REPO_PATH_RE.search(_workspace_relative(joined))
             or INTERPOLATION_RE.search(joined)
         ):
-            findings.append(
+            unplaced.append((
                 _finding(
                     "AAK-IDE-TASK-002",
                     rel,
                     f"task {label_str or '(unlabelled)'!r} command/args reach a shell: "
                     f"{joined!r}",
-                    line_number=line,
-                )
-            )
+                ),
+                anchor,
+            ))
             if label_str:
                 flagged.add(label_str)
 
-    return findings, flagged
+    # Every reported task's line in one pass over the file, not one search of it per
+    # task: a quiet task is never looked up. A task with nothing to place it by goes
+    # on the first line, as before.
+    lines = find_line_numbers(raw, (anchor for _, anchor in unplaced if anchor))
+    for finding, anchor in unplaced:
+        finding.line_number = lines[anchor] if anchor else 1
+    return [finding for finding, _ in unplaced], flagged
 
 
 def _scan_launch(
@@ -286,6 +281,7 @@ def _scan_launch(
     configs = data.get("configurations")
     if not isinstance(configs, list):
         return []
+    unplaced: list[tuple[Finding, str]] = []
     for cfg in configs:
         if not isinstance(cfg, dict):
             continue
@@ -294,15 +290,19 @@ def _scan_launch(
             name = cfg.get("name")
             name_str = name if isinstance(name, str) else "(unnamed)"
             where = f" (flagged in {tasks_rel})" if tasks_rel else ""
-            findings.append(
+            unplaced.append((
                 _finding(
                     "AAK-IDE-TASK-003",
                     rel,
                     f"launch config {name_str!r} preLaunchTask {pre!r} chains to a "
                     f"flagged auto-exec task{where}",
-                    line_number=find_line_number(raw, pre) or 1,
-                )
-            )
+                ),
+                pre,
+            ))
+    # Every chained task's line in one pass over the file, not one search of it per config.
+    for finding in placed(raw, unplaced):
+        finding.line_number = finding.line_number or 1  # not found: the file's first line
+        findings.append(finding)
     return findings
 
 

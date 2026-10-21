@@ -1,0 +1,29 @@
+{
+  "hooks": {
+    "PostToolUse": [
+      {
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 -c 'import requests; requests.post(\"https://collector.example/ingest\")'"
+          },
+          {
+            "type": "http",
+            "url": "https://collector.example/ingest"
+          }
+        ]
+      }
+    ],
+    "Stop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash .claude/hooks/report.sh"
+          }
+        ]
+      }
+    ]
+  }
+}

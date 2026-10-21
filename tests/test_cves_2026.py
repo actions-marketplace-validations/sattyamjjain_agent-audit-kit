@@ -7,9 +7,13 @@ scanner, and asserts the expected rule IDs fire (vulnerable) or none fire
 
 from __future__ import annotations
 
+import json
 import shutil
 from pathlib import Path
 
+import pytest
+
+from agent_audit_kit.engine import run_scan
 from agent_audit_kit.scanners import (
     hook_rce,
     langchain_vuln,
@@ -102,7 +106,26 @@ def test_hook_rce_vulnerable_fires(tmp_path: Path) -> None:
     findings, _ = hook_rce.scan(tmp_path)
     ids = {f.rule_id for f in findings}
     assert "AAK-HOOK-RCE-001" in ids
-    assert "AAK-HOOK-RCE-003" in ids
+    assert "AAK-HOOK-RCE-003" not in ids  # a version pin now; see the next test
+
+
+@pytest.mark.parametrize("settings", [
+    {"statusLine": {"type": "command", "command": "bash .claude/statusline.sh"}},
+    {"hooks": {"PostToolUse": [{"matcher": "Write|Edit",
+                                "hooks": [{"type": "command", "command": "npx prettier --write ."}]}]}},
+])
+def test_hook_rce_003_no_longer_reads_settings_local_json(tmp_path: Path, settings: dict) -> None:
+    """AAK-HOOK-RCE-003 fired HIGH on any string under a `command`, `cmd`, `run` or
+    `script` key in a settings.local.json, a status line included, and on 14 of 159
+    real hook-bearing settings files, 14 of their 16 `--fail-on high` failures. A
+    hook in that file runs before the trust dialog only on Claude Code below 1.0.111
+    (CVE-2025-59536), which the file does not say, so the rule now reads the
+    Claude Code version a project declares instead."""
+    claude_dir = tmp_path / ".claude"
+    claude_dir.mkdir()
+    (claude_dir / "settings.local.json").write_text(json.dumps(settings), encoding="utf-8")
+    result = run_scan(project_root=tmp_path, rules=["AAK-HOOK-RCE-003"])
+    assert not any(f.rule_id == "AAK-HOOK-RCE-003" for f in result.findings)
 
 
 def test_hook_rce_safe_is_quiet(tmp_path: Path) -> None:
@@ -111,6 +134,147 @@ def test_hook_rce_safe_is_quiet(tmp_path: Path) -> None:
     shutil.copy(FIX / "hook_rce" / "safe_settings.json", claude_dir / "settings.json")
     findings, _ = hook_rce.scan(tmp_path)
     assert findings == []
+
+
+def test_hook_rce_reads_the_documented_matcher_group_shape(tmp_path: Path) -> None:
+    """A pin, not a fix: hook_rce walks the whole settings tree for `command`, so
+    Claude Code's matcher-group shape, which hook_injection's reader skipped,
+    was never a gap here. If the walk is ever narrowed, this says so."""
+    claude_dir = tmp_path / ".claude"
+    claude_dir.mkdir()
+    settings = {"hooks": {"PreToolUse": [{
+        "matcher": "Bash",
+        "hooks": [{"type": "command", "command": "echo ${input.file} | bash"}],
+    }]}}
+    (claude_dir / "settings.json").write_text(json.dumps(settings), encoding="utf-8")
+    findings, _ = hook_rce.scan(tmp_path)
+    assert "AAK-HOOK-RCE-001" in {f.rule_id for f in findings}
+
+
+_CRAFTED_INTERPOLATIONS = {
+    # The `"+` and `{{` openers ended in a `\s*` of their own, beside the shared
+    # one, so a blank run after either was split between the two every way.
+    "braces-blanks": "{{" + " " * 990_000 + "x",
+    "concat-blanks": '"' + " " * 495_000 + "+" + " " * 495_000 + "x",
+}
+
+
+@pytest.mark.parametrize("shape", sorted(_CRAFTED_INTERPOLATIONS))
+@pytest.mark.parametrize("where", ["settings", "script"])
+def test_hook_rce_a_crafted_interpolation_scans_in_linear_time(tmp_path: Path, shape: str, where: str) -> None:
+    """A hook command or hook script of about 1 MB. Before, 40,000 blanks after
+    `{{` took 30 seconds and the time grew with the square of the run. The bound
+    is loose for slow CI runners; each takes a fraction of a second."""
+    import json
+    import time
+
+    text = _CRAFTED_INTERPOLATIONS[shape]
+    claude_dir = tmp_path / ".claude"
+    (claude_dir / "hooks").mkdir(parents=True)
+    if where == "settings":
+        settings = {"hooks": {"Stop": [{"command": text}]}}
+        (claude_dir / "settings.json").write_text(json.dumps(settings), encoding="utf-8")
+    else:
+        (claude_dir / "hooks" / "stop.sh").write_text(text, encoding="utf-8")
+    started = time.perf_counter()
+    findings, _ = hook_rce.scan(tmp_path)
+    assert time.perf_counter() - started < 5.0
+    assert not any(f.rule_id == "AAK-HOOK-RCE-001" for f in findings)
+
+
+@pytest.mark.parametrize(("source", "fires"), [
+    ("import subprocess\nsubprocess.run(cmd, shell=True)\n", True),
+    ("const cp = require('child_process');\ncp.spawn(cmd, args, { shell: true });\n", True),
+    ("os.system(cmd)\n", False),
+    ("subprocess.run(cmd, check=True)\nlog(shell=True)\n", False),  # after the call's `)`
+])
+def test_hook_rce_shell_true_shapes_keep_their_result(tmp_path: Path, source: str, fires: bool) -> None:
+    hooks_dir = tmp_path / ".claude" / "hooks"
+    hooks_dir.mkdir(parents=True)
+    (hooks_dir / "stop.py").write_text(source, encoding="utf-8")
+    findings, _ = hook_rce.scan(tmp_path)
+    assert any(f.rule_id == "AAK-HOOK-RCE-002" for f in findings) is fires
+
+
+@pytest.mark.parametrize(("source", "fires"), [
+    # `shell: true` was read only as the first option of the object.
+    ("spawn(cmd, [], { cwd: dir, shell: true });\n", True),
+    ("spawn(cmd, [], { stdio: 'inherit', shell: true });\n", True),
+    ("spawnSync(cmd, args, {\n  cwd: dir,\n  env: process.env,\n  shell: true,\n});\n", True),
+    ("child_process.exec(cmd, { timeout: 5, shell: true });\n", True),
+    ("spawn(cmd, [], { cwd: dir, shell: false });\n", False),
+    ("spawn(cmd, [], { cwd: dir, myshell: true });\n", False),
+    ("spawn(cmd, [], { cwd: dir });\nconst opts = { x: 1, shell: true };\n", False),  # after the call's `)`
+])
+def test_hook_rce_shell_true_anywhere_in_the_options(tmp_path: Path, source: str, fires: bool) -> None:
+    hooks_dir = tmp_path / ".claude" / "hooks"
+    hooks_dir.mkdir(parents=True)
+    (hooks_dir / "pre.js").write_text(source, encoding="utf-8")
+    findings, _ = hook_rce.scan(tmp_path)
+    assert any(f.rule_id == "AAK-HOOK-RCE-002" for f in findings) is fires
+
+
+def test_hook_rce_shell_true_evidence_points_at_its_call(tmp_path: Path) -> None:
+    hooks_dir = tmp_path / ".claude" / "hooks"
+    hooks_dir.mkdir(parents=True)
+    (hooks_dir / "pre.js").write_text(
+        "const cp = require('child_process');\n\nspawn(cmd, [], { cwd: dir, shell: true });\n",
+        encoding="utf-8",
+    )
+    [hit] = [f for f in hook_rce.scan(tmp_path)[0] if f.rule_id == "AAK-HOOK-RCE-002"]
+    assert hit.line_number == 3
+
+
+@pytest.mark.parametrize("tail", [", " + " " * 1_000_000, ", x" * 330_000, "{ a: 1," * 140_000])
+def test_hook_rce_a_crafted_options_object_scans_in_linear_time(tmp_path: Path, tail: str) -> None:
+    """One call whose options are a 1 MB run of separators and blanks with no
+    `shell`. Each `,` or `{` reads its blanks once. The bound is loose for slow
+    CI runners."""
+    import time
+
+    hooks_dir = tmp_path / ".claude" / "hooks"
+    hooks_dir.mkdir(parents=True)
+    (hooks_dir / "pre.js").write_text("spawn(cmd" + tail, encoding="utf-8")
+    started = time.perf_counter()
+    findings, _ = hook_rce.scan(tmp_path)
+    assert time.perf_counter() - started < 5.0
+    assert not any(f.rule_id == "AAK-HOOK-RCE-002" for f in findings)
+
+
+@pytest.mark.parametrize("unit", ["spawn(", "os.system(", "subprocess.run("])
+def test_hook_rce_a_crafted_script_of_calls_scans_in_linear_time(tmp_path: Path, unit: str) -> None:
+    """A 1 MB hook script of one call opener repeated with no `)`. Every opener
+    read on to the first `)`, so 40,000 characters of `spawn(` took 1.9 seconds
+    and the time grew with the square; hook scripts are read whatever their size.
+    The bound is loose for slow CI runners."""
+    import time
+
+    hooks_dir = tmp_path / ".claude" / "hooks"
+    hooks_dir.mkdir(parents=True)
+    (hooks_dir / "stop.py").write_text(unit * (1_000_000 // len(unit)), encoding="utf-8")
+    started = time.perf_counter()
+    findings, _ = hook_rce.scan(tmp_path)
+    assert time.perf_counter() - started < 5.0
+    assert not any(f.rule_id == "AAK-HOOK-RCE-002" for f in findings)
+
+
+@pytest.mark.parametrize(("command", "fires"), [
+    ('echo "$X" + input', True),
+    ("echo {{ input }}", True),
+    ("echo {{   argv }}", True),
+    ('echo "x"   +   args', True),
+    ("echo $(input)", True),
+    ("echo {{ name }}", False),
+])
+def test_hook_rce_interpolation_shapes_keep_their_result(tmp_path: Path, command: str, fires: bool) -> None:
+    import json
+
+    claude_dir = tmp_path / ".claude"
+    claude_dir.mkdir()
+    settings = {"hooks": {"Stop": [{"command": command}]}}
+    (claude_dir / "settings.json").write_text(json.dumps(settings), encoding="utf-8")
+    findings, _ = hook_rce.scan(tmp_path)
+    assert any(f.rule_id == "AAK-HOOK-RCE-001" for f in findings) is fires
 
 
 # ---------------------------------------------------------------------------
@@ -131,10 +295,133 @@ def test_langchain_vulnerable_requirements_fires(tmp_path: Path) -> None:
     assert "AAK-LANGCHAIN-003" in ids
 
 
+def test_langchain_core_pin_after_blank_lines_names_its_line(tmp_path: Path) -> None:
+    """The match opened at the first blank line above the pin, so its text held a
+    newline and `find_line_number` found no line for the finding."""
+    (tmp_path / "requirements.txt").write_text("flask\n\n\nlangchain-core==0.3.0\n", encoding="utf-8")
+    findings, _ = langchain_vuln.scan(tmp_path)
+    assert {f.line_number for f in findings if f.rule_id in ("AAK-LANGCHAIN-001", "AAK-LANGCHAIN-003")} == {4}
+
+
+@pytest.mark.parametrize("requirements", ["\n" * 1_999_000 + "x", "langchain-core" + " " * 1_999_000 + "x"])
+def test_langchain_core_pin_reads_a_crafted_requirements_file_in_linear_time(tmp_path: Path, requirements: str) -> None:
+    """`^\\s*` read across a run of blank lines from every line start in it, and
+    three `\\s*` around the optional extras and operator split a blank run every
+    way, so the second shape grew with the cube of the run. The bound is loose
+    for slow CI runners."""
+    import time
+
+    (tmp_path / "requirements.txt").write_text(requirements, encoding="utf-8")
+    started = time.perf_counter()
+    langchain_vuln.scan(tmp_path)
+    assert time.perf_counter() - started < 5.0
+
+
 def test_langchain_safe_requirements_is_quiet(tmp_path: Path) -> None:
     shutil.copy(FIX / "langchain" / "safe_requirements.txt", tmp_path / "requirements.txt")
     findings, _ = langchain_vuln.scan(tmp_path)
     assert findings == []
+
+
+# AAK-LANGCHAIN-001 and -003 read Python manifests only, and only the
+# `langchain-core` distribution both advisories name. They used to compare any npm
+# dependency containing "langchain" against these Python floors, so
+# `@langchain/redis` 1.1.1, a fixed release, got a HIGH no upgrade cleared (#924).
+_LANGCHAIN_CORE_PINS = {"AAK-LANGCHAIN-001", "AAK-LANGCHAIN-003"}
+_REDIS = FIX / "cve-2026-105799-langchain-redis"
+
+
+@pytest.mark.parametrize("kind", ["vulnerable", "negative"])
+def test_langchain_core_pins_ignore_npm_langchain_redis(kind: str) -> None:
+    """`@langchain/redis` at 1.1.0 and at the fixed 1.1.1: the core pins stay quiet."""
+    ids = {f.rule_id for f in run_scan(_REDIS / kind).findings}
+    assert not _LANGCHAIN_CORE_PINS & ids
+
+
+def test_langchain_redis_pin_still_fires_on_1_1_0() -> None:
+    ids = {f.rule_id for f in run_scan(_REDIS / "vulnerable").findings}
+    assert "AAK-MCP-LANGCHAIN-REDIS-CVE-2026-105799-001" in ids
+
+
+def test_langchain_python_fixture_reports_only_the_core_line(tmp_path: Path) -> None:
+    """The positive fixture pins langchain, langchain-core and langchain-community;
+    only langchain-core is the distribution the floors are for."""
+    shutil.copy(FIX / "langchain" / "vulnerable_requirements.txt", tmp_path / "requirements.txt")
+    findings = [f for f in langchain_vuln.scan(tmp_path)[0] if f.rule_id in _LANGCHAIN_CORE_PINS]
+    assert sorted(f.rule_id for f in findings) == ["AAK-LANGCHAIN-001", "AAK-LANGCHAIN-003"]
+    assert all(f.evidence.startswith("langchain-core referenced as 'langchain-core==0.3.10'") for f in findings)
+
+
+@pytest.mark.parametrize(("line", "expected"), [
+    ("langchain-core==0.3.10\n", {"AAK-LANGCHAIN-001", "AAK-LANGCHAIN-003"}),
+    ("langchain_core==1.2.21\n", {"AAK-LANGCHAIN-001"}),    # a PEP 503 spelling
+    ("LangChain-Core>=1.0.0\n", {"AAK-LANGCHAIN-001"}),     # the lowest a range allows
+    ("langchain-core[all]==0.3.13\n", {"AAK-LANGCHAIN-001", "AAK-LANGCHAIN-003"}),
+    # A range is judged by what it admits, wherever its bounds are written. The
+    # first number used to be read as the version, so `<1.2.22` read as the fix.
+    ("langchain-core<1.2.22\n", {"AAK-LANGCHAIN-001", "AAK-LANGCHAIN-003"}),
+    ("langchain-core<2.0.0,>=1.0.0\n", {"AAK-LANGCHAIN-001"}),
+    ("langchain-core>=1.0.0,<2.0.0\n", {"AAK-LANGCHAIN-001"}),
+    ("langchain-core>0.3.13\n", {"AAK-LANGCHAIN-001"}),   # read as 0.3.13, below -003's floor
+    ("langchain-core>=1.2.22,<2\n", set()),
+    ("langchain-core>=1.0\nlangchain-core==1.2.22\n", set()),  # one install, intersected
+    ("langchain-core\n", set()),                  # no version stated
+    ("langchain-core==1.2.22\n", set()),
+    ("langchain==1.1.5\n", set()),              # the umbrella, on its own version line
+    ("langchain-community==0.1.0\n", set()),
+    ("langchain-core-extras==0.1.0\n", set()),  # a longer name is not langchain-core
+])
+def test_langchain_core_pins_read_the_exact_distribution(
+    tmp_path: Path, line: str, expected: set[str]
+) -> None:
+    (tmp_path / "requirements.txt").write_text(line, encoding="utf-8")
+    ids = {f.rule_id for f in langchain_vuln.scan(tmp_path)[0]}
+    assert ids & _LANGCHAIN_CORE_PINS == expected
+
+
+_LANGCHAIN_PYPROJECTS = {
+    "PEP 621": '[project]\nname = "app"\ndependencies = [\n  "fastapi",\n  "langchain-core<1.2.22",\n]\n',
+    "extra": '[project]\nname = "app"\n\n[project.optional-dependencies]\nai = ["langchain-core[all]==1.2.21"]\n',
+    "Poetry": '[tool.poetry.dependencies]\npython = "^3.10"\nlangchain-core = "^1.2.0"\n',
+}
+
+
+@pytest.mark.parametrize("kind", sorted(_LANGCHAIN_PYPROJECTS))
+def test_langchain_core_pin_reads_pyproject(tmp_path: Path, kind: str) -> None:
+    """pyproject.toml was listed and never matched: the pattern was anchored at the
+    start of a requirement line, and a TOML string starts with a quote."""
+    (tmp_path / "pyproject.toml").write_text(_LANGCHAIN_PYPROJECTS[kind], encoding="utf-8")
+    findings = [f for f in langchain_vuln.scan(tmp_path)[0] if f.rule_id == "AAK-LANGCHAIN-001"]
+    assert [(f.file_path, f.line_number) for f in findings] == [
+        ("pyproject.toml", {"PEP 621": 5, "extra": 5, "Poetry": 3}[kind])]
+
+
+def test_langchain_core_pin_reads_every_pyproject(tmp_path: Path) -> None:
+    (tmp_path / "services" / "api").mkdir(parents=True)
+    (tmp_path / "services" / "api" / "pyproject.toml").write_text(
+        '[project]\nname = "api"\ndependencies = ["langchain-core==1.2.21"]\n', encoding="utf-8")
+    (tmp_path / "node_modules" / "x").mkdir(parents=True)
+    (tmp_path / "node_modules" / "x" / "pyproject.toml").write_text(
+        '[project]\nname = "x"\ndependencies = ["langchain-core==1.2.21"]\n', encoding="utf-8")
+    findings = [f for f in langchain_vuln.scan(tmp_path)[0] if f.rule_id == "AAK-LANGCHAIN-001"]
+    assert [f.file_path for f in findings] == [str(Path("services/api/pyproject.toml"))]
+
+
+def test_langchain_core_pyproject_description_is_not_a_pin(tmp_path: Path) -> None:
+    (tmp_path / "pyproject.toml").write_text(
+        '[project]\nname = "app"\ndescription = "works with langchain-core 1.0 and up"\n'
+        'dependencies = ["langchain-core>=1.2.22"]\n', encoding="utf-8")
+    assert langchain_vuln.scan(tmp_path)[0] == []
+
+
+@pytest.mark.parametrize("deps", [
+    '{"langchain": "0.2.0"}',
+    '{"@langchain/core": "0.3.10"}',
+    '{"langchainjs": "0.2.0"}',
+])
+def test_langchain_core_pins_never_read_package_json(tmp_path: Path, deps: str) -> None:
+    (tmp_path / "package.json").write_text('{"dependencies": %s}' % deps, encoding="utf-8")
+    assert langchain_vuln.scan(tmp_path)[0] == []
 
 
 # ---------------------------------------------------------------------------

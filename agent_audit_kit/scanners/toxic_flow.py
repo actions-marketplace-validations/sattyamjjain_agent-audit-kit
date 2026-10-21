@@ -1,11 +1,13 @@
 """AAK-TOXICFLOW-001 — toxic-flow source/sink pair scoring.
 
-Snyk Agent Scan parity. Discover every tool the agent project exposes
-(MCP servers in `.mcp.json` + skills in `.claude/skills/` + first-party
-tools the codebase imports) and emit a HIGH finding for every
+Snyk Agent Scan parity. Discover the tools the agent project exposes
+(MCP server names and args in `.mcp.json` and the other MCP config
+files, VS Code's `servers` object included, + `@tool`-decorated Python
+functions in the repo) and emit a HIGH finding for every
 (sensitive_source, external_sink) pair listed in
 `agent_audit_kit/data/toxic_flow_pairs.yml` — unless the pair appears
-in `.aak-toxic-flow-trust.yml` with a non-empty justification.
+in `.aak-toxic-flow-trust.yml` with a non-empty justification. Skills
+are not read; the rule's limitation text lists what else is not.
 
 Off by default: requires `AAK_TOXIC_FLOW=1` in the environment to fire.
 That was introduced as a v0.3.5 temporary measure and is still the
@@ -28,7 +30,16 @@ import yaml
 
 from agent_audit_kit.models import Finding
 
-from ._helpers import SKIP_DIRS, make_finding
+from ._helpers import (
+    CONFIG_MAX_BYTES,
+    SOURCE_MAX_BYTES,
+    in_skip_dir,
+    iter_mcp_servers,
+    load_yaml,
+    loads_jsonc,
+    make_finding,
+    read_text_capped,
+)
 
 
 _DATA_DIR = Path(__file__).resolve().parent.parent / "data"
@@ -39,7 +50,7 @@ def _load_pairs() -> dict:
     if not _PAIRS_PATH.is_file():
         return {"sources": {}, "sinks": {}, "pairs": []}
     try:
-        return yaml.safe_load(_PAIRS_PATH.read_text(encoding="utf-8")) or {}
+        return load_yaml(_PAIRS_PATH.read_text(encoding="utf-8"), _PAIRS_PATH) or {}
     except yaml.YAMLError:
         return {"sources": {}, "sinks": {}, "pairs": []}
 
@@ -53,8 +64,10 @@ def _load_trust(project_root: Path) -> set[tuple[str, str]]:
     if not trust_path.is_file():
         return set()
     try:
-        data = yaml.safe_load(trust_path.read_text(encoding="utf-8")) or {}
-    except yaml.YAMLError:
+        data = load_yaml(read_text_capped(trust_path, CONFIG_MAX_BYTES, errors="replace"), trust_path) or {}
+    except (yaml.YAMLError, OSError):
+        return set()
+    if not isinstance(data, dict):
         return set()
     out: set[tuple[str, str]] = set()
     for entry in data.get("trust", []) or []:
@@ -69,59 +82,94 @@ def _load_trust(project_root: Path) -> set[tuple[str, str]]:
     return out
 
 
-def _discover_mcp_tools(project_root: Path) -> set[str]:
-    """Collect tool/server identifiers from MCP config files."""
-    tools: set[str] = set()
-    for cfg in (
-        ".mcp.json",
-        ".cursor/mcp.json",
-        ".vscode/mcp.json",
-        ".amazonq/mcp.json",
-        "mcp.json",
-    ):
+_MCP_CONFIG_FILES: tuple[str, ...] = (
+    ".mcp.json",
+    ".cursor/mcp.json",
+    ".vscode/mcp.json",
+    ".amazonq/mcp.json",
+    "mcp.json",
+)
+
+
+def _mcp_tool_origins(project_root: Path) -> tuple[dict[str, str], set[str]]:
+    """Tool/server identifiers from MCP config files, each with the file it came from.
+
+    Returns ``(origins, parsed)``: ``origins`` maps an identifier to the first
+    config that declared it, and ``parsed`` is every config file read. The
+    origin is what a finding is reported against. It used to be `.mcp.json`
+    whatever the pair's source, which once `servers` was read would have named
+    a file a VS Code-only project does not have.
+    """
+    origins: dict[str, str] = {}
+    parsed: set[str] = set()
+    for cfg in _MCP_CONFIG_FILES:
         p = project_root / cfg
         if not p.is_file():
             continue
         try:
-            data = json.loads(p.read_text(encoding="utf-8", errors="replace"))
+            data = loads_jsonc(read_text_capped(p, CONFIG_MAX_BYTES, errors="replace"), p)
         except (json.JSONDecodeError, OSError):
             continue
-        servers = data.get("mcpServers") if isinstance(data, dict) else None
-        if not isinstance(servers, dict):
-            continue
-        for name, cfg_data in servers.items():
-            tools.add(name)
-            if isinstance(cfg_data, dict):
-                args = cfg_data.get("args")
-                if isinstance(args, list):
-                    for arg in args:
-                        if isinstance(arg, str):
-                            tools.add(arg)
-    return tools
+        parsed.add(cfg)
+        # VS Code's `servers` map counts too: `.vscode/mcp.json` was on the
+        # list while only `mcpServers` was read, so a VS Code project exposed
+        # no MCP tools here. An entry that is not an object declares no
+        # server, so its name is not taken as a tool identifier.
+        for name, cfg_data in iter_mcp_servers(data):
+            origins.setdefault(name, cfg)
+            args = cfg_data.get("args")
+            if isinstance(args, list):
+                for arg in args:
+                    if isinstance(arg, str):
+                        origins.setdefault(arg, cfg)
+    return origins, parsed
 
 
+def _discover_mcp_tools(project_root: Path) -> set[str]:
+    """Collect tool/server identifiers from MCP config files."""
+    return set(_mcp_tool_origins(project_root)[0])
+
+
+# `\s*(?:\(\s*)?`, not `\s*\(?\s*`: with no `(`, the two `\s*` split a run of
+# blanks every way, so a long line of them took the square of its length.
+# The second arm is the bare decorator, `@tool` with nothing after it but
+# blanks or a comment, which is the form LangChain documents. The first arm
+# alone never saw it: it wants `)` or a newline after the name, and the lines
+# come from `splitlines()`, which drops the newline. The `$` arm cannot follow
+# a `(`, so a call whose arguments sit on the next lines (`@tool(`) stays out.
+# A decorator starts its line: unanchored, the `$` arm read a comment that ends
+# in `@tool` ("the public ones are wrapped with @tool") as one, and made the
+# undecorated `def` below it a tool.
 _TOOL_DECORATOR_RE = re.compile(
     r"""
-    @(?:mcp\s*\.\s*tool|server\s*\.\s*tool|tool|langchain\s*\.\s*tools\s*\.\s*tool)
-    \s*\(?\s*[\)\n]
+    ^\s*@(?:mcp\s*\.\s*tool|server\s*\.\s*tool|tool|langchain\s*\.\s*tools\s*\.\s*tool)
+    (?:\s*(?:\(\s*)?[\)\n]|\s*(?:\#[^\n]*)?$)
     """,
     re.VERBOSE,
 )
 _DEF_NAME_RE = re.compile(r"def\s+([A-Za-z_][A-Za-z_0-9]*)\s*\(")
 
 
-def _discover_repo_tools(project_root: Path) -> set[str]:
-    """Names of @tool / @mcp.tool decorated functions in the repo."""
-    tools: set[str] = set()
-    for path in project_root.rglob("*.py"):
-        if any(part in SKIP_DIRS for part in path.parts):
+def _repo_tool_origins(project_root: Path) -> dict[str, tuple[str, int]]:
+    """Names of @tool / @mcp.tool decorated functions in the repo, with where each is.
+
+    Maps a name to the file (relative to ``project_root``) and the line of the
+    first ``def`` that declared it, in path order, so a pair made only of
+    these functions is reported where its first tool is written instead of
+    against a `.mcp.json` the project may not have. The walk is sorted: in
+    directory order a name declared in two files could point at either.
+    """
+    origins: dict[str, tuple[str, int]] = {}
+    for path in sorted(project_root.rglob("*.py")):
+        if in_skip_dir(path, project_root):
             continue
         try:
-            text = path.read_text(encoding="utf-8", errors="replace")
+            text = read_text_capped(path, SOURCE_MAX_BYTES, errors="replace")
         except OSError:
             continue
         if "@tool" not in text and "@mcp.tool" not in text and "@server.tool" not in text:
             continue
+        rel = str(path.relative_to(project_root))
         # Cheap pass: pair @-decorator with the immediately following def.
         lines = text.splitlines()
         for i, line in enumerate(lines):
@@ -132,9 +180,14 @@ def _discover_repo_tools(project_root: Path) -> set[str]:
                         break
                     m = _DEF_NAME_RE.search(lines[i + off])
                     if m:
-                        tools.add(m.group(1))
+                        origins.setdefault(m.group(1), (rel, i + off + 1))
                         break
-    return tools
+    return origins
+
+
+def _discover_repo_tools(project_root: Path) -> set[str]:
+    """Names of @tool / @mcp.tool decorated functions in the repo."""
+    return set(_repo_tool_origins(project_root))
 
 
 def _classify(tool_id: str, family_map: dict[str, list[str]]) -> set[str]:
@@ -164,8 +217,11 @@ def scan(project_root: Path) -> tuple[list[Finding], set[str]]:
     pair_rules: list[dict] = pairs_cfg.get("pairs") or []
     trust = _load_trust(project_root)
 
-    scanned: set[str] = set()
-    discovered = _discover_mcp_tools(project_root) | _discover_repo_tools(project_root)
+    origins, scanned = _mcp_tool_origins(project_root)
+    repo_origins = _repo_tool_origins(project_root)
+    # A file that declared a tool was read for the graph, like a config.
+    scanned |= {rel for rel, _ in repo_origins.values()}
+    discovered = set(origins) | set(repo_origins)
     if not discovered:
         return [], scanned
 
@@ -201,16 +257,28 @@ def scan(project_root: Path) -> tuple[list[Finding], set[str]]:
             "these tools — add an entry to `.aak-toxic-flow-trust.yml` "
             "with a justification, or remove one side of the pair."
         )
+        # The config that declared the pair's first MCP tool, sources first.
+        # A pair made only of `@tool` functions in the repo has no config: it
+        # is reported at the `def` of its first tool, which used to be the
+        # `.mcp.json` placeholder whether or not the project had one. Every
+        # discovered tool has one origin or the other.
+        pair = (*source_tools, *sink_tools)
+        report_path = next((origins[t] for t in pair if t in origins), None)
+        line: int | None = None
+        if report_path is None:
+            report_path, line = repo_origins[pair[0]]
         findings.append(make_finding(
             "AAK-TOXICFLOW-001",
-            ".mcp.json",
+            report_path,
             evidence,
+            line,
         ))
-    if findings:
-        scanned.add(".mcp.json")
     return findings, scanned
 
 
 def discovered_tools(project_root: Path) -> Iterable[str]:
-    """Helper for `agent-audit-kit toxic-flow --explain` (future CLI)."""
+    """Every tool identifier the rule pairs, sorted: MCP server names and args, and repo functions.
+
+    No CLI command calls it; the finding's evidence names the tools of each pair.
+    """
     return sorted(_discover_mcp_tools(project_root) | _discover_repo_tools(project_root))

@@ -46,7 +46,9 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
-from typing import Any, Callable, Optional
+from typing import Any, Callable
+
+from agent_audit_kit.scanners._helpers import collecting_refusals, loads_json, refuse
 
 SUPPORTED_FORMATS = ("openai-agents", "langgraph", "jsonl", "aak")
 
@@ -72,8 +74,10 @@ def _as_arguments(raw: Any) -> dict:
         text = raw.strip()
         if text.startswith("{"):
             try:
-                parsed = json.loads(text)
-            except ValueError:
+                parsed = loads_json(text, None)
+            except (ValueError, RecursionError, MemoryError):
+                # Not JSON, or nested past `JSON_MAX_NESTING`: kept as the
+                # string it is, as an argument that does not parse was.
                 return {"arg": raw}
             if isinstance(parsed, dict):
                 return parsed
@@ -84,7 +88,7 @@ def _as_arguments(raw: Any) -> dict:
     return {"arg": str(raw)}
 
 
-def _call(tool: Any, arguments: Any) -> Optional[dict]:
+def _call(tool: Any, arguments: Any) -> dict | None:
     if not isinstance(tool, str) or not tool:
         return None
     return {"tool": tool, "arguments": _as_arguments(arguments)}
@@ -106,7 +110,7 @@ def _sorted_by(items: list[dict], key: str) -> list[dict]:
 # openai-agents
 # --------------------------------------------------------------------------
 
-def _openai_spans(raw: Any) -> Optional[list[dict]]:
+def _openai_spans(raw: Any) -> list[dict] | None:
     if isinstance(raw, dict):
         for key in ("spans", "data", "items"):
             value = raw.get(key)
@@ -118,7 +122,7 @@ def _openai_spans(raw: Any) -> Optional[list[dict]]:
     return None
 
 
-def from_openai_agents(raw: Any) -> Optional[list[dict]]:
+def from_openai_agents(raw: Any) -> list[dict] | None:
     """OpenAI Agents SDK run trace → canonical calls."""
     spans = _openai_spans(raw)
     if spans is None:
@@ -145,17 +149,17 @@ def from_openai_agents(raw: Any) -> Optional[list[dict]]:
 # langgraph
 # --------------------------------------------------------------------------
 
-def _langgraph_messages(raw: Any) -> Optional[list[dict]]:
-    if not isinstance(raw, dict):
-        return None
-    for container in ("channel_values", "values", "state"):
-        holder = raw.get(container)
-        if isinstance(holder, dict) and isinstance(holder.get("messages"), list):
-            return [m for m in holder["messages"] if isinstance(m, dict)]
-    # A bare checkpoint sometimes nests one level deeper under "checkpoint".
-    checkpoint = raw.get("checkpoint")
-    if isinstance(checkpoint, dict):
-        return _langgraph_messages(checkpoint)
+def _langgraph_messages(raw: Any) -> list[dict] | None:
+    # A bare checkpoint sometimes nests one level deeper under "checkpoint",
+    # and a crafted one any number of levels. They are followed in a loop: one
+    # frame a level took a transcript nested past the recursion limit, which
+    # JSON's parser reads on Python 3.12 and later, down with the whole scan.
+    while isinstance(raw, dict):
+        for container in ("channel_values", "values", "state"):
+            holder = raw.get(container)
+            if isinstance(holder, dict) and isinstance(holder.get("messages"), list):
+                return [m for m in holder["messages"] if isinstance(m, dict)]
+        raw = raw.get("checkpoint")
     return None
 
 
@@ -190,7 +194,7 @@ def _message_tool_calls(message: dict) -> list[dict]:
     return out
 
 
-def from_langgraph(raw: Any) -> Optional[list[dict]]:
+def from_langgraph(raw: Any) -> list[dict] | None:
     """LangGraph checkpoint / thread state → canonical calls."""
     messages = _langgraph_messages(raw)
     if messages is None:
@@ -205,8 +209,13 @@ def from_langgraph(raw: Any) -> Optional[list[dict]]:
 # jsonl
 # --------------------------------------------------------------------------
 
-def from_jsonl(text: str) -> Optional[list[dict]]:
-    """Raw JSONL of ``{tool, args, ts}`` → canonical calls."""
+def from_jsonl(text: str, path: Path | None = None) -> list[dict] | None:
+    """Raw JSONL of ``{tool, args, ts}`` → canonical calls.
+
+    A line nested past `JSON_MAX_NESTING` is skipped, as an unparseable one
+    is, and refused against ``path`` when there is one, so a scan reports
+    the transcript it did not read in full.
+    """
     rows: list[dict] = []
     saw_json_object = False
     for line in text.splitlines():
@@ -214,8 +223,8 @@ def from_jsonl(text: str) -> Optional[list[dict]]:
         if not line:
             continue
         try:
-            parsed = json.loads(line)
-        except ValueError:
+            parsed = loads_json(line, path)
+        except (ValueError, RecursionError, MemoryError):
             continue
         if not isinstance(parsed, dict):
             continue
@@ -241,7 +250,7 @@ def from_jsonl(text: str) -> Optional[list[dict]]:
 # aak canonical
 # --------------------------------------------------------------------------
 
-def from_aak(raw: Any) -> Optional[list[dict]]:
+def from_aak(raw: Any) -> list[dict] | None:
     """AAK's own ``{"calls": [...]}`` (or a bare list) → canonical calls."""
     if isinstance(raw, dict) and isinstance(raw.get("calls"), list):
         seq = raw["calls"]
@@ -265,14 +274,14 @@ def from_aak(raw: Any) -> Optional[list[dict]]:
 
 # Order matters: the framework formats are checked before the permissive
 # canonical reader, which would otherwise swallow a bare list of spans.
-_JSON_ADAPTERS: tuple[tuple[str, Callable[[Any], Optional[list[dict]]]], ...] = (
+_JSON_ADAPTERS: tuple[tuple[str, Callable[[Any], list[dict] | None]], ...] = (
     ("openai-agents", from_openai_agents),
     ("langgraph", from_langgraph),
     ("aak", from_aak),
 )
 
 
-def normalize(raw: Any) -> Optional[tuple[str, list[dict]]]:
+def normalize(raw: Any) -> tuple[str, list[dict]] | None:
     """Normalise already-parsed JSON. Returns ``(format_name, calls)``."""
     for name, adapter in _JSON_ADAPTERS:
         try:
@@ -284,13 +293,13 @@ def normalize(raw: Any) -> Optional[tuple[str, list[dict]]]:
     return None
 
 
-def detect_format(path: Path) -> Optional[str]:
+def detect_format(path: Path) -> str | None:
     """The format name AAK would read ``path`` as, or ``None``."""
     result = normalize_path(path)
     return result[0] if result else None
 
 
-def normalize_path(path: Path) -> Optional[tuple[str, list[dict]]]:
+def normalize_path(path: Path) -> tuple[str, list[dict]] | None:
     """Read one transcript file. Returns ``(format_name, calls)`` or ``None``."""
     try:
         if path.stat().st_size > _MAX_FILE_BYTES:
@@ -302,15 +311,18 @@ def normalize_path(path: Path) -> Optional[tuple[str, list[dict]]]:
     suffix = path.suffix.lower()
 
     if suffix in _JSONL_SUFFIXES:
-        calls = from_jsonl(text)
+        calls = from_jsonl(text, path)
         return ("jsonl", calls) if calls else None
 
     if suffix in _JSON_SUFFIXES:
         try:
-            raw = json.loads(text)
+            # Refused against the transcript when nested past what JSON's
+            # parser reads; RecursionError is no ValueError, and it stopped the
+            # whole scan.
+            raw = loads_json(text, path)
         except ValueError:
             # A .json file holding JSON-lines is common enough to be worth trying.
-            calls = from_jsonl(text)
+            calls = from_jsonl(text, path)
             return ("jsonl", calls) if calls else None
         return normalize(raw)
 
@@ -347,7 +359,7 @@ def load_transcripts(target: Path) -> list[tuple[Path, str, list[dict]]]:
 # scan integration
 # --------------------------------------------------------------------------
 
-def scan_sessions(target: Path, config_root: Optional[Path] = None) -> list[Any]:
+def scan_sessions(target: Path, config_root: Path | None = None) -> list[Any]:
     """Run the session-scoped rules over normalised transcripts at ``target``.
 
     The rules discover transcripts by walking a project root, so normalised
@@ -385,14 +397,25 @@ def scan_sessions(target: Path, config_root: Optional[Path] = None) -> list[Any]
 
         # staged relative path -> the transcript the user actually passed
         origin: dict[str, str] = {}
+        sources: dict[str, Path] = {}
         for index, (path, _fmt, calls) in enumerate(transcripts):
             staged = sessions_dir / f"{index:04d}-{path.name}.json"
             if staged.suffix != ".json":
                 staged = staged.with_suffix(".json")
-            staged.write_text(json.dumps({"calls": calls}), encoding="utf-8")
+            try:
+                staged_text = json.dumps({"calls": calls})
+            except (RecursionError, MemoryError):
+                refuse(path, "a call's arguments nested too deep to read (RecursionError)")
+                continue
+            staged.write_text(staged_text, encoding="utf-8")
             origin[staged.relative_to(staging).as_posix()] = _display_path(path, target)
+            sources[str(staged)] = path
 
-        findings, _evaluated = session_splice.scan(staging)
+        # A staged copy the rule refuses is refused against its transcript.
+        with collecting_refusals() as staged_refused:
+            findings, _evaluated = session_splice.scan(staging)
+        for staged_path, reason in staged_refused.items():
+            refuse(sources.get(staged_path, staged_path), reason)
 
         for finding in findings:
             real = origin.get(finding.file_path)

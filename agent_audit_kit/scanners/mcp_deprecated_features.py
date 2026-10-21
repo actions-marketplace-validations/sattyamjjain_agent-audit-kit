@@ -29,7 +29,7 @@ import re
 from pathlib import Path
 
 from agent_audit_kit.models import Finding
-from agent_audit_kit.scanners._helpers import find_line_number, make_finding, SKIP_DIRS
+from agent_audit_kit.scanners._helpers import find_line_number, in_skip_dir, loads_json, loads_jsonc, make_finding
 
 _CAP_TO_RULE = {
     "roots": "AAK-MCP-DEPRECATED-001",
@@ -38,12 +38,15 @@ _CAP_TO_RULE = {
 }
 
 _LANG_EXTS = {".py", ".ts", ".tsx", ".js", ".jsx", ".mjs", ".cjs", ".rs", ".java", ".kt"}
-_CONFIG_NAMES = {
+# A tuple, not a set: the files are read in this order, and a set of strings
+# iterates in an order that changes with each process's hash seed, so two runs
+# of `aak scan` listed the same findings in different orders.
+_CONFIG_NAMES = (
     ".mcp.json", "mcp.json", "claude_desktop_config.json",
     ".cursor/mcp.json", ".vscode/mcp.json", ".windsurf/mcp.json",
     ".amazonq/mcp.json", ".roo/mcp.json", ".kiro/mcp.json",
     "package.json", "pyproject.toml",
-}
+)
 _CONFIG_GLOBS = ("*.mcp.json", "*.mcp.yaml", "*.mcp.yml")
 _MAX_FILE_BYTES = 1_000_000
 
@@ -71,20 +74,26 @@ _STRONG = {
     ),
 }
 
-# Softer markers — require an MCP hint in the same file.
+# Softer markers — require an MCP hint in the same file. The block after
+# `capabilities: {` or `ServerCapabilities(` stops at the next such opener as
+# well as at its closer: with `[^}]*` alone, a file of openers and no closer read
+# to the end once per opener. An opener inside another's block reads the rest
+# itself, so a file matches exactly when it did; the match then starts there.
+_CAPS_BLOCK = r"capabilities\s*[:=]\s*\{(?:(?!capabilities\s*[:=]\s*\{)[^}])*"
+_CAPS_CALL = r"ServerCapabilities\s*\((?:(?!ServerCapabilities\s*\()[^)])*"
 _WEAK = {
     "AAK-MCP-DEPRECATED-001": re.compile(
-        r"\blist_roots\s*\(|\blistRoots\s*\(|capabilities\s*[:=]\s*\{[^}]*\broots\b"
-        r"|ServerCapabilities\s*\([^)]*\broots\s*="
+        r"\blist_roots\s*\(|\blistRoots\s*\(|" + _CAPS_BLOCK + r"\broots\b"
+        r"|" + _CAPS_CALL + r"\broots\s*="
     ),
     "AAK-MCP-DEPRECATED-002": re.compile(
         r"\bcreate_message\s*\(|\.sampling\.create\s*\("
-        r"|capabilities\s*[:=]\s*\{[^}]*\bsampling\b"
-        r"|ServerCapabilities\s*\([^)]*\bsampling\s*="
+        r"|" + _CAPS_BLOCK + r"\bsampling\b"
+        r"|" + _CAPS_CALL + r"\bsampling\s*="
     ),
     "AAK-MCP-DEPRECATED-003": re.compile(
-        r"capabilities\s*[:=]\s*\{[^}]*\blogging\b"
-        r"|ServerCapabilities\s*\([^)]*\blogging\s*="
+        _CAPS_BLOCK + r"\blogging\b"
+        r"|" + _CAPS_CALL + r"\blogging\s*="
     ),
 }
 
@@ -101,25 +110,35 @@ def _line_of(text: str, start: int) -> int:
 
 def _walk_capabilities(obj: object, found: set[str]) -> None:
     """Collect deprecated capability keys declared under any `capabilities`
-    object anywhere in a parsed JSON structure (handles dict or list form)."""
-    if isinstance(obj, dict):
-        for key, value in obj.items():
-            if key == "capabilities":
-                if isinstance(value, dict):
-                    found.update(c for c in value if c in _CAP_TO_RULE)
-                elif isinstance(value, list):
-                    found.update(c for c in value if isinstance(c, str) and c in _CAP_TO_RULE)
-            _walk_capabilities(value, found)
-    elif isinstance(obj, list):
-        for item in obj:
-            _walk_capabilities(item, found)
+    object anywhere in a parsed JSON structure (handles dict or list form).
+    Iterative: `json.loads` accepts nesting deeper than Python's recursion
+    limit, and the recursive walk this was took the scanner down on one such
+    file."""
+    stack: list[object] = [obj]
+    while stack:
+        node = stack.pop()
+        if isinstance(node, dict):
+            for key, value in node.items():
+                if key == "capabilities":
+                    if isinstance(value, dict):
+                        found.update(c for c in value if c in _CAP_TO_RULE)
+                    elif isinstance(value, list):
+                        found.update(c for c in value if isinstance(c, str) and c in _CAP_TO_RULE)
+                stack.append(value)
+        elif isinstance(node, list):
+            stack.extend(node)
 
 
-def _json_capability_hits(text: str) -> set[str]:
+def _json_capability_hits(text: str, jsonc: bool = False, path: Path | None = None) -> set[str]:
     """Rule IDs for deprecated capabilities declared in a JSON `capabilities`
-    block (precise; multi-key safe). Empty when the file is not JSON."""
+    block (precise; multi-key safe). Empty when the file is not JSON.
+
+    With `jsonc`, an MCP config is read as VS Code reads `.vscode/mcp.json`, so
+    a comment or a trailing comma no longer hides its `capabilities` block.
+    Source files and `package.json` stay strict JSON.
+    """
     try:
-        data = json.loads(text)
+        data = loads_jsonc(text, path) if jsonc else loads_json(text, path)
     except (json.JSONDecodeError, ValueError):
         return set()
     found: set[str] = set()
@@ -127,7 +146,7 @@ def _json_capability_hits(text: str) -> set[str]:
     return {_CAP_TO_RULE[c] for c in found}
 
 
-def _check_text(text: str, has_hint: bool) -> dict[str, int]:
+def _check_text(text: str, has_hint: bool, jsonc: bool = False, path: Path | None = None) -> dict[str, int]:
     """Return {rule_id: line} for each deprecated feature matched in text.
 
     Merges regex markers (source-side) with a JSON `capabilities` walk
@@ -141,7 +160,7 @@ def _check_text(text: str, has_hint: bool) -> dict[str, int]:
         if m is not None:
             out[rule_id] = _line_of(text, m.start())
 
-    for rule_id in _json_capability_hits(text):
+    for rule_id in sorted(_json_capability_hits(text, jsonc, path)):
         if rule_id not in out:
             cap = next(c for c, r in _CAP_TO_RULE.items() if r == rule_id)
             out[rule_id] = find_line_number(text, f'"{cap}"') or 1
@@ -158,12 +177,12 @@ def _candidate_files(project_root: Path) -> list[Path]:
             seen.add(p)
     for pattern in _CONFIG_GLOBS:
         for p in project_root.rglob(pattern):
-            if p.is_file() and p not in seen and not any(part in SKIP_DIRS for part in p.parts):
+            if p.is_file() and p not in seen and not in_skip_dir(p, project_root):
                 out.append(p)
                 seen.add(p)
     for p in project_root.rglob("*"):
         if p.suffix in _LANG_EXTS and p.is_file() and p not in seen:
-            if any(part in SKIP_DIRS for part in p.parts):
+            if in_skip_dir(p, project_root):
                 continue
             out.append(p)
             seen.add(p)
@@ -192,7 +211,8 @@ def scan(project_root: Path) -> tuple[list[Finding], set[str]]:
         rel = str(path.relative_to(project_root))
         scanned.add(rel)
         has_hint = bool(_MCP_HINT.search(text))
-        for rule_id, line in _check_text(text, has_hint).items():
+        jsonc = path.suffix == ".json" and path.name != "package.json"
+        for rule_id, line in _check_text(text, has_hint, jsonc, path).items():
             findings.append(make_finding(rule_id, rel, _EVIDENCE[rule_id], line))
 
     return findings, scanned

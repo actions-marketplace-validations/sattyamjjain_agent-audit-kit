@@ -13,14 +13,14 @@ agent-audit-kit scan .
 
 ## Features
 
-- **<!-- rule-count:total -->357<!-- /rule-count --> detection rules** across 14 categories
-- **OWASP Agentic Top 10** complete mapping (ASI01-ASI10)
-- **OWASP MCP Top 10** complete mapping
+- **<!-- rule-count:total -->412<!-- /rule-count --> detection rules** across 14 categories
+- **OWASP Top 10 for Agentic Applications** (Version 2026): rules for every entry, ASI01-ASI10, under OWASP's own ids and titles ([per-entry lists](coverage/owasp-agentic-top10.md))
+- **OWASP MCP Top 10** (v0.1, 2025 edition): at least one rule for every entry, MCP01-MCP10, unevenly spread ([per-entry lists](coverage/owasp-mcp-top10.md))
 - **Adversa AI Top 25** mapping
 - **Compliance frameworks** (14): EU AI Act (Art. 15, 50, 55), SOC 2, ISO 27001, ISO 42001, HIPAA, NIST AI RMF, NSA MCP CSI, + regional (India DPDP, Singapore, Alabama, Tennessee, Colorado SB 26-189 ADMT)
 - **Tool pinning** for rug pull detection
 - **Taint analysis** for @tool function security
-- **Multi-agent discovery** across 10 agent platforms
+- **Multi-agent discovery** across 11 agent platforms
 - **Auto-fix** for common misconfigurations
 - **Security scoring** with A-F grades and SVG badges
 - **SARIF output** for GitHub Code Scanning integration
@@ -32,7 +32,7 @@ agent-audit-kit scan .
 | Command | Description |
 |---------|-------------|
 | `agent-audit-kit scan .` | Scan a project |
-| `agent-audit-kit discover` | Find all AI agent configs |
+| `agent-audit-kit discover .` | Find AI agent configs in a project and your home directory |
 | `agent-audit-kit pin` | Pin tool definitions |
 | `agent-audit-kit verify` | Verify tool pins |
 | `agent-audit-kit fix` | Auto-fix issues |

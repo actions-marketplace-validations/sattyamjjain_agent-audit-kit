@@ -52,7 +52,7 @@ jobs:
         with:
           args: >-
             --no-progress
-            --exclude 'mailto:|agentauditkit\.io|globenewswire\.com|asciinema\.org|linkedin\.com|github\.com/sattyamjjain/agent-audit-kit/(blob|tree)/main|sattyamjjain\.github\.io/agent-audit-kit/docs/'
+            --exclude 'mailto:|agentauditkit\.io|globenewswire\.com|asciinema\.org|linkedin\.com|github\.com/sattyamjjain/agent-audit-kit/(blob|tree)/main|sattyamjjain\.github\.io/agent-audit-kit/docs/|github\.com/snyk/agent-scan/blob/main/docs/(issue-codes|risks)\.md|github\.com/openvex/spec/blob/main/OPENVEX-SPEC\.md|genai\.owasp\.org/resource/owasp-top-10-for-agentic-applications-for-2026/'
             --exclude-path 'docs/changelog/archive'
             --max-retries 3
             --retry-wait-time 5
@@ -71,7 +71,10 @@ jobs:
       # file requests every mkdocs nav entry against the deployed site on a daily
       # cron, which is the right clock for a published page: it asks after the
       # deploy rather than during it. The Pages root and its /data/ files stay in
-      # lychee's scope — only the /docs/ subtree moves to that job.
+      # lychee's scope — only the /docs/ subtree moves to that job. That includes
+      # the per-rule help pages, which the docs build generates from the registry
+      # and so never exist as a file for lychee to read: the same job requests
+      # every rule's page, the target of its SARIF helpUri.
       #
       # globenewswire.com is excluded above because lychee fails its HTTP/2
       # negotiation from the runner ("HTTP/2 protocol error. Server may not
@@ -80,6 +83,10 @@ jobs:
       # normally the wrong call, so this is the narrow trade: one press-release
       # citation stays unchecked rather than the whole job staying red and
       # hiding real breakage. Revisit if lychee gains a per-host HTTP/1.1 flag.
+      #
+      # The snyk/agent-scan and openvex/spec blob pages answered 503 to the runner in runs 252, 253 and 255 (2026-10-02) and 200 elsewhere.
+      #
+      # The OWASP Agentic Top 10 page is excluded because genai.owasp.org started answering every non-browser request, its root included, with a 403 "Checking your browser... Javascript required" challenge after 2026-10-06 (run 37773926053, and from outside CI); the Wayback Machine has the page as of 2026-10-05.
       #
       # The deterministic half of this job — relative links to files in this
       # repo — is also covered by tests/test_docs_links.py, which fails fast and
@@ -109,6 +116,37 @@ jobs:
       #
       # --timeout stays at 30 regardless: it is a reasonable default for the
       # remaining hosts and costs nothing.
+
+  # --------------------------------------------------------------------------
+  # The docs site, built the way it ships, with every MkDocs warning an error.
+  #
+  # A relative link from a docs page to a file outside docs/ (`../README.md`,
+  # `../../scripts/cve_watcher.py`) resolves on GitHub and 404s on the
+  # published site, where only docs/ exists. MkDocs reports it as a warning
+  # and builds anyway, so ten of them sat in the docs with every check green:
+  # lychee reads the markdown, not the site, and tests/test_docs_links.py asks
+  # whether the target file exists, not whether the site serves it. --strict
+  # fails the PR that adds one. Point such a link at the docs page that
+  # publishes the target, or at its blob/main URL on GitHub.
+  #
+  # The install is the one the deploy job in mcp-security-index.yml runs, so
+  # the build checked here is the build that ships.
+  # --------------------------------------------------------------------------
+  docs-build:
+    name: Docs build has no dead link (mkdocs --strict)
+    if: github.event_name != 'schedule' || github.event.schedule == '23 6 * * 1'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97  # v7.0.0
+        with:
+          python-version: '3.11'
+      - name: Install agent-audit-kit + MkDocs
+        run: |
+          pip install -e .
+          pip install mkdocs mkdocs-material
+      - name: Build the docs, failing on any warning
+        run: mkdocs build --strict -d "$RUNNER_TEMP/site"
 
   index-cadence:
     name: MCP Security Index is still publishing
@@ -143,9 +181,16 @@ jobs:
   # check that is red for a legitimate reason gets ignored. It runs on the daily
   # cron instead — a dead entry is caught within a day of opening, not a week —
   # and on demand, which is what to use straight after a deploy.
+  #
+  # It also requests the help page of every rule in rules.json. Those are not nav
+  # entries, but each is the "more info" link GitHub code scanning shows for that
+  # rule (the SARIF helpUri), and the docs only redeploy on certain pushes, so a
+  # rule can exist in the registry before its page exists on the site. This is
+  # the check that would say so (the deploy workflow also redeploys on a change
+  # to agent_audit_kit/ so the window stays short).
   # --------------------------------------------------------------------------
   nav-liveness:
-    name: Every mkdocs nav entry is served
+    name: Every nav entry and rule page is served
     if: >-
       github.event_name == 'workflow_dispatch' ||
       (github.event_name == 'schedule' && github.event.schedule == '31 6 * * *')
