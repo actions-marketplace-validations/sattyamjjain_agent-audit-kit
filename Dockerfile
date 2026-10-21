@@ -1,6 +1,6 @@
 # Pin to specific digest for supply chain security
 # Multi-arch index digest of python:3.11-slim as of 2026-10-20 (`crane digest python:3.11-slim`).
-FROM python:3.11-slim@sha256:e88e9763f943ec1834f992a4b51e0f24500486803e8bc534e5767af9ea65f6ce AS base
+FROM python:3.15-slim@sha256:2da676046630d7bf14c6764ae1143dc7fa0377a53f94bf5a642f0b214aca5bce AS base
 
 LABEL maintainer="AgentAuditKit"
 LABEL org.opencontainers.image.source="https://github.com/sattyamjjain/agent-audit-kit"
