@@ -33,22 +33,31 @@ import pytest
 from agent_audit_kit.scanners import (
     _helpers,
     a2a_protocol,
+    agent_server_noauth,
     agent_config,
     composition,
     gha_hardening,
     hook_rce,
     ide_task_rce,
     india_pii,
+    known_vulns,
+    known_vulns_launch,
     langchain_prompt_loader,
+    malicious_extensions,
+    mcp_codeexec_sandbox,
+    malicious_releases,
     mcp_config,
+    mcp_cve_pins_2026_07,
     mcp_destination_guard,
     mcp_server_card,
     mcp_stdio_launcher,
     mcp_stdio_params,
     oauth_surface,
+    runtime_advisories,
     secret_exposure,
     shared_resource_authz,
     ssrf_toctou,
+    startup_hooks,
     supply_chain,
     tool_poisoning,
     transport_security,
@@ -75,6 +84,30 @@ def _workflow(k: int) -> dict[str, str]:
     )
     return {".github/workflows/ci.yml": "on: [pull_request_target]\njobs:\n  b:\n    runs-on: ubuntu-latest\n"
             "    steps:\n" + steps}
+
+
+def _python_runtime(i: int) -> str:
+    """The i-th distinct spelling runtime_advisories reads as a managed Python runtime."""
+    major, rest = divmod(i, 220)
+    dotted, minor = divmod(rest, 110)
+    minor_text = str(minor) if minor < 10 else f"{minor - 10:02d}"
+    case, major = divmod(major, 10)
+    word = "".join(c.upper() if case >> j & 1 else c for j, c in enumerate("python"))
+    return f"{word}{major}{'.' if dotted else ''}{minor_text}"
+
+
+# The litellm image digest the bundled malicious-release feed lists (LITELLM-2026-10-21).
+_LISTED_DIGEST = "sha256:1bbcb1443bc962e45f5aad53fe3d2c30600e0379715fb6c664cdd3ac126c339e"
+
+
+def _gha_run(run: str) -> dict[str, str]:
+    """A workflow of one step whose `run:` is the YAML scalar `run`, as written."""
+    return {".github/workflows/ci.yml": "on: push\njobs:\n a:\n  runs-on: x\n  steps:\n  - run: " + run + "\n"}
+
+
+def _gha_heredocs(separator: str, k: int) -> dict[str, str]:
+    """k encoders on one line, joined by `separator`, all fed one heredoc of k lines."""
+    return _gha_run("|\n     " + f"base64 <<A{separator}" * k + "cat\n" + "     x\n" * k + "     A")
 
 
 def _npx_servers(k: int) -> dict[str, str]:
@@ -252,6 +285,16 @@ _SHAPES: dict[str, tuple[Callable[[Path], object], Callable[[int], dict[str, str
     "tasks": (ide_task_rce.scan, _tasks, 500, True),
     # Row 3: one per `uses:` step: 10,000 steps took 11 s.
     "workflow-steps": (gha_hardening.scan, _workflow, 1_000, True),
+    # AAK-GHA-SECRET-DUMP-001's reader, before it was released: each stage that reads
+    # the environment searched every later stage for an encoder (12,000 `env|` stages
+    # in one step, 48 KB, took 16 s), a stage's words were re-sliced for each leading
+    # `VAR=value` (80,000 of them 22 s), and a heredoc body was read again for every
+    # stage and every `;` command it fed (40,000 of each, 720 KB, 12 s and 18 s).
+    "secret-dump-env-stages": (gha_hardening.scan, lambda k: _gha_run('"base64|' + "env|" * k + 'cat"'), 1_200,
+                               False),
+    "secret-dump-assignments": (gha_hardening.scan, lambda k: _gha_run('"' + "A=1 " * k + 'base64"'), 8_000, False),
+    "secret-dump-heredoc-stages": (gha_hardening.scan, lambda k: _gha_heredocs("|", k), 4_000, False),
+    "secret-dump-heredoc-commands": (gha_hardening.scan, lambda k: _gha_heredocs(";", k), 4_000, False),
     # Row 4: one per launched package: 4,000 servers took 3.2 s.
     "npx-servers": (supply_chain.scan, _npx_servers, 800, True),
     # Row 5: the UPI pattern read a dotted run from every word boundary: 60 KB took 14 s.
@@ -336,6 +379,126 @@ _SHAPES: dict[str, tuple[Callable[[Path], object], Callable[[int], dict[str, str
     "shared-launcher-source": (mcp_stdio_params.scan, lambda k: _shared_split(lambda i: f"n{i % 10}", 15, k), 100,
                                False),
     "shared-static-source": (mcp_stdio_params.scan, lambda k: _shared_split(lambda i: "'a'", 80, k), 100, False),
+    # startup_hooks, before it was released (the 2026-10-28 review): shlex grew a RUN word
+    # one character at a time (900,000 characters, 5.4 s); leading VAR=value words were
+    # sliced off one at a time (245,000, 71 s); each ENV PYTHONSTARTUP re-read every step
+    # (49,000, 67 s); each Dockerfile listed its directory again for MCP manifests (10,000
+    # in one directory, 43 s); and each PYTHONPATH entry was matched against every COPY
+    # (10,000 x 10,000, 11 s), resolving both sides on a match (1,000 x 1,000, 81 s) and
+    # listing a directory again for each entry naming it (3,000 x 3,000 files, 8.5 s).
+    "startup-long-run-word": (startup_hooks.scan, lambda k: {"Dockerfile": "FROM python:3.12\nRUN " + "a" * k + "\n"},
+                              90_000, False),
+    "startup-run-assignments": (startup_hooks.scan,
+                                lambda k: {"Dockerfile": "FROM python:3.12\nRUN " + "a=1 " * k + "\n"}, 24_000, False),
+    "startup-env-startup": (startup_hooks.scan,
+                            lambda k: {"Dockerfile": "FROM python:3.12\n" + "ENV PYTHONSTARTUP=x\n" * k}, 4_900, False),
+    "startup-many-dockerfiles": (startup_hooks.scan,
+                                 lambda k: {f"Dockerfile.{i}": "ENV PYTHONSTARTUP=x\n" for i in range(k)}, 600, False),
+    "startup-pythonpath-copies": (startup_hooks.scan, lambda k: {
+        "Dockerfile": "FROM python:3.12\nENV PYTHONPATH=" + ":".join(["/a"] * k) + "\n" + "COPY d /b\n" * k},
+        1_000, False),
+    "startup-pythonpath-copy-match": (startup_hooks.scan, lambda k: {
+        "Dockerfile": "FROM python:3.12\nENV PYTHONPATH=" + ":".join(["/app"] * k) + "\n" + "COPY d /app\n" * k,
+        "d/x.txt": "x"}, 100, False),
+    "startup-pythonpath-relist": (startup_hooks.scan, lambda k: {
+        **{f"d/f{i}.txt": "x" for i in range(k)},
+        "Dockerfile": "FROM python:3.12\nENV PYTHONPATH=" + ":".join(["/d"] * k) + "\n"}, 300, False),
+    # malicious_releases, before it was released: each listed image digest looked back to
+    # the start of its line and of the file (4,000 on one line, 292 KB, about 11 s; 27,000
+    # ran past two minutes), and quoted everything before it on the line (1,500 with
+    # nothing between them, 108 KB, 15 s and 82 MB of evidence).
+    "malicious-digests-on-one-line": (malicious_releases.scan, lambda k: {
+        "compose.yaml": "image: " + ("@" + _LISTED_DIGEST + " ") * k + "\n"}, 400, True),
+    "malicious-digests-unseparated": (malicious_releases.scan, lambda k: {
+        "compose.yaml": "image: x" + ("@" + _LISTED_DIGEST) * k + "\n"}, 150, True),
+    # runtime_advisories, before it was released: shlex grew a FROM word one character at a
+    # time (900,000 characters, 5.2 s), and a `.tool-versions` value was reported once per
+    # repetition (140,000, 14 s). Its per-value line searches are timed by
+    # test_serverless_runtime_lines_are_placed_in_one_pass, below.
+    "runtime-long-from-word": (runtime_advisories.scan, lambda k: {"Dockerfile": "FROM " + "a" * k + "\n"},
+                               90_000, False),
+    "runtime-repeated-tool-versions": (runtime_advisories.scan,
+                                       lambda k: {".tool-versions": "nodejs " + "22.0.0 " * k + "\n"}, 14_000, False),
+    # known_vulns, before it was released: rows that keep its cost to one pass over the
+    # file. A lockfile resolving one package at thousands of releases is read for 64 of
+    # them per advisory, and every pinned or ranged declaration is judged once.
+    "known-vulns-lockfile-releases": (known_vulns.scan, lambda k: {"uv.lock": "".join(
+        f'[[package]]\nname = "vllm"\nversion = "0.{i}.0"\n' for i in range(k))}, 1_500, False),
+    "known-vulns-pinned-declarations": (known_vulns.scan, lambda k: {"requirements.txt": "".join(
+        f"vllm==0.31.{i}\n" for i in range(k))}, 1_000, True),
+    "known-vulns-ranges": (known_vulns.scan, lambda k: {"requirements.txt": "".join(
+        f"vllm>=0.{i}\n" for i in range(k))}, 1_000, False),
+    # agent_server_noauth, before it was released: rows that keep its cost to one pass
+    # over the file for many `\`-continued script lines, many launcher calls in one
+    # module and many compose services.
+    "agent-server-script-continuations": (agent_server_noauth.scan, lambda k: {
+        "start.sh": "docker run ghcr.io/openhands/agent-server \\\n" + "  -e X=1 \\\n" * k + "  -p 8000:8000\n"},
+        5_000, False),
+    "agent-server-launchers": (agent_server_noauth.scan, lambda k: {
+        "agent.py": "from openhands.workspace import DockerWorkspace\n" + "DockerWorkspace(server_image='x')\n" * k},
+        500, True),
+    "agent-server-compose-services": (agent_server_noauth.scan, lambda k: {"compose.yaml": "services:\n" + "".join(
+        f"  s{i}:\n    image: ghcr.io/openhands/agent-server\n    ports: ['{10000 + i}:8000']\n" for i in range(k))},
+        300, True),
+    # known_vulns_launch, before it was released: reading each reference where
+    # container_image_pins reads one, by slicing its line's prefix and searching it
+    # again, took 96 s of CPU for 20,000 references on one 620 KB line (load average
+    # 7, 2026-10-31; one pass, 0.03 s). Each line's bounds, first comment and FROM
+    # image are now found once, and a key is read back over its own whitespace.
+    "launch-image-refs-on-one-line": (known_vulns_launch.scan, lambda k: {
+        "compose.yaml": "image: " + "fctrid/ai-agent-for-okta:3.1.1 " * k + "\n"}, 2_000, False),
+    "launch-quoted-refs-on-one-line": (known_vulns_launch.scan, lambda k: {
+        "compose.yaml": "x: [" + '"fctrid/ai-agent-for-okta", ' * k + "]\n"}, 2_000, False),
+    "launch-image-key-whitespace": (known_vulns_launch.scan, lambda k: {
+        "compose.yaml": "".join("image:" + " " * 40 + "fctrid/ai-agent-for-okta " for _ in range(k)) + "\n"},
+        1_000, False),
+    "launch-mcp-servers": (known_vulns_launch.scan, lambda k: {".mcp.json": _js({"mcpServers": {
+        f"s{i}": {"command": "go", "args": ["run", f"github.com/gojue/moling@v0.5.{i}"]} for i in range(k)}})},
+        500, False),
+    "launch-docker-args": (known_vulns_launch.scan, lambda k: {".mcp.json": _js({"mcpServers": {"s": {
+        "command": "docker", "args": ["run"] + [f"fctrid/ai-agent-for-okta:3.1.{i}" for i in range(k)]}}})},
+        1_000, False),
+    "launch-repo-url-args": (known_vulns_launch.scan, lambda k: {".mcp.json": _js({"mcpServers": {"s": {
+        "command": "uvx", "args": ["https://github.com/gojue/moling/blob/x"] * k}}})}, 1_000, False),
+    "launch-shell-line": (known_vulns_launch.scan, lambda k: {".mcp.json": _js({"mcpServers": {"s": {
+        "command": "bash", "args": ["-c", "moling" + " -x" * k]}}})}, 3_000, False),
+    "launch-many-configs": (known_vulns_launch.scan, lambda k: {
+        f"p{i}/.mcp.json": _js({"mcpServers": {"s": {"command": "go", "args": ["run", "github.com/gojue/moling@v0.4.0"]}}})
+        for i in range(k)}, 60, True),
+    # malicious_releases' AAK-MALICIOUS-RELEASE-002, before it was released: one finding per
+    # server, each placed and described once, and one launch naming a listed package
+    # thousands of times (`-p` repeated) reported once.
+    "unpinned-malicious-launches": (malicious_releases.scan, lambda k: {".mcp.json": _js({"mcpServers": {
+        f"s{i}": {"command": "npx", "args": ["-y", "local-commander-agent"]} for i in range(k)}})}, 300, True),
+    "unpinned-malicious-package-flags": (malicious_releases.scan, lambda k: {".mcp.json": _js({"mcpServers": {
+        "s": {"command": "npx", "args": ["-y"] + ["-p", "local-commander-agent@^0.3.0"] * k + ["lc"]}}})},
+        1_000, False),
+    # malicious_extensions, before it was released: an index listing the tampered build
+    # thousands of times is reported once and placed once, an index of unlisted ids is
+    # parsed once, and a workspace recommending many ids is read once.
+    "extension-index-repeats": (malicious_extensions.scan, lambda k: {".cursor/extensions/extensions.json": _js([
+        {"identifier": {"id": "anthropic.claude-code"}, "version": "2.1.313"} for _ in range(k)])}, 1_000, False),
+    "extension-index-unlisted": (malicious_extensions.scan, lambda k: {".vscode/extensions/extensions.json": _js([
+        {"identifier": {"id": f"p{i}.x"}, "version": "1.0.0", "relativeLocation": f"p{i}.x-1.0.0"}
+        for i in range(k)])}, 700, False),
+    "extension-folders": (malicious_extensions.scan, lambda k: {
+        f".cursor/extensions/anthropic.claude-code-2.{i}.0/package.json": '{"version": "x"}' for i in range(k)},
+        300, False),
+    "extension-recommendations": (malicious_extensions.scan, lambda k: {".vscode/extensions.json": _js(
+        {"recommendations": ["anthropic.claude-code"] * k})}, 3_000, False),
+    # mcp_codeexec_sandbox, before it was released: each launch's line counted from the
+    # top of the file, flags read in windows that could overlap, and a revoke call's
+    # names read from a window around each one.
+    "deno-launches": (mcp_codeexec_sandbox.scan, lambda k: {"runner.js": "const run = (p, code) => p.runPython(code);\n"
+                                                            + 'spawn("deno", ["run", "-A", s]);\n' * k}, 1_000, True),
+    "deno-launch-no-close": (mcp_codeexec_sandbox.scan, lambda k: {"runner.js": "p.runPython(code);\n"
+                                                                  + "deno run -A " * k}, 3_000, False),
+    "deno-handoffs-and-revokes": (mcp_codeexec_sandbox.scan, lambda k: {"runner.js": 'spawn("deno", ["run", "-A"]);\n'
+                                                                       + "p.runPython(`${c}`); Deno.permissions.revoke({name: 'net'});\n" * k},
+                                  600, False),
+    "genui-registrations": (mcp_codeexec_sandbox.scan, lambda k: {
+        "server.py": "from fastmcp.apps.generative import GenerativeUI\n" + "mcp.add_provider(GenerativeUI())\n" * k,
+        "uv.lock": '[[package]]\nname = "prefab-ui"\nversion = "0.20.2"\n'}, 1_000, True),
 }
 
 
@@ -1555,3 +1718,42 @@ def test_many_quoted_server_names_are_read_in_linear_time() -> None:
     seconds, total = result.stdout.split()
     assert total == "0", result.stderr[-500:]
     assert float(seconds) < 5.0
+
+
+
+def test_a_lockfile_of_escaped_quotes_reads_its_keys_in_linear_time() -> None:
+    """The JSON lockfile reader `malicious_releases` and `runtime_advisories` run on every
+    Pipfile.lock found its keys with a regular expression that tried every quote as an
+    opening one and read up to 214 escaped characters past each: 2.3 s a megabyte, so
+    4 MB of escaped quotes took 9 s and the 32 MiB lockfile cap 73 s. Below the 1 MB file
+    rows' size it stayed under their bound, so the reader is timed here directly."""
+    small, large = '"' + '\\"' * 200_000, '"' + '\\"' * 2_000_000
+    def read(text: str) -> object:
+        return mcp_cve_pins_2026_07._lockfile_raw_entries(text, "pipfile.lock", {"a"})
+    t_small, t_large = _seconds(lambda: read(small)), _seconds(lambda: read(large))
+    assert t_large < 5.0
+    assert t_large < 40 * t_small + 0.25, (t_small, t_large)
+
+
+
+def test_serverless_runtime_lines_are_placed_in_one_pass(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Each serverless runtime value's line was searched for from the top of the file:
+    30,000 spellings took 7.5 s on 3.12, most of it those searches. The rest is PyYAML's
+    pure-Python parse, linear but close to a slow runner's bound at that size, so the
+    parse is stubbed here and the placement alone is timed."""
+    def project(k: int) -> tuple[str, dict]:
+        values = [_python_runtime(i) for i in range(k)]
+        text = "functions:\n" + "".join(f"  f{i}: {{runtime: {v}}}\n" for i, v in enumerate(values))
+        return text, {"functions": {f"f{i}": {"runtime": v} for i, v in enumerate(values)}}
+
+    small, large = project(3_000), project(30_000)
+    parsed = {small[0]: small[1], large[0]: large[1]}
+    monkeypatch.setattr(runtime_advisories, "load_yaml", lambda text, path: parsed[text])
+    path = Path("serverless.yml")
+    found = runtime_advisories._runtime_key_declared(path, large[0])
+    assert len(found) == 30_000 and found[-1].line_no == 30_001
+    t_small = _seconds(lambda: runtime_advisories._runtime_key_declared(path, small[0]))
+    t_large = _seconds(lambda: runtime_advisories._runtime_key_declared(path, large[0]))
+    assert t_large < 5.0
+    assert t_large < 40 * t_small + 0.25, (t_small, t_large)
+

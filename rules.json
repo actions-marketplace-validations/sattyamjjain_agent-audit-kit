@@ -587,6 +587,34 @@
       "title": "Multi-agent shared state mutated by >=2 agents without a lock primitive (Code-as-Harness, research-grade)"
     },
     {
+      "adversa_references": [
+        "ADV-AUTH-01"
+      ],
+      "aicm_references": [
+        "IAM-01",
+        "IVS-04"
+      ],
+      "auto_fixable": false,
+      "category": "agent-config",
+      "cve_references": [
+        "CVE-2026-112346"
+      ],
+      "description": "Python source constructs an OpenHands `DockerWorkspace`, `DockerDevWorkspace` or `ApptainerWorkspace` that starts the sandbox agent server with no session key, or a compose service or `docker run` publishes the SDK's agent-server image on every interface without one. The launchers run the server with `--host 0.0.0.0` and take its key only from the `OH_SESSION_API_KEYS_0` or `SESSION_API_KEY` environment variable; with neither set, the server accepts unauthenticated HTTP and WebSocket requests that run shell commands in the sandbox as root and read its secrets (CVE-2026-112346, the OpenHands Software Agent SDK before 1.52.0). 1.52.0 publishes the Docker launcher's port on 127.0.0.1 only and changed nothing else: without a key the server still starts keyless, and the Apptainer launcher still binds every interface of the host in 1.59.0.",
+      "incident_references": [],
+      "limitations": "Reads Python source (`*.py` up to 512 KB) for a call that constructs `DockerWorkspace`, `DockerDevWorkspace` or `ApptainerWorkspace` imported from `openhands.workspace` or one of its modules; a call through another name, a factory, `**` arguments or a `forward_env` that is not a literal list or tuple is not judged. A file that sets `SESSION_API_KEY` or `OH_SESSION_API_KEYS_0` in `os.environ` (by assignment, `setdefault`, `update` or `putenv`) counts as keyed; a key set in the shell, a `.env` file or the agent-server config file is not seen, so such a launch is reported. A Docker launch is HIGH when the lowest `openhands-workspace` or `openhands-sdk` release the project locks, pins exactly or has installed, anywhere under the root, is below 1.52.0, and MEDIUM from 1.52.0 or when none is found; an Apptainer launch is HIGH in every release. A YAML file with `services` is read for a service whose `image` is `ghcr.io/openhands/agent-server` and that publishes container port 8000 or 8001 without a loopback host IP and sets neither variable in `environment`; a service with an `env_file` is not judged. A `docker run` or `podman run` of that image in a `*.sh` script is read the same way from its `-p` and `-e` options, and `--env-file` counts as keyed. Other images, Kubernetes manifests and a port given by a variable are not read. NVIDIA's NeMo Agent Toolkit advisory of the same week names no component, so this rule has no shape for it.",
+      "owasp_agentic_references": [
+        "ASI03",
+        "ASI05"
+      ],
+      "owasp_ast_references": [],
+      "owasp_mcp_references": [],
+      "remediation": "Upgrade `openhands-workspace` to 1.52.0 or later (below it the Docker launcher publishes the port on every interface and its client sends no key), then set `SESSION_API_KEY` in the environment that starts the workspace: both launchers forward it to the server and send it with every request. For a compose service or a `docker run`, publish the port on 127.0.0.1 (`127.0.0.1:8000:8000`) and set the key in its environment.",
+      "rule_id": "AAK-AGENT-SERVER-NOAUTH-001",
+      "sarif_name": "AgentServerWithoutSessionKey",
+      "severity": "high",
+      "title": "OpenHands sandbox agent server started without a session key"
+    },
+    {
       "adversa_references": [],
       "aicm_references": [],
       "auto_fixable": false,
@@ -1633,6 +1661,36 @@
       "title": "Third-party GitHub Action not pinned by full commit SHA"
     },
     {
+      "adversa_references": [
+        "ADV-TOKEN-06"
+      ],
+      "aicm_references": [
+        "DSP-17",
+        "STA-08"
+      ],
+      "auto_fixable": false,
+      "category": "secret-exposure",
+      "cve_references": [],
+      "description": "A `run:` step in a GitHub Actions workflow expands the secrets context (`toJSON(secrets)`, `secrets.X`, or an env var set from a secret) or the whole environment (`env`, `printenv`, `set`) and passes it through an encoder or transformer (base32, base64, xxd, od, rev, gzip, `openssl enc` and the like) whose output reaches the job log. GitHub masks a secret in the log only where its exact value appears, so an encoded copy prints in full, and anyone who can read the log can decode it. The Gheist campaign (Wiz, 2026-10-25) pushed exactly this step, `echo -n '${{ toJSON(secrets) }}' | base32 -w 120`, on `ci-sync-*` branches of every repository stolen tokens could reach, then downloaded the log and deleted the run.",
+      "incident_references": [
+        "WIZ-GHEIST-2026-10-25"
+      ],
+      "limitations": "Reads the `run:` steps of the workflow files directly inside `.github/workflows`; a composite action, a reusable workflow kept elsewhere and the code of an action are not read. A command line is joined across backslash continuations, split at `;`, `&&` and `||`, and its pipeline at `|`; secret material reaches an encoder through a pipe, a here-string, a heredoc or a process substitution. Secret material is a `secrets` expression (`toJSON(secrets)`, `secrets.X`, `secrets['X']`), an env var that a workflow, job or step `env:` sets from one, or a whole-environment dump (`env` without a command, `printenv`, `set` without arguments, `export -p`, `declare -p` or `-x`). A step is reported only when the encoded output reaches the log: the pipeline ends in a program that prints (an encoder, `cat`, `tee`, `tr`, `sed`, `jq` and the like) and redirects it nowhere but stdout, stderr or `$GITHUB_STEP_SUMMARY`. A secret written to a file, to `$GITHUB_OUTPUT` or `$GITHUB_ENV`, or piped into a program that consumes it (`docker login --password-stdin`, `gpg --import`) is not reported, and neither is a dump made by a script the step calls or through a variable the step builds. CRITICAL when the workflow carries a published Gheist marker: the file `sync-check.yml` with the step `toJSON(secrets) }}' | base32 -w 120`, or the string `===== gdmp-pivot:`. A workflow file over 1 MB is not read.",
+      "owasp_agentic_references": [
+        "ASI03",
+        "ASI04"
+      ],
+      "owasp_ast_references": [],
+      "owasp_mcp_references": [
+        "MCP01:2025"
+      ],
+      "remediation": "Remove the step. If you did not write it, treat every repository, organization and environment secret the workflow could read as exposed: rotate them, revoke the token that pushed the commit, and look for `ci-sync-*` branches and for workflow runs deleted soon after they finished (`workflows.delete_workflow_run` in the audit log). To give a tool a secret, pass it as an env var or on stdin; never print it, encoded or not.",
+      "rule_id": "AAK-GHA-SECRET-DUMP-001",
+      "sarif_name": "GhaSecretDumpThroughEncoder",
+      "severity": "high",
+      "title": "Workflow step prints secrets through an encoder"
+    },
+    {
       "adversa_references": [],
       "aicm_references": [
         "AIS-08",
@@ -2304,6 +2362,58 @@
     },
     {
       "adversa_references": [
+        "ADV-SUPPLY-04"
+      ],
+      "aicm_references": [
+        "STA-08"
+      ],
+      "auto_fixable": false,
+      "category": "supply-chain",
+      "cve_references": [],
+      "description": "A lockfile resolves, a manifest pins, or a site-packages directory has installed a PyPI or npm release that an OSV advisory lists as affected. vLLM 0.31.1 and MLflow 3.16.0 locked in a project passed every rule on 0.6.28 (28 Oct 2026), although CVEs against both were published on 26 and 27 Oct, because AAK knew a vulnerable release only through a hand-written pin. The rule reads the offline advisory feed `aak update` builds from the OSV exports it already downloads for the malicious-release feed: every PyPI and npm record that is not `MAL-` or withdrawn and has a range or a version list. OSV can lag a CNA by days: IBM's Langflow OSS CVEs of 29 Oct 2026, CVSS 9.8, had no OSV package record while NVD carried IBM's affected range, so the feed also holds entries converted from NVD's records of CNA version data, for the CVEs OSV has no package record of. A scan reads the copy cached at `~/.agent-audit-kit/advisories.json`, else the records bundled with AAK, and never touches the network. The finding carries the advisory's severity: CRITICAL from a CVSS 3.x base score of 9.0, HIGH from 7.0, MEDIUM below that or unscored, and INFO for a manifest range that admits affected and unaffected releases.",
+      "incident_references": [],
+      "limitations": "Reads what AAK-MALICIOUS-RELEASE-001 reads, anywhere outside AAK's skip directories: the lockfiles uv.lock, poetry.lock, Pipfile.lock, package-lock.json, npm-shrinkwrap.json, pnpm-lock.yaml and yarn.lock (v1); declarations in requirements*.txt, pyproject.toml, Pipfile, package.json (not its `scripts`) and the launches in MCP configs; and `<name>-<version>.dist-info` directories in the site-packages and dist-packages directories AAK-STARTUP-HOOK-PTH-001's walk reaches. A release matches by PEP 440 order on PyPI (3.12.0rc0 is inside `>=3.12.0rc0`, 3.17.0rc1 below a 3.17.0 fix) and semver on npm, against the record's `ECOSYSTEM` and `SEMVER` ranges, read in version order, and its listed versions; a git range, a CVSS 4.0 vector and a record with no PyPI or npm package are not read, and a record scored by neither a CVSS 3.x vector nor GitHub's label is reported MEDIUM. A declaration without a version is not judged, and a range is read on release triples, as the pin table reads ranges, so a pre-release bound counts as its release. A range that admits affected and unaffected releases is one INFO finding naming at most five advisories, and none when a lockfile in the same directory resolves the package. A PYSEC record and its GHSA twin are one advisory, reported under the GHSA id; two GHSA records are never merged. Where another rule reports every CVE id of the advisory on the same line of the same file at or above this finding's severity, as most version pins do, only that rule's finding is kept; an advisory without a CVE id is always reported. A lockfile is read for its first 64 distinct releases of a package. NVD's records are read by `aak update` for the last 120 days of modifications (`--nvd-days`), and each run's entries replace the last run's, so a record last modified before that window leaves the feed. A record names a package only through its CNA's `pkg:pypi` or `pkg:npm` packageURL, a PyPI or npm `collectionURL` (a package's own page, or the registry's root with a `packageName`, which must agree with a page's name), or a row of the reviewed `data/cna_package_map.json` matching its repository or its vendor and product (four rows on 2 Nov 2026), never through a name alone; one that maps to none of these is dropped and counted. A CNA version written as text is read in GitHub's advisory grammar (`< 0.5.0`, `>= 2.2.0, < 3.0.1`, one lower and one upper bound at most, or `= x` alone), and `> x` only on npm, where semver has a first version after x. NVD's CPE data, other text, a version type other than semver, custom or python, and a `defaultStatus: affected` whose exceptions no interval states are not read; an NVD entry without a CVSS 3.x vector takes its CVSS 4.0 label, else MEDIUM; and one whose CVE an OSV entry for the package names is dropped for OSV's. The bundled records are the two OSV advisories of 27 and 28 Oct 2026 against vLLM and MLflow and nine entries from NVD's records of seven CVEs of 29 Oct to 2 Nov 2026 against langflow, lmdeploy, prefab-ui, open, @modelcontextprotocol/inspector, opencode-ai and @samanhappy/mcphub, so without `aak update` nothing else is known; a feed over 60 MB keeps only HIGH and CRITICAL records and says so. `.egg-info` installs, `node_modules`, conda metadata and image layers are not read. A manifest over 2 MB or a lockfile over 32 MiB is not read.",
+      "owasp_agentic_references": [
+        "ASI04"
+      ],
+      "owasp_ast_references": [],
+      "owasp_mcp_references": [
+        "MCP04:2025"
+      ],
+      "remediation": "Upgrade to the release the finding names as fixed on that line, re-lock, and rebuild the environment or image; for a manifest range, raise its lower bound past the fix. Where the advisory lists no fixed release, remove or replace the package, or keep the component the advisory names unreachable until one ships; where an NVD entry names only the last affected release, upgrade past it to the release the vendor's advisory names as fixed. Run `aak update` so the scan reads the current advisories rather than the bundled few.",
+      "rule_id": "AAK-KNOWN-VULN-001",
+      "sarif_name": "KnownVulnerableRelease",
+      "severity": "critical",
+      "title": "A locked, pinned or installed release is affected by a published advisory"
+    },
+    {
+      "adversa_references": [
+        "ADV-SUPPLY-04"
+      ],
+      "aicm_references": [
+        "STA-08"
+      ],
+      "auto_fixable": false,
+      "category": "supply-chain",
+      "cve_references": [],
+      "description": "An MCP client config starts, or a compose file, Kubernetes manifest, Helm values file or Dockerfile runs, a release of software that an NVD record's CNA data lists as affected, where the software is on neither PyPI nor npm: a binary an MCP config names as its `command`, a Go module it starts with `go run`, an image it starts with `docker run` or a deployment file pins, or its GitHub repository given as an argument. On 0.6.29 a project whose `.mcp.json` ran MoLing 0.4.0, a Go MCP server whose SSE endpoints took no authentication before 0.5.0 (CVSS 9.6), passed every rule: NVD's record named no package for AAK-KNOWN-VULN-001 to map, only a vendor and a product. The advisory feed now maps such records through reviewed launch rows, each naming how the project's own repository says to start the software, and this rule matches them against what a project starts. The finding carries the record's severity for a launch that names a release in its range, and is MEDIUM for one whose release could not be read.",
+      "incident_references": [],
+      "limitations": "Matches only software a reviewed launch row of `data/cna_package_map.json` names (MoLing and TAKO on 31 Oct 2026), and maps an NVD record to a row only by the CNA's repository or its vendor and product, never by a name alone; a record no row maps is counted by `aak update` and dropped. Reads, outside AAK's skip directories, the JSON MCP client configs `container_image_pins` reads (`*mcp*.json`, `claude_desktop_config.json`), parsed as JSONC: a server's `command` by its file name, `go run <module>@<version>`, a `docker`, `podman` or `nerdctl` `run`, an argument that is itself a `github.com/<owner>/<repo>` URL (a link into the repository is not a launch), and a command line behind `sh -c`, `bash -c`, `cmd /c` or `-Command`, two levels deep. In YAML files and Dockerfiles it reads image references only, where an image goes (an `image:` value, a `FROM` line, a quoted string, a Helm `repository` and `tag`), so a YAML MCP config's `command`, a shell script, a Makefile and a systemd unit are not read. A release is read as semver 2.0 with a leading `v` dropped, so an image tag's suffix is a pre-release: `1.2.3-alpine` sorts below 1.2.3, and a variant tag of the first fixed release reads affected. A two-part tag (`3.1`) is reported at the record's severity only when every release on its line is affected. A launch that names no release (a bare command, `latest`, an untagged or digest-only image, a branch, a commit) is MEDIUM. The rule reports the release, not whether the launch uses the flawed feature: MoLing's flaw is in its SSE mode, and a stdio launch of 0.4.0 is reported too. One finding per file and advisory; where another rule reports every CVE id of the advisory on the same line of the same file at or above this finding's severity, only that rule's finding is kept. The bundled launch entries are NVD's three records of 30 Oct 2026 against MoLing and TAKO, so without `aak update` nothing else is known. A file over 2 MB is not read.",
+      "owasp_agentic_references": [
+        "ASI04"
+      ],
+      "owasp_ast_references": [],
+      "owasp_mcp_references": [
+        "MCP04:2025"
+      ],
+      "remediation": "Pin the launch to a release outside the advisory's range (the fix the finding names, or later): `go run module@vX.Y.Z`, an image tag naming the release, or the binary's release, then restart the server or redeploy. For a launch AAK could not read, check which release it runs and pin it. Where the advisory lists no fixed release, stop running it or keep the flawed component unreachable. Run `aak update` so the scan reads the current NVD records rather than the bundled few.",
+      "rule_id": "AAK-KNOWN-VULN-002",
+      "sarif_name": "KnownVulnerableLaunch",
+      "severity": "critical",
+      "title": "A launched MCP server, binary or image is a release a published advisory lists as affected"
+    },
+    {
+      "adversa_references": [
         "ADV-SUPPLY-01"
       ],
       "aicm_references": [],
@@ -2667,6 +2777,89 @@
       "sarif_name": "McpLogInjection",
       "severity": "medium",
       "title": "MCP tool logs caller-controlled input without CRLF/ANSI sanitization"
+    },
+    {
+      "adversa_references": [],
+      "aicm_references": [
+        "STA-08",
+        "IVS-04"
+      ],
+      "auto_fixable": false,
+      "category": "supply-chain",
+      "cve_references": [],
+      "description": "An editor that hosts coding agents (Cursor, VS Code and the editors built on it) has installed an extension build that the offline malicious-release feed lists: a version no legitimate publisher shipped, or a build whose file matches a published SHA-256. On 29 Oct 2026 Cursor's extension marketplace served tampered builds of Anthropic's Claude Code extension, `anthropic.claude-code` 2.1.312 and 2.1.313, under Anthropic's publisher id for about eleven hours; their `extension.js` added an SSH key to `~/.ssh/authorized_keys` and installed a LaunchAgent, a scheduled task or a crontab line (Cursor's notice). AAK read MCP configs under `.vscode/` and no extension folder, so a home directory, dev container or image that carried the build scanned clean. The rule reads the installed folders and their `extensions.json` index; a tampered build can carry the number of a real release, as 2.1.312 did, and is then matched by content.",
+      "incident_references": [
+        "CURSOR-CLAUDE-CODE-2026-10-29"
+      ],
+      "limitations": "Reads the folders a VS Code-based editor installs extensions into, `<home>/.<editor>/extensions/<publisher>.<name>-<version>[-<platform>]/`, and the `extensions.json` index beside them, in the scan root itself, `root/`, and each `home/*/` and `Users/*/` below it; with `--include-user-config` also in this user's home. An editor is named by its data folder (`.cursor` is `cursor`, `.vscode` is `vscode`, a remote server's `.cursor-server` or `.vscode-server` is the editor's own), and a feed entry matches only the editors it names, or every one for `*`. A home elsewhere (`srv/<user>/`), a folder moved by `--extensions-dir` or `VSCODE_EXTENSIONS`, a portable install, a symlinked extension folder and the index of a profile other than the default are not read. A version matches exactly as the folder name or index writes it; a digest is computed only for the file an entry names, inside the folder and up to 64 MiB, so an index entry whose folder is gone is matched on its version alone. A workspace's `.vscode/extensions.json` recommendations name no version and are reported only for an entry that lists every version. An uninstalled `.vsix`, a devcontainer.json `extensions` list and an editor's download cache are not read. The rule says a listed build is on disk, not whether it ran or what it left behind. The bundled feed lists one extension entry, anthropic.claude-code: 2.1.313 on every editor, and any build whose `extension.js` has the SHA-256 Cursor published for the tampered 2.1.312 and 2.1.313; `aak update` keeps it and adds none, since neither OSV nor GitHub lists editor extensions. An index over 8 MB is not read.",
+      "owasp_agentic_references": [
+        "ASI04",
+        "ASI05"
+      ],
+      "owasp_ast_references": [],
+      "owasp_mcp_references": [],
+      "remediation": "Remove the extension, then install the publisher's fixed release from a marketplace the advisory clears (for anthropic.claude-code, 2.1.314 or later from the VS Code Marketplace or Open VSX). Check the machine for the persistence the advisory names, which removing the extension does not undo: for the Claude Code builds, an SSH key labelled `svc-telemetry` in `~/.ssh/authorized_keys`, `~/.config/.smt` and `.smtk`, the LaunchAgent `com.apple.sysmond`, a crontab `@reboot` line and the scheduled task `SysMon`. Where any is present, isolate the machine and rotate every credential it could reach.",
+      "rule_id": "AAK-MALICIOUS-EXTENSION-001",
+      "sarif_name": "KnownMaliciousEditorExtension",
+      "severity": "critical",
+      "title": "An agent host's installed editor extension is a build listed as malware"
+    },
+    {
+      "adversa_references": [
+        "ADV-SUPPLY-04"
+      ],
+      "aicm_references": [
+        "STA-08"
+      ],
+      "auto_fixable": false,
+      "category": "supply-chain",
+      "cve_references": [],
+      "description": "A manifest pins, a lockfile resolves, a site-packages directory has installed, a launcher's cache on this host holds (with `--include-user-config`), or an image reference by digest runs a release that the offline malicious-release feed lists: OSV's OpenSSF Malicious Packages (`MAL-`) records for PyPI and npm, GitHub's malware advisories when `aak update` could read them, and image digests from vendor incident reports. Such a release is malware rather than a flaw below a fix, so no version pin catches it: litellm 1.107.0 (21 Oct 2026, OSV MAL-2026-2144) sat above every pinned floor and ran a credential stealer at every Python start. A scan reads the feed `aak update` caches at `~/.agent-audit-kit/malicious_releases.json`, else the copy bundled with AAK, and never touches the network; the SARIF run and the console summary name the copy and when it was generated.",
+      "incident_references": [
+        "BERRIAI-LITELLM-2026-10-21"
+      ],
+      "limitations": "Reads, anywhere outside AAK's skip directories, requirements*.txt, pyproject.toml, Pipfile, package.json (not its `scripts`) and the launches in MCP configs (`.mcp.json`, `mcp.json`, `claude_desktop_config.json`, `*.mcp.json`, `*.mcp.yaml`, `*.mcp.yml`) for a declaration that pins one version; the lockfiles uv.lock, poetry.lock, Pipfile.lock, package-lock.json, npm-shrinkwrap.json, pnpm-lock.yaml and yarn.lock (v1) for resolved versions; `<name>-<version>.dist-info` directories in the site-packages and dist-packages directories AAK-STARTUP-HOOK-PTH-001's walk reaches; and `@sha256:` image references in Dockerfiles, YAML files and MCP configs. With `--include-user-config` it also reads this host's npx cache (`<npm cache>/_npx/*/node_modules/<name>/package.json`, the cache an `npm_config_cache` variable names, else `~/.npm` or `%LocalAppData%\\npm-cache`) and uv's tool environments (the `<name>-<version>.dist-info` directories under `<uv cache>/environments-v*/`, the cache `UV_CACHE_DIR` names, else `$XDG_CACHE_HOME/uv`, `~/.cache/uv` or `%LOCALAPPDATA%\\uv\\cache`); an `.npmrc` `cache=` line, uv's `--cache-dir` and `tool.uv.cache-dir`, `uv tool install` environments and the pnpm, yarn and bun caches are not read, and without the flag no cache is. A version matches exactly, PEP 440 normalised for PyPI and as written for npm, so a pre-release beside a malicious release (litellm 1.107.0rc1) is not reported, and npm's `0.0.1-security` placeholder never matches. A range, or a declaration without a version, matches only an entry that lists every release of the package, since a range does not say which release was installed. An image tag never matches, only a digest, and a digest matches whatever registry name the reference gives it. A program an MCP config runs by name names no registry and is not read, nor are `.egg-info` installs, `node_modules`, conda metadata or an image's registry layers. The bundled feed lists only MAL-2026-2144 (litellm 1.82.7, 1.82.8 and 1.107.0), MAL-2026-18425 (local-commander-agent 0.3.52) and one image index digest, so without `aak update` nothing else is known. A lockfile that resolves one release more than once is reported once, at its first entry, and an image reference is quoted from at most 256 characters before its digest. A manifest over 2 MB, a lockfile over 32 MiB or an image-reference file over 2 MB is not read.",
+      "owasp_agentic_references": [
+        "ASI04",
+        "ASI05"
+      ],
+      "owasp_ast_references": [],
+      "owasp_mcp_references": [
+        "MCP04:2025"
+      ],
+      "remediation": "Remove the release: pin a version the feed does not list (for litellm, 1.106.2, the version LiteLLM named), re-lock, and rebuild the environment or image from scratch rather than upgrading in place. Treat every environment, host or cluster that installed or ran it as compromised: rotate each credential it could reach and review its outbound traffic. Run `aak update` to refresh the feed.",
+      "rule_id": "AAK-MALICIOUS-RELEASE-001",
+      "sarif_name": "KnownMaliciousRelease",
+      "severity": "critical",
+      "title": "A declared, locked, installed or deployed release is listed as malware"
+    },
+    {
+      "adversa_references": [
+        "ADV-SUPPLY-04"
+      ],
+      "aicm_references": [
+        "STA-08"
+      ],
+      "auto_fixable": false,
+      "category": "supply-chain",
+      "cve_references": [],
+      "description": "An MCP client config launches a PyPI or npm package with no version, a tag or a range (`npx -y local-commander-agent`, `uvx litellm`) while the offline malicious-release feed lists particular releases of that package as malware. Such a launch runs whichever release the registry, or the launcher's cache, hands it, so it can run a listed one: local-commander-agent, an MCP bridge, published 0.3.52 as malware (GHSA-7j62-5j84-72fv, OSV MAL-2026-18425, 31 Oct 2026), and an unpinned launch of it drew only a generic \"no version pin\". AAK-MALICIOUS-RELEASE-001 cannot report such a launch, since nothing says which release it installed; this rule reports the launch itself, and the scan then reports it once, standing AAK-SUPPLY-001 and AAK-MCP-007 down on it. A package the feed lists in every release (a typosquat) stays AAK-MALICIOUS-RELEASE-001's.",
+      "incident_references": [
+        "LOCAL-COMMANDER-AGENT-2026-10-31"
+      ],
+      "limitations": "Reads the launches in the MCP configs AAK-MALICIOUS-RELEASE-001 reads (`.mcp.json`, `mcp.json`, `claude_desktop_config.json`, `*.mcp.json`, `*.mcp.yaml`, `*.mcp.yml`, outside AAK's skip directories) through the launch grammar AAK-SUPPLY-001 reads (npx, pnpx, bunx, `npm exec`, `pnpm dlx`, `yarn dlx`, uvx, `uv tool run`, `pipx run`, and `--with` packages); a launch in a shell script, a Makefile or a package.json `scripts` entry is not read, and neither is a program a config runs by name, a git URL or a local path. A launch with no version, a tag or a range the version reader cannot read is reported for every version-specific entry of the package; a readable range only when it admits a listed release, read on release triples as the version pins read ranges, so a pre-release beside a listed release counts as it. An exact pin is never reported here: a listed one is AAK-MALICIOUS-RELEASE-001's, any other is safe by the feed. The rule reports what could be launched, not what was: it does not know whether a listed release is still the registry's newest or was ever fetched. A finding names at most ten listed versions per entry. AAK-SUPPLY-001 and AAK-MCP-007 stand down only on a launch of a server in a top-level `mcpServers` or `servers` map. The bundled feed lists two packages with version-specific entries (litellm and local-commander-agent), so without `aak update` nothing else is known. A config over 2 MB is not read.",
+      "owasp_agentic_references": [
+        "ASI04"
+      ],
+      "owasp_ast_references": [],
+      "owasp_mcp_references": [
+        "MCP04:2025"
+      ],
+      "remediation": "Pin the launch to one release outside the list the finding names (`npx -y local-commander-agent@0.3.61`, `uvx litellm==1.106.2`), or stop launching the package. Then check what the launcher already fetched: run `aak scan --include-user-config`, which reads the npx and uv caches, and if a listed release is there, delete that cache entry and treat the machine that ran it as compromised. Run `aak update` so the scan reads the current feed rather than the bundled few entries.",
+      "rule_id": "AAK-MALICIOUS-RELEASE-002",
+      "sarif_name": "UnpinnedLaunchOfMaliciousPackage",
+      "severity": "high",
+      "title": "An MCP config launches a package with releases listed as malware, without pinning a safe one"
     },
     {
       "adversa_references": [
@@ -3907,6 +4100,37 @@
       ],
       "aicm_references": [
         "IAM-01",
+        "STA-08"
+      ],
+      "auto_fixable": false,
+      "category": "supply-chain",
+      "cve_references": [
+        "CVE-2026-115413"
+      ],
+      "description": "The AWS API MCP Server (`awslabs.aws-api-mcp-server`) added OAuth authentication in 1.3.0 (`AUTH_TYPE=oauth`, which the README says is on by default in HTTP mode unless `AUTH_TYPE=no-auth` is set). Before 1.6.0 it did not check a token's audience, so a local user holding an access token that the same identity provider issued to another application could call the server and run AWS operations with the server's configured AWS credentials (CVE-2026-115413, CVSS 7.8, CWE-346; GHSA-4prq-p2x5-w9fh). 1.6.0 adds `AUTH_AUDIENCE` and `AUTH_CLIENT_ID`, matched against the token's `aud` and `client_id` or `azp` claims, and requires one of them in OAuth mode (awslabs/mcp#4865).",
+      "incident_references": [],
+      "limitations": "Reports `awslabs.aws-api-mcp-server` from 1.3.0 below 1.6.0 where a version is stated: a requirements*.txt entry at any depth, a pyproject.toml, Pipfile or lockfile entry at the project root, or a `uvx` launch in .mcp.json, mcp.json or claude_desktop_config.json, reporting a range that admits an affected version. `latest` was 1.6.0 on 2026-10-28 and states no version, so the README's own `uvx awslabs.aws-api-mcp-server@latest` is not reported. It reads the version, not the transport or `AUTH_TYPE`, so a server run over stdio, which has no OAuth mode, or with `AUTH_TYPE=no-auth` is reported too. The ECR image `public.ecr.aws/awslabs-mcp/awslabs/aws-api-mcp-server`, which the README runs at `latest`, is not read. A file over 2 MB, or a lockfile over 32 MiB, is not read. A declaration nested more than 64 levels deep in package.json, a TOML manifest or an MCP config (an MCP server more than 62) is still judged, and reported without a line; a lockfile entry keeps its line at any depth.",
+      "owasp_agentic_references": [
+        "ASI03",
+        "ASI04"
+      ],
+      "owasp_ast_references": [],
+      "owasp_mcp_references": [
+        "MCP07:2025",
+        "MCP04:2025"
+      ],
+      "remediation": "Upgrade `awslabs.aws-api-mcp-server` to 1.6.0 or later and pin it, then set `AUTH_AUDIENCE` to the server's own audience, or `AUTH_CLIENT_ID` for a provider whose access tokens carry no `aud` claim, such as Amazon Cognito. Until then, run it over stdio, or keep its HTTP port to the one client that should reach it.",
+      "rule_id": "AAK-MCP-AWSAPIMCP-CVE-2026-115413-001",
+      "sarif_name": "AwsApiMcpServerOAuthAudience",
+      "severity": "high",
+      "title": "AWS API MCP Server 1.3.0 to 1.5.x: OAuth mode accepts tokens issued to other applications"
+    },
+    {
+      "adversa_references": [
+        "ADV-AUTH-01"
+      ],
+      "aicm_references": [
+        "IAM-01",
         "AIS-07",
         "STA-08"
       ],
@@ -4310,6 +4534,94 @@
     },
     {
       "adversa_references": [
+        "ADV-EXFIL-02"
+      ],
+      "aicm_references": [
+        "AIS-07",
+        "STA-08"
+      ],
+      "auto_fixable": false,
+      "category": "supply-chain",
+      "cve_references": [
+        "CVE-2026-85297"
+      ],
+      "description": "Cloud Run MCP (`@google-cloud/cloud-run-mcp`, GoogleCloudPlatform/cloud-run-mcp) deploys local source to Cloud Run by uploading an archive to a Cloud Storage bucket named `<project id>-source-bucket` and building from it. Before 1.11.0 it used an existing bucket of that name without checking which project owns it. Bucket names are global, so a bucket created first under that name in another project, and left open to writes, receives the source: its owner can read it, or change it before Cloud Build runs it (CVE-2026-85297, CVSS 4.0 7.7, CWE-340). 1.11.0 checks that the bucket belongs to the deploying project and otherwise uses a randomized name (GoogleCloudPlatform/cloud-run-mcp#300).",
+      "incident_references": [],
+      "limitations": "Reports an npm reference to `@google-cloud/cloud-run-mcp` below 1.11.0 that states a version: a package.json or lockfile entry, or the package in an MCP config, reporting a range that admits an affected version. `latest` was 1.11.0 on 2026-10-27 and states no version, so the README's own unversioned `npx -y @google-cloud/cloud-run-mcp` is not reported. The unscoped npm `cloud-run-mcp` is the same 1.0.0 build under the project's first name, and that is its only release, so any reference to it is reported, an unversioned one included; that takes in an MCP server run by the bare name `cloud-run-mcp`, which is also the executable a global install of the scoped package provides. It reads the version, not whether the server ever deploys from source, nor which bucket a past deploy used. Docker's MCP catalog image `mcp/cloud-run-mcp` is tagged only `latest`, the remote-server image `us-docker.pkg.dev/cloudrun/container/mcp` carries no version tag, and the Gemini CLI extension installs from the repository, so none states a version AAK reads and none is reported. A file over 2 MB, or a lockfile over 32 MiB, is not read. A declaration nested more than 64 levels deep in package.json, a TOML manifest or an MCP config (an MCP server more than 62) is still judged, and reported without a line; a lockfile entry keeps its line at any depth.",
+      "owasp_agentic_references": [
+        "ASI04",
+        "ASI05"
+      ],
+      "owasp_ast_references": [],
+      "owasp_mcp_references": [
+        "MCP04:2025"
+      ],
+      "remediation": "Upgrade `@google-cloud/cloud-run-mcp` to 1.11.0 or later and pin it, in place of the unscoped `cloud-run-mcp`, whose only release is 1.0.0. If an earlier release has deployed source, check that `<project id>-source-bucket` belongs to your project, and redeploy from a known-good tree if it does not.",
+      "rule_id": "AAK-MCP-CLOUDRUN-CVE-2026-85297-001",
+      "sarif_name": "CloudRunMcpSourceBucketSquatting",
+      "severity": "high",
+      "title": "Cloud Run MCP below 1.11.0: source deploys use a bucket named after the project without checking who owns it"
+    },
+    {
+      "adversa_references": [
+        "ADV-SUPPLY-04"
+      ],
+      "aicm_references": [
+        "STA-08",
+        "IVS-04"
+      ],
+      "auto_fixable": false,
+      "category": "supply-chain",
+      "cve_references": [
+        "CVE-2026-120338"
+      ],
+      "description": "Python source registers FastMCP's Generative UI provider (`mcp.add_provider(GenerativeUI())`, from `fastmcp.apps.generative`), whose `generate_prefab_ui` tool runs Python its caller supplies in prefab-ui's sandbox, and the project's lockfiles or installed packages give prefab-ui 0.14.0 up to 0.21.0, or nothing pins it. That sandbox is Pyodide inside a Deno subprocess started with unscoped `--allow-read`, `--allow-write` and `--allow-net`, and the Python can reach Deno's API, so whoever can call the tool (anyone, on a server without authentication) reads and writes files as the server's user and can persist by writing a `.pth` file into its environment (CVE-2026-120338, JFrog, CVSS 10.0, 1 Nov 2026). prefab-ui 0.21.0 scopes the network permission and revokes read, write and net before it accepts code. JFrog's record names prefab-ui only by `collectionURL`, which AAK-KNOWN-VULN-001 now reads, so the version is reported there too; this rule says the tool that reaches it is registered.",
+      "incident_references": [],
+      "limitations": "Reads Python source (`*.py` up to 512 KB) for `add_provider(...)` given a `GenerativeUI(...)` call, or a name assigned one in the same module, where `GenerativeUI` is imported from `fastmcp.apps.generative` (any alias, or the module imported and the class named on it); a provider built in another module, passed through a factory or a list, or registered another way is not seen. The prefab-ui release is read from the PyPI lockfiles AAK-KNOWN-VULN-001 reads (uv.lock, poetry.lock, Pipfile.lock; the first 64 releases of each), `prefab_ui-<version>.dist-info` directories its site-packages walk reaches, and exact pins in requirements*.txt, pyproject.toml and Pipfile, anywhere under the root, not only beside the registering file. A release is affected from 0.14.0 up to 0.21.0 in PEP 440 order, so a 0.21.0 pre-release counts. With no release found, a manifest range that admits no affected release keeps the rule quiet, and anything else (no range, or none at all) is reported, since fastmcp's `apps` extra admits 0.18.0. The rule does not read whether the server has authentication, nor whether the tool was called. A lockfile over 32 MiB is not read.",
+      "owasp_agentic_references": [
+        "ASI04",
+        "ASI05"
+      ],
+      "owasp_ast_references": [],
+      "owasp_mcp_references": [
+        "MCP04:2025",
+        "MCP05:2025"
+      ],
+      "remediation": "Upgrade prefab-ui to 0.21.0 or later and re-lock: fastmcp's `apps` extra asks only for `prefab-ui>=0.18.0`, so pin `prefab-ui>=0.21.0` beside it. Until then, keep the `generate_prefab_ui` tool off any server a caller you do not trust can reach. Check the server's environment for `.pth` files nobody installed (AAK-STARTUP-HOOK-PTH-001 reads them) and rotate what its user could read.",
+      "rule_id": "AAK-MCP-CODEEXEC-SANDBOX-001",
+      "sarif_name": "GenerativeUIOpenSandbox",
+      "severity": "critical",
+      "title": "FastMCP's GenerativeUI runs caller code in a prefab-ui sandbox with open Deno permissions"
+    },
+    {
+      "adversa_references": [],
+      "aicm_references": [
+        "IVS-04",
+        "AIS-07"
+      ],
+      "auto_fixable": false,
+      "category": "mcp-config",
+      "cve_references": [
+        "CVE-2026-120338"
+      ],
+      "description": "Source starts a Deno subprocess with an open permission (`-A`, `--allow-all`, or `--allow-read`, `--allow-write`, `--allow-net`, `--allow-run`, `--allow-env`, `--allow-ffi`, `--allow-sys` or `--allow-import` with no value) and code a caller can supply reaches that runtime: a Pyodide `runPython`/`runPythonAsync`, an `eval` or a `new Function` whose argument is not a fixed literal, in the launching file or in a script it names beside it, with no `Deno.permissions.revoke` of the open permission. A WASM interpreter does not contain code that can reach the host runtime's API: prefab-ui's Generative UI sandbox ran caller Python in Pyodide under `deno run --allow-read --allow-write --allow-net`, which gave that Python the server's own file and network access (CVE-2026-120338, CVSS 10.0). prefab-ui 0.21.0 keeps the read and write flags for bootstrap, scopes `--allow-net` to its CDN, and revokes all three before taking code, which this rule reads as closed.",
+      "incident_references": [],
+      "limitations": "Pattern matching, not data flow. Reads Python and JS/TS source (`.py`, `.js`, `.mjs`, `.cjs`, `.ts`, `.mts`, `.cts`, `.jsx`, `.tsx`, up to 512 KB) for a Deno launch written as `deno`, a path ending in it or `Deno.execPath()` followed by `run`, as an argument list or a command string, and reads its flags up to the first `]` or `)` and at most 1,500 characters on. `deno eval`, a launch built in pieces (a flag list in another variable), a shell script, a Dockerfile and a flag set through `DENO_*` variables are not read. A hand-off is a `runPython`, `runPythonAsync`, `eval` or `new Function` call whose first argument is not a plain string literal (a template with `${...}` counts), in the launching file if it is JS/TS or in a JS/TS script whose name the launching file writes as a string literal and which sits at that path beside it inside the root (32 names per file); whether a caller's text really reaches the call is not traced, and a constant held in a variable counts as caller code. A permission counts as closed when the script calls `Deno.permissions.revoke` with its name written within 300 characters before or 120 after the call, wherever in the script that is, not only before the code runs. `-A` grants read, write, net, run, env, ffi and sys. A scoped flag (`--allow-net=cdn.example`) is not read as open, however wide its scope.",
+      "owasp_agentic_references": [
+        "ASI05"
+      ],
+      "owasp_ast_references": [],
+      "owasp_mcp_references": [
+        "MCP05:2025"
+      ],
+      "remediation": "Start the sandbox's runtime with no permissions, or scoped ones (`--allow-read=<dir>`, `--allow-net=<host>`), and pass `--no-prompt`. If bootstrap needs more, revoke it with `Deno.permissions.revoke({ name })` before reading any code to run, as prefab-ui 0.21.0's runner does. Check the environment the server runs in for unexpected `.pth` files (AAK-STARTUP-HOOK-PTH-001).",
+      "rule_id": "AAK-MCP-CODEEXEC-SANDBOX-002",
+      "sarif_name": "DenoSandboxOpenPermissions",
+      "severity": "high",
+      "title": "A code-execution sandbox starts Deno with open permissions and hands it caller code"
+    },
+    {
+      "adversa_references": [
         "ADV-INJECT-01"
       ],
       "aicm_references": [
@@ -4487,6 +4799,38 @@
       "sarif_name": "CortexClaudeProjectDirExec",
       "severity": "high",
       "title": "neuro-cortex-memory <= 3.17.0 (CLAUDE_PROJECT_DIR treated as a trusted source root)"
+    },
+    {
+      "adversa_references": [
+        "ADV-AUTH-01",
+        "ADV-SUPPLY-08"
+      ],
+      "aicm_references": [
+        "IAM-01",
+        "STA-08"
+      ],
+      "auto_fixable": false,
+      "category": "supply-chain",
+      "cve_references": [
+        "CVE-2026-114123"
+      ],
+      "description": "`d365fo-mcp` (npm; dynamics365ninja/d365fo-mcp-server), an MCP server that answers questions about Dynamics 365 Finance & Operations X++ code and metadata, ships an HTTP mode for Azure App Service. Before 1.11.0 its documented one-click deployment, infrastructure/azuredeploy.json and main.bicep, defaulted the `apiKey` parameter to an empty string and passed it to the App Service's `API_KEY` setting; with `API_KEY` empty, `src/middleware/apiKeyAuth.ts` passed every request through, and `src/index.ts` bound the listener to `0.0.0.0` by default. A deployer who left the optional key blank and added no network restriction or upstream authentication got a public App Service that answered unauthenticated JSON-RPC `tools/call` requests on `/mcp` (CVE-2026-114123, CVSS 3.1 7.5, CWE-306/CWE-1188, GHSA-8764-fh3m-wf7g). `MCP_SERVER_MODE=read-only` did not help: `search`, `get_object_info`, `batch_get_info`, `extension_info`, `security_info`, `find_references` and `find_event_handlers` returned the indexed proprietary X++ source snippets, business logic, extension and event-handler wiring, security-role and privilege structure and labels from PackagesLocalDirectory. 1.11.0 (e70bd051, 384394a8) makes the template's `apiKey` required, defaults a keyless server to loopback, and refuses to start an HTTP listener on a non-loopback address without `API_KEY` unless `ALLOW_UNAUTHENTICATED=true` states that something upstream authenticates.",
+      "incident_references": [],
+      "limitations": "Reports `d365fo-mcp` below 1.11.0 where a package.json, lockfile or MCP config states the version, reporting a range that admits an affected version. It reads the package version a project declares, not the deployment: the `apiKey` default in infrastructure/azuredeploy.json or main.bicep, the App Service's `API_KEY` setting, and whether a network restriction or upstream authentication sits in front of the listener are not read, so a 1.10.1 behind Easy Auth is reported and a 1.11.0 started with `ALLOW_UNAUTHENTICATED=true` is not. `latest` was 1.21.0 on 2026-10-22 and states no version, so an unversioned `npx d365fo-mcp` launch, or a config that runs a global install by its bare name, is not reported, and an MCP config that points at a deployed App Service by URL carries no version and is not read. npm's `@zhound/d365fo-mcp-server` and `@d365portal/d365fo-context-mcp` are other projects, `@iflow-mcp/dynamics365ninja-d365fo-mcp-server` is a republication on its own 1.0.x line, and `d365fo-mcp-server` is the repository's name, not a package; none is matched. PyPI has no `d365fo-mcp`, so a `uvx` launch is not read. A file over 2 MB, or a lockfile over 32 MiB, is not read. A declaration nested more than 64 levels deep in package.json, a TOML manifest or an MCP config (an MCP server more than 62) is still judged, and reported without a line; a lockfile entry keeps its line at any depth.",
+      "owasp_agentic_references": [
+        "ASI03",
+        "ASI04"
+      ],
+      "owasp_ast_references": [],
+      "owasp_mcp_references": [
+        "MCP07:2025",
+        "MCP04:2025"
+      ],
+      "remediation": "Upgrade `d365fo-mcp` to 1.11.0 or later and pin it, and redeploy from the 1.11.0 templates, which require the key. On any version set `API_KEY` on the App Service to a strong random value (`openssl rand -hex 32`), or keep the listener on `HOST=127.0.0.1`, or put App Service Easy Auth, a Private Endpoint or an authenticating proxy in front of it; then check that the public `/mcp` endpoint answers `tools/call` with 401 when no key is sent, and rotate anything the indexed X++ source exposed.",
+      "rule_id": "AAK-MCP-D365FO-CVE-2026-114123-001",
+      "sarif_name": "McpD365foServerKeylessDeploymentDefault",
+      "severity": "high",
+      "title": "D365 F&O MCP Server below 1.11.0: the documented Azure deployment serves /mcp unauthenticated by default"
     },
     {
       "adversa_references": [
@@ -4835,6 +5179,37 @@
     },
     {
       "adversa_references": [
+        "ADV-INJECT-01"
+      ],
+      "aicm_references": [
+        "AIS-07",
+        "STA-08"
+      ],
+      "auto_fixable": false,
+      "category": "supply-chain",
+      "cve_references": [
+        "CVE-2026-117568"
+      ],
+      "description": "mcp-ffmpeg (npm `mcp-ffmpeg`, bitscorp-mcp/mcp-ffmpeg), an MCP server for FFmpeg, builds the commands its `resize-video`, `extract-audio` and `get-video-info` tools run by placing the `videoPath` and `outputDir` parameters inside a double-quoted string handed to `child_process.exec`. A path holding `$()`, backticks or a closing double quote, which an existing file or directory name can carry, breaks out of the string, so a client or a prompt-injected agent that can name a file runs commands as the server's user (CVE-2026-117568, CVSS 7.0, CWE-78). Checked in the published npm packages: the MCP server first ships in 1.0.3 (1.0.0 to 1.0.2 are an Express upload service on fluent-ffmpeg with no MCP tools), and 1.0.5, the newest release (2025-03-13), still builds `ffmpeg -i \"${absVideoPath}\" ...` strings. bitscorp-mcp/mcp-ffmpeg#8 is open and there is no fixed release.",
+      "incident_references": [],
+      "limitations": "Reports an npm reference to `mcp-ffmpeg` from 1.0.3: a package.json or lockfile entry, the package an `npx` launch in an MCP config names, or a config that runs a global install by that bare name. Presence-only from 1.0.3: every later version is reported, a future fixed one included, until the pin gets a floor, and so is a reference that states no version, which installs 1.0.5. 1.0.0 to 1.0.2 had no MCP tools and are not reported. PyPI's `mcp-ffmpeg` (priyanshum143/MCP-FFMPEG) is another project, so a Python requirement and a `uvx` launch are not matched. It reads the name and version, not which tools the client lets the model call. A file over 2 MB, or a lockfile over 32 MiB, is not read. A declaration nested more than 64 levels deep in package.json, a TOML manifest or an MCP config (an MCP server more than 62) is still judged, and reported without a line; a lockfile entry keeps its line at any depth.",
+      "owasp_agentic_references": [
+        "ASI04",
+        "ASI05"
+      ],
+      "owasp_ast_references": [],
+      "owasp_mcp_references": [
+        "MCP05:2025",
+        "MCP04:2025"
+      ],
+      "remediation": "Remove `mcp-ffmpeg` from agents that read untrusted content, or run it as a user that can reach nothing worth taking; there is no fixed release. A fork that passes FFmpeg its arguments as an array (`execFile`, or `spawn` without a shell) closes the injection.",
+      "rule_id": "AAK-MCP-FFMPEG-CVE-2026-117568-001",
+      "sarif_name": "McpFfmpegPathShellInjection",
+      "severity": "high",
+      "title": "mcp-ffmpeg from 1.0.3: video paths reach a shell command string"
+    },
+    {
+      "adversa_references": [
         "ADV-CHAIN-02"
       ],
       "aicm_references": [
@@ -4961,6 +5336,38 @@
       "sarif_name": "Flyto2CoreProviderKeyExfil",
       "severity": "high",
       "title": "Flyto2 Core forwards provider API keys to a caller-controlled base_url, and its HTTP MCP route runs modules unauthenticated (<2.26.6)"
+    },
+    {
+      "adversa_references": [
+        "ADV-SSRF-01"
+      ],
+      "aicm_references": [
+        "IVS-04",
+        "STA-08"
+      ],
+      "auto_fixable": false,
+      "category": "supply-chain",
+      "cve_references": [
+        "CVE-2026-115750",
+        "CVE-2026-115751"
+      ],
+      "description": "`mcp-from-openapi` (npm; agentfront/mcp-from-openapi) builds MCP tools from an OpenAPI spec it fetches with `fromURL()`. Two flaws are fixed in 2.9.0. CVE-2026-115750 (2.5.0 to 2.8.x): `safeFetch()` carries the caller's `Authorization` and `Cookie` headers to another origin when the spec host redirects there, so a spec host or an open redirect can send the request to an attacker's origin and collect bearer tokens or cookies. CVE-2026-115751 (2.2.0 to 2.8.x): a hostname with a trailing dot (`blocked.example.invalid.`) is not matched against `ssrf.blockedHosts`, so a spec URL or redirect target reaches a host the operator blocked (CVSS 3.1 3.7 each, CWE-522/CWE-184, GHSA-ff5q-5r4v-fw4v). 2.9.0 keeps caller headers on their origin and normalizes hostnames before every host-list check.",
+      "incident_references": [],
+      "limitations": "Reports `mcp-from-openapi` from 2.2.0 below 2.9.0 where a package.json, lockfile or MCP config states the version, reporting a range that admits an affected version. 2.2.0 to 2.4.x carry only CVE-2026-115751: `safeFetch()`, and with it the redirect leak, first ships in 2.5.0. `latest` was 2.9.1 on 2026-10-24 and states no version, so an unversioned reference is not reported. Releases below 2.5.0 also fire `AAK-MCP-FROMOPENAPI-CVE-2026-59973-001`. PyPI's `mcp-from-openapi` is another project and is not read. A file over 2 MB, or a lockfile over 32 MiB, is not read. A declaration nested more than 64 levels deep in package.json, a TOML manifest or an MCP config (an MCP server more than 62) is still judged, and reported without a line; a lockfile entry keeps its line at any depth.",
+      "owasp_agentic_references": [
+        "ASI02",
+        "ASI04"
+      ],
+      "owasp_ast_references": [],
+      "owasp_mcp_references": [
+        "MCP01:2025",
+        "MCP04:2025"
+      ],
+      "remediation": "Upgrade `mcp-from-openapi` to 2.9.0 or later and pin it. Until then pass no credentials to spec fetches from hosts you do not control, and list the trailing-dot form of each blocked host in `ssrf.blockedHosts` as well.",
+      "rule_id": "AAK-MCP-FROMOPENAPI-CVE-2026-115750-001",
+      "sarif_name": "McpFromOpenapiRedirectCredentialLeak",
+      "severity": "low",
+      "title": "mcp-from-openapi from 2.2.0 below 2.9.0: spec credentials follow a cross-origin redirect, and a trailing dot slips past blockedHosts"
     },
     {
       "adversa_references": [
@@ -5776,9 +6183,16 @@
         "CVE-2026-105697",
         "CVE-2026-105740",
         "CVE-2026-105741",
-        "CVE-2026-105699"
+        "CVE-2026-105699",
+        "CVE-2026-110186",
+        "CVE-2026-93680",
+        "CVE-2026-110193",
+        "CVE-2026-110192",
+        "CVE-2026-104339",
+        "CVE-2026-107327",
+        "CVE-2026-107329"
       ],
-      "description": "IBM Langflow OSS (`langflow`) from 1.0.0 through 1.10.1 is vulnerable to unauthenticated remote code execution through its MCP stdio launcher: the `DANGEROUS_ENV_VARS` blocklist in `src/lfx/base/mcp/util.py` omits `SHELLOPTS`, `BASHOPTS`, and `PS4`, so an unauthenticated attacker can inject those environment variables into a launched stdio MCP server process and achieve arbitrary code execution (CVE-2026-12940, CVSS 9.8). The same 1.11.0 floor also remediates five further Langflow OSS CVEs disclosed for 1.0.0\u20131.10.3: CVE-2026-17623 (command-field RCE in MCP server configurations), CVE-2026-17626 (host-file read/modify via unfiltered Docker volume-mount and device-mapping args), CVE-2026-8446 (MCP composer OAuth authentication bypass), CVE-2026-9077 (writing arbitrary MCP server configurations into host IDE config files), and CVE-2026-7646 (`resources/read` path traversal reading the JWT signing secret, the SQLite DB, and process env). A seventh, CVE-2026-9186, raised the floor past those: Langflow OSS 1.0.0\u20131.11.2 trusts a spoofed `X-Forwarded-For: 127.0.0.1` header to satisfy its localhost-only guard on MCP-config installation, so a remote authenticated attacker writes arbitrary IDE configuration files (`~/.cursor/mcp.json` and siblings) \u2014 which 1.11.0, 1.11.1 and 1.11.2 are all exposed to. Three further IBM advisories then moved the floor again, all scoped 1.0.0 through 1.11.5: CVE-2026-85025 (CRITICAL 9.8) \u2014 unauthenticated arbitrary code execution and access to other users' chat sessions through publicly shared MCP project endpoints, because public-flow security restrictions and session isolation are both enforced improperly; CVE-2026-78575 (HIGH 8.8) \u2014 a remote authenticated attacker executes arbitrary commands through improperly validated command-line arguments in the MCP stdio server configuration; and CVE-2026-81941 (HIGH 8.8) \u2014 a non-administrative authenticated user runs OS commands at the application's privilege level by building a flow whose MCP Tools component uses a local stdio subprocess transport, bypassing both `LANGFLOW_CUSTOM_COMPONENT_ADMIN_ONLY` and `LANGFLOW_BLOCK_CODE_INTERPRETER_COMPONENTS`. Those are fixed in 1.11.6. CVE-2026-101861 (CVSS 4.1) then moved the floor to 1.12.0: from 1.0.16 through 1.11.6, an authenticated caller's Tool-Mode input options reach `eval()` in `schema.py` when a component is converted into a LangChain tool through `ComponentToolkit.get_tools()`, a custom-component save through the API included, so an option object with a crafted `__repr__` runs code (GHSA-33p4-w7j3-33mw). Treat < 1.12.0 (and unpinned) as exposed; 1.11.6 is exposed to that one alone. Three more advisories sit under that floor: CVE-2026-105697 (CVSS 9.9) and CVE-2026-105740 (CVSS 9.9), the MCP stdio transport running a configured command through `bash -c` with no allowlist (fixed in 1.10.3 and 1.9.0), and CVE-2026-105741 (CVSS 7.1), a spoofed `X-Forwarded-For` on the MCP-config install endpoint from 1.5.0 (fixed in 1.10.3). So does CVE-2026-105699 (CVSS 4.0 7.1): from 1.6.8, a project-scoped MCP connection's `resources/read` returned another user's flow files without checking that the flow belonged to the caller (fixed in 1.9.1). The same code ships as `langflow-base` and `lfx`, which reach 1.12.0 in the same release, so both are read at the same floor. Pre-1.0.0 releases of `langflow` predate the MCP stdio launcher and are not in the affected range.",
+      "description": "IBM Langflow OSS (`langflow`) from 1.0.0 through 1.10.1 is vulnerable to unauthenticated remote code execution through its MCP stdio launcher: the `DANGEROUS_ENV_VARS` blocklist in `src/lfx/base/mcp/util.py` omits `SHELLOPTS`, `BASHOPTS`, and `PS4`, so an unauthenticated attacker can inject those environment variables into a launched stdio MCP server process and achieve arbitrary code execution (CVE-2026-12940, CVSS 9.8). The same 1.11.0 floor also remediates five further Langflow OSS CVEs disclosed for 1.0.0\u20131.10.3: CVE-2026-17623 (command-field RCE in MCP server configurations), CVE-2026-17626 (host-file read/modify via unfiltered Docker volume-mount and device-mapping args), CVE-2026-8446 (MCP composer OAuth authentication bypass), CVE-2026-9077 (writing arbitrary MCP server configurations into host IDE config files), and CVE-2026-7646 (`resources/read` path traversal reading the JWT signing secret, the SQLite DB, and process env). A seventh, CVE-2026-9186, raised the floor past those: Langflow OSS 1.0.0\u20131.11.2 trusts a spoofed `X-Forwarded-For: 127.0.0.1` header to satisfy its localhost-only guard on MCP-config installation, so a remote authenticated attacker writes arbitrary IDE configuration files (`~/.cursor/mcp.json` and siblings) \u2014 which 1.11.0, 1.11.1 and 1.11.2 are all exposed to. Three further IBM advisories then moved the floor again, all scoped 1.0.0 through 1.11.5: CVE-2026-85025 (CRITICAL 9.8) \u2014 unauthenticated arbitrary code execution and access to other users' chat sessions through publicly shared MCP project endpoints, because public-flow security restrictions and session isolation are both enforced improperly; CVE-2026-78575 (HIGH 8.8) \u2014 a remote authenticated attacker executes arbitrary commands through improperly validated command-line arguments in the MCP stdio server configuration; and CVE-2026-81941 (HIGH 8.8) \u2014 a non-administrative authenticated user runs OS commands at the application's privilege level by building a flow whose MCP Tools component uses a local stdio subprocess transport, bypassing both `LANGFLOW_CUSTOM_COMPONENT_ADMIN_ONLY` and `LANGFLOW_BLOCK_CODE_INTERPRETER_COMPONENTS`. Those are fixed in 1.11.6. CVE-2026-101861 (CVSS 4.1) then moved the floor to 1.12.0: from 1.0.16 through 1.11.6, an authenticated caller's Tool-Mode input options reach `eval()` in `schema.py` when a component is converted into a LangChain tool through `ComponentToolkit.get_tools()`, a custom-component save through the API included, so an option object with a crafted `__repr__` runs code (GHSA-33p4-w7j3-33mw). Treat < 1.12.0 (and unpinned) as exposed; 1.11.6 is exposed to that one alone. Three more advisories sit under that floor: CVE-2026-105697 (CVSS 9.9) and CVE-2026-105740 (CVSS 9.9), the MCP stdio transport running a configured command through `bash -c` with no allowlist (fixed in 1.10.3 and 1.9.0), and CVE-2026-105741 (CVSS 7.1), a spoofed `X-Forwarded-For` on the MCP-config install endpoint from 1.5.0 (fixed in 1.10.3). So does CVE-2026-105699 (CVSS 4.0 7.1): from 1.6.8, a project-scoped MCP connection's `resources/read` returned another user's flow files without checking that the flow belonged to the caller (fixed in 1.9.1). IBM's records of 29 Oct 2026 then moved the `langflow` floor to 1.13.0: CVE-2026-110186 (CVSS 9.8, arbitrary code through improper control of code generation), CVE-2026-93680 (CVSS 9.8, a security-restriction bypass through improper authentication), CVE-2026-110193 (CVSS 8.8, a low-privileged user has the Agentic Assistant generate or submit component code that runs) and CVE-2026-110192 (CVSS 6.5, API credentials exposed to an authenticated user) affect 1.0.0 through 1.12.8 and are fixed in 1.13.0; CVE-2026-104339 (CVSS 9.8, OS command injection) affects 1.0.0 through 1.12.3, fixed in 1.12.4, and CVE-2026-107327 and CVE-2026-107329 (CVSS 9.9 each, code execution by an authenticated user) 1.0.0 through 1.12.4, fixed in 1.12.5. Treat `langflow` < 1.13.0 (and unpinned) as exposed. The same code ships as `langflow-base` and `lfx`, which reached 1.12.0 in the same release as `langflow`, so both are read at that floor; no IBM bulletin or CNA record names either package for the October records, so their floors stay at 1.12.0. Pre-1.0.0 releases of `langflow` predate the MCP stdio launcher and are not in the affected range.",
       "incident_references": [],
       "limitations": "Reads `langflow`, `langflow-base` and `lfx` in requirements*.txt at any depth and, at the project root only, in pyproject.toml, Pipfile, .mcp.json, mcp.json, claude_desktop_config.json and the Pipfile.lock, poetry.lock and uv.lock lockfiles, reporting a range that admits an affected version and a reference that states no version. The dependency is not read when it is declared in a sub-directory manifest (`services/api/pyproject.toml`) or in a lockfile format the reader does not parse (`pdm.lock`). A compose file's `langflowai/langflow` image tag is not read. A file over 2 MB, or a lockfile over 32 MiB, is not read. A declaration nested more than 64 levels deep in package.json, a TOML manifest or an MCP config (an MCP server more than 62) is still judged, and reported without a line; a lockfile entry keeps its line at any depth.",
       "owasp_agentic_references": [
@@ -5790,11 +6204,11 @@
         "MCP04:2025",
         "MCP05:2025"
       ],
-      "remediation": "Upgrade `langflow` (or `langflow-base` / `lfx`, where those are installed directly) to >= 1.12.0 and pin it. Do not pass an attacker-influenced environment through to a launched stdio MCP server; blocklist (or, better, allowlist) the process environment, including `SHELLOPTS`/`BASHOPTS`/`PS4`. Derive the client address from the socket, not from a caller-supplied `X-Forwarded-For` header, when gating localhost-only operations.",
+      "remediation": "Upgrade `langflow` to >= 1.13.0 (or `langflow-base` / `lfx`, where those are installed directly, to >= 1.12.0) and pin it. Do not pass an attacker-influenced environment through to a launched stdio MCP server; blocklist (or, better, allowlist) the process environment, including `SHELLOPTS`/`BASHOPTS`/`PS4`. Derive the client address from the socket, not from a caller-supplied `X-Forwarded-For` header, when gating localhost-only operations.",
       "rule_id": "AAK-MCP-LANGFLOW-CVE-2026-12940-001",
       "sarif_name": "LangflowMcpStdioEnvInjectionRce",
       "severity": "critical",
-      "title": "Langflow MCP stdio launcher env-var-injection RCE (1.0.0\u2013<1.12.0)"
+      "title": "Langflow MCP stdio launcher env-var-injection RCE (1.0.0\u2013<1.13.0)"
     },
     {
       "adversa_references": [],
@@ -5831,22 +6245,51 @@
       "auto_fixable": false,
       "category": "supply-chain",
       "cve_references": [
-        "CVE-2026-71433"
+        "CVE-2026-71433",
+        "CVE-2026-115883"
       ],
-      "description": "`langgraph-checkpoint-postgres` and `langgraph-checkpoint-sqlite` before 3.1.1 persist hierarchical namespaces as a dot-joined string and scope reads by matching that string as a simple prefix pattern. A read scoped to one namespace can therefore also match a sibling namespace whose flattened form shares the same leading characters, or a label containing unescaped pattern metacharacters, so an authenticated caller retrieves another tenant's stored items through an ordinary scoped search or `list namespaces` call, with no crafted input (CVE-2026-71433, CVSS 5.3). Fixed in 3.1.1; the Postgres/SQLite sibling of the langgraph-checkpoint-mongodb checkpoint leak. Treat < 3.1.1 (and unpinned) as exposed.",
+      "description": "`langgraph-checkpoint-postgres` and `langgraph-checkpoint-sqlite` persist hierarchical namespaces as a dot-joined string, which twice let one tenant reach another's stored items. Before 3.1.1 a read was scoped by matching that string as a simple prefix pattern, so a read scoped to one namespace also matched a sibling whose flattened form shares the same leading characters, or a label holding unescaped pattern metacharacters, through an ordinary scoped search or `list namespaces` call (CVE-2026-71433, CVSS 5.3; the Postgres/SQLite sibling of the langgraph-checkpoint-mongodb checkpoint leak). Before postgres 3.1.3 and sqlite 3.1.2, `PostgresStore`, `AsyncPostgresStore`, `SqliteStore` and `AsyncSqliteStore` still joined labels with `\".\"`, while the base store validated labels only for `put` and `aput`, so a dotted label passed to `get`, `search`, `delete`, `list_namespaces`, their async forms or a direct `batch` resolved to another tenant's namespace and read, overwrote or deleted its items (CVE-2026-115883, CVSS 4.0 6.0, CWE-20/CWE-863, GHSA-6hmw-9432-67qq). `InMemoryStore` compares namespace tuples and is not affected. Treat a release below either floor, or an unpinned reference, as exposed.",
       "incident_references": [],
-      "limitations": "Reads `langgraph-checkpoint-postgres` and `langgraph-checkpoint-sqlite` in requirements*.txt at any depth and, at the project root only, in pyproject.toml, Pipfile, package.json, .mcp.json, mcp.json, claude_desktop_config.json and the Pipfile.lock, poetry.lock, uv.lock, package-lock.json, pnpm-lock.yaml and yarn.lock lockfiles, taking the lowest version a range allows and reporting a reference that states no version. The dependency is not read when it is declared in a sub-directory manifest (`services/api/pyproject.toml`) or in a lockfile format the reader does not parse (`pdm.lock`). A file over 2 MB, or a lockfile over 32 MiB, is not read. A declaration nested more than 64 levels deep in package.json, a TOML manifest or an MCP config (an MCP server more than 62) is still judged, and reported without a line; a lockfile entry keeps its line at any depth.",
+      "limitations": "Reads `langgraph-checkpoint-postgres` and `langgraph-checkpoint-sqlite` in requirements*.txt at any depth and, at the project root only, in pyproject.toml, Pipfile, package.json, .mcp.json, mcp.json, claude_desktop_config.json and the Pipfile.lock, poetry.lock, uv.lock, package-lock.json, pnpm-lock.yaml and yarn.lock lockfiles, taking the lowest version a range allows and reporting a reference that states no version. Each package is judged against its own floor, 3.1.3 for postgres and 3.1.2 for sqlite, so postgres 3.1.1 and 3.1.2 and sqlite 3.1.1, fixed for CVE-2026-71433, are reported for CVE-2026-115883. The base `langgraph-checkpoint` package, where the shared label check lives, is not read. The dependency is not read when it is declared in a sub-directory manifest (`services/api/pyproject.toml`) or in a lockfile format the reader does not parse (`pdm.lock`). A file over 2 MB, or a lockfile over 32 MiB, is not read. A declaration nested more than 64 levels deep in package.json, a TOML manifest or an MCP config (an MCP server more than 62) is still judged, and reported without a line; a lockfile entry keeps its line at any depth.",
       "owasp_agentic_references": [
         "ASI03",
         "ASI04"
       ],
       "owasp_ast_references": [],
       "owasp_mcp_references": [],
-      "remediation": "Upgrade `langgraph-checkpoint-postgres` / `langgraph-checkpoint-sqlite` to >= 3.1.1 and pin them. Store and match namespaces as structured, escaped segments (not a prefix over a flattened dot-joined string) so a scoped read cannot spill into a sibling namespace.",
+      "remediation": "Upgrade `langgraph-checkpoint-postgres` to 3.1.3 or later and `langgraph-checkpoint-sqlite` to 3.1.2 or later, and pin them; both validate every namespace label before an operation reaches the store. Until then reject a namespace label holding a `.` before it reaches the store, for every operation, not only writes.",
       "rule_id": "AAK-MCP-LANGGRAPH-CHECKPOINT-CVE-2026-71433-001",
       "sarif_name": "LangGraphCheckpointNamespaceLeak",
       "severity": "medium",
-      "title": "LangGraph Postgres/SQLite checkpoint saver cross-tenant namespace leak (< 3.1.1)"
+      "title": "LangGraph Postgres and SQLite stores leak across tenant namespaces (postgres below 3.1.3, sqlite below 3.1.2)"
+    },
+    {
+      "adversa_references": [
+        "ADV-TOKEN-06"
+      ],
+      "aicm_references": [
+        "DSP-17",
+        "STA-08"
+      ],
+      "auto_fixable": false,
+      "category": "supply-chain",
+      "cve_references": [
+        "CVE-2026-115885"
+      ],
+      "description": "The LangGraph CLI (`langgraph-cli` on PyPI; langchain-ai/langgraph) builds and deploys LangGraph agents. From 0.4.15, `langgraph deploy` logs in to the deployment's image registry by passing a temporary push token to `docker login --password-stdin`, and with `--verbose` its subprocess helper prints each command's input, token included. Anyone who can read the CI log or a terminal recording within the token's 12-hour life can pull the deployment's images or push to its image repository; the token alone cannot point the deployment at a pushed image (CVE-2026-115885, CVSS 4.0 4.1, CWE-532, GHSA-8prr-f582-jqq3). Deployments without `--verbose`, and remote image builds, are not affected. 0.4.32 runs that `docker login` with verbose output off.",
+      "incident_references": [],
+      "limitations": "Reports `langgraph-cli` from 0.4.15 below 0.4.32 where a requirements*.txt (at any depth), or at the project root a pyproject.toml, Pipfile, Pipfile.lock, poetry.lock or uv.lock, or an MCP config's `uvx` launch states the version, reporting a range that admits an affected version. It reads the version, not how the CLI is run, so a project that never deploys with `--verbose`, or only builds remotely, is reported too. `latest` was 0.4.38 on 2026-10-24 and states no version, so a bare `langgraph-cli` is not reported, and neither is a CLI installed globally or into a CI image, which no project file names. npm's `@langchain/langgraph-cli` is another package and is not read. A file over 2 MB, or a lockfile over 32 MiB, is not read. A declaration nested more than 64 levels deep in package.json, a TOML manifest or an MCP config (an MCP server more than 62) is still judged, and reported without a line; a lockfile entry keeps its line at any depth.",
+      "owasp_agentic_references": [
+        "ASI03",
+        "ASI04"
+      ],
+      "owasp_ast_references": [],
+      "owasp_mcp_references": [],
+      "remediation": "Upgrade `langgraph-cli` to 0.4.32 or later and pin it. Until then run `langgraph deploy` without `--verbose` in CI, and treat any log from a verbose deploy as holding a live registry credential until 12 hours have passed.",
+      "rule_id": "AAK-MCP-LANGGRAPH-CLI-CVE-2026-115885-001",
+      "sarif_name": "LangGraphCliVerboseDeployToken",
+      "severity": "medium",
+      "title": "LangGraph CLI from 0.4.15 below 0.4.32: `langgraph deploy --verbose` prints the registry push token"
     },
     {
       "adversa_references": [
@@ -5958,6 +6401,38 @@
       "sarif_name": "StainlessLineageProvenance",
       "severity": "info",
       "title": "Stainless-generator provenance / lineage (informational)"
+    },
+    {
+      "adversa_references": [
+        "ADV-SUPPLY-08"
+      ],
+      "aicm_references": [
+        "IAM-01",
+        "STA-08"
+      ],
+      "auto_fixable": false,
+      "category": "supply-chain",
+      "cve_references": [
+        "CVE-2026-114612"
+      ],
+      "description": "LiteLLM (`litellm` on PyPI; BerriAI/litellm), the LLM gateway proxy, sealed UI and CLI session tokens with `encrypt_value_helper`, the helper that seals its secrets at rest. From 1.87.0 the key API seals a key's `callback_vars` metadata with the same helper (#27141), and per the advisory the API-key flow returns what it sealed, so an authenticated `internal_user` can put a forged `proxy_admin` session in that metadata, have the proxy seal it, and present the result as a bearer token: the proxy opens it, trusts the forged administrator, and grants administrative access, including commands run through its MCP stdio endpoint (CVE-2026-114612, CVSS 3.1 9.9, CWE-269/CWE-345/CWE-441, GHSA-7hp6-4w63-5g45). 1.87.0 to 1.90.x accept such a token only when `EXPERIMENTAL_UI_LOGIN` is turned on; from 1.91.0 they accept it unless that variable is explicitly false. 1.100.4, 1.101.3, 1.102.2, 1.103.1 and 1.104.0rc2 seal session tokens through `encrypt_bearer_token`, under a prefix that is also the AES-GCM associated data, so a sealed secret no longer opens as a session.",
+      "incident_references": [],
+      "limitations": "Reports `litellm` from 1.87.0 below 1.100.4, and 1.101.0 to 1.101.2, 1.102.0 to 1.102.1 and 1.103.0, where a requirements*.txt (at any depth), or at the project root a pyproject.toml, Pipfile, Pipfile.lock, poetry.lock or uv.lock, or an MCP config's `uvx` launch states the version, reporting a range that admits an affected version (`litellm>=1.100.4` admits 1.101.0). `latest` was 1.106.2 on 2026-10-23 and states no version, so a bare `litellm` is not reported. It reads the version, not the proxy's settings: 1.87.0 to 1.90.x are reported although they are exposed only with `EXPERIMENTAL_UI_LOGIN` turned on, and so is a later release run with it set to false. A pre-release reads as its release, so 1.104.0rc1 and the 1.104.0 dev releases, which are affected, read as 1.104.0, which is fixed, and are not reported, while 1.101.0rc1, 1.102.0rc1 and 1.103.0rc1 read as their affected releases and are. The `ghcr.io/berriai/litellm` image tag is not read, in a compose file or in an MCP config that starts it with `docker run`, and npm's `litellm` (zya/litellmjs, a JavaScript port on its own 0.x line) is another package and is not read. A file over 2 MB, or a lockfile over 32 MiB, is not read. A declaration nested more than 64 levels deep in package.json, a TOML manifest or an MCP config (an MCP server more than 62) is still judged, and reported without a line; a lockfile entry keeps its line at any depth.",
+      "owasp_agentic_references": [
+        "ASI03",
+        "ASI04",
+        "ASI05"
+      ],
+      "owasp_ast_references": [],
+      "owasp_mcp_references": [
+        "MCP07:2025",
+        "MCP04:2025"
+      ],
+      "remediation": "Upgrade `litellm` to a fixed release and pin it: 1.100.4, 1.101.3, 1.102.2 or 1.103.1 on those release lines, or 1.104.0 or later. A lower bound below 1.103.1 still admits affected releases (`litellm>=1.100.4` admits 1.101.0 to 1.101.2, 1.102.0 to 1.102.1 and 1.103.0), so raise it to 1.103.1 or pin the exact version. Until you can upgrade, set `EXPERIMENTAL_UI_LOGIN=false`, which closes the path but also breaks CLI SSO and Claude Code gateway login.",
+      "rule_id": "AAK-MCP-LITELLM-CVE-2026-114612-001",
+      "sarif_name": "LiteLLMSessionTokenSharedEncryptionContext",
+      "severity": "critical",
+      "title": "LiteLLM from 1.87.0 below its fixed releases: session tokens share the at-rest encryption context, so an internal user can become proxy admin"
     },
     {
       "adversa_references": [
@@ -6105,9 +6580,10 @@
         "CVE-2026-79747",
         "CVE-2026-79748",
         "CVE-2026-79749",
-        "CVE-2026-79750"
+        "CVE-2026-79750",
+        "CVE-2026-120323"
       ],
-      "description": "MCPHub is a self-hosted gateway that fronts many MCP servers behind one endpoint, so a defect in its authorization layer is a defect in every server behind it. Eight advisories landed against it in one batch (CVE-2026-79743 through CVE-2026-79750) and they are carried by one pin because they share a package and the highest fix version covers all of them. The batch is mostly missing authorization on mutating routes: `PUT /api/system-config` performs no authorization check at all (< 1.0.29); the prompt and resource controllers do no role checking on their mutating POST/PUT routes (< 1.0.32); a bearer key scoped to `servers` is accepted against a group route it should not reach (< 1.0.31); and non-admin server ownership scoping is enforced on list views and config edits but not everywhere (< 1.0.30). The remaining three are execution and egress: the `POST /api/servers` and `PUT /api/servers/:name` endpoints create MCP server entries whose command is executed (< 0.12.15, CVSS 9.9), the MCPB file-upload handler trusts the `name` field of a `manifest.json` read out of an uploaded ZIP (< 0.12.13), and the SSRF guard in `src/utils/ssrf.ts` uses a custom `isBlockedIpv6` that does not cover the address forms it needs to, so an authenticated non-admin registers a server pointing at an internal URL and reads the response back through the hub (< 1.0.32). A project pinning `@samanhappy/mcphub` below 1.0.32, or leaving it unpinned, is exposed to at least one of these. Note that PyPI `mcphub` is an unrelated project by a different author on a 0.1.x line; this rule matches the scoped npm name only and will not fire on it.",
+      "description": "MCPHub is a self-hosted gateway that fronts many MCP servers behind one endpoint, so a defect in its authorization layer is a defect in every server behind it. Eight advisories landed against it in one batch (CVE-2026-79743 through CVE-2026-79750) and they are carried by one pin because they share a package and the highest fix version covers all of them. The batch is mostly missing authorization on mutating routes: `PUT /api/system-config` performs no authorization check at all (< 1.0.29); the prompt and resource controllers do no role checking on their mutating POST/PUT routes (< 1.0.32); a bearer key scoped to `servers` is accepted against a group route it should not reach (< 1.0.31); and non-admin server ownership scoping is enforced on list views and config edits but not everywhere (< 1.0.30). The remaining three are execution and egress: the `POST /api/servers` and `PUT /api/servers/:name` endpoints create MCP server entries whose command is executed (< 0.12.15, CVSS 9.9), the MCPB file-upload handler trusts the `name` field of a `manifest.json` read out of an uploaded ZIP (< 0.12.13), and the SSRF guard in `src/utils/ssrf.ts` uses a custom `isBlockedIpv6` that does not cover the address forms it needs to, so an authenticated non-admin registers a server pointing at an internal URL and reads the response back through the hub (< 1.0.32). A ninth, CVE-2026-120323 (VulDB, 2 Nov 2026), leaks the credentials a server entry's `passthroughHeaders` forward: its record lists every 1.0.x through 1.0.45 and 1.1.x through 1.1.7 as affected and names 1.1.8 as the fix, with no 1.0.x fix, so the pin's floor is 1.1.8. A project pinning `@samanhappy/mcphub` below 1.1.8, or leaving it unpinned, is exposed to at least one of these. Note that PyPI `mcphub` is an unrelated project by a different author on a 0.1.x line; this rule matches the scoped npm name only and will not fire on it.",
       "incident_references": [],
       "limitations": "Reads `@samanhappy/mcphub` in requirements*.txt at any depth and, at the project root only, in pyproject.toml, Pipfile, package.json, .mcp.json, mcp.json, claude_desktop_config.json and the Pipfile.lock, poetry.lock, uv.lock, package-lock.json, pnpm-lock.yaml and yarn.lock lockfiles, taking the lowest version a range allows and reporting a reference that states no version. The dependency is not read when it is declared in a sub-directory manifest (`packages/app/package.json`), in `.cursor/mcp.json` or `.vscode/mcp.json`, or in a lockfile format the reader does not parse (a Yarn 2+ `yarn.lock`). A file over 2 MB, or a lockfile over 32 MiB, is not read. A declaration nested more than 64 levels deep in package.json, a TOML manifest or an MCP config (an MCP server more than 62) is still judged, and reported without a line; a lockfile entry keeps its line at any depth.",
       "owasp_agentic_references": [
@@ -6120,11 +6596,11 @@
         "MCP05:2025",
         "MCP07:2025"
       ],
-      "remediation": "Upgrade `@samanhappy/mcphub` to >= 1.0.32 and pin it \u2014 that floor clears all eight. Until you are past it, treat every authenticated MCPHub user as able to reach the mutating admin routes: put the hub behind an authenticating proxy, restrict who may create or update server entries at all (that route reaches command execution), and place the hub on a network segment with no route to internal services so the SSRF guard is not the only control.",
+      "remediation": "Upgrade `@samanhappy/mcphub` to >= 1.1.8 and pin it \u2014 that floor clears all nine. Until you are past it, treat every authenticated MCPHub user as able to reach the mutating admin routes: put the hub behind an authenticating proxy, restrict who may create or update server entries at all (that route reaches command execution), and place the hub on a network segment with no route to internal services so the SSRF guard is not the only control.",
       "rule_id": "AAK-MCP-MCPHUB-CVE-2026-79748-001",
       "sarif_name": "McpHubGatewayAuthorizationBypass",
       "severity": "critical",
-      "title": "@samanhappy/mcphub < 1.0.32 (eight MCP gateway authorization + SSRF defects)"
+      "title": "@samanhappy/mcphub < 1.1.8 (MCP gateway authorization, SSRF and credential-leak defects)"
     },
     {
       "adversa_references": [
@@ -6388,6 +6864,37 @@
       "sarif_name": "NeoMjsFileSystemMcpShellInjection",
       "severity": "high",
       "title": "Neo.mjs file-system MCP server shell injection (no released fix yet)"
+    },
+    {
+      "adversa_references": [
+        "ADV-AUTH-01"
+      ],
+      "aicm_references": [
+        "IAM-01",
+        "STA-08"
+      ],
+      "auto_fixable": false,
+      "category": "supply-chain",
+      "cve_references": [
+        "CVE-2026-57207"
+      ],
+      "description": "NetBox MCP Server (netboxlabs/netbox-mcp-server), a read-only MCP server for NetBox, ships as a source checkout run with `uv run netbox-mcp-server` and as the Docker Hub image `netboxlabs/netbox-mcp-server`; it is on neither npm nor PyPI. Before 1.2.1, with `TRANSPORT=http` its HTTP endpoint had no authentication, so any client that reached the port got an MCP session and all four NetBox tools, reading the inventory with the server's own NetBox token (CVE-2026-57207, CVSS 3.1 5.9, CWE-306/CWE-1059, GHSA-5qg7-j8mr-9477). 1.2.1 adds a bearer token for the HTTP transport (`MCP_AUTH_TOKEN`, or `--mcp-auth-token`), checked in constant time, but leaves it optional: unset, the endpoint is still open.",
+      "incident_references": [],
+      "limitations": "Reads image references only: an `image:` value or any other mention of `netboxlabs/netbox-mcp-server:TAG` in YAML (compose files, Kubernetes manifests, MCP configs), a Helm values mapping of `repository` and `tag`, Dockerfile and Containerfile `FROM`, and `docker run` arguments in `*mcp*.json` and `claude_desktop_config.json`. `1.2.0`, the one release pushed as an image before the fix, is reported, and so is the `0.0.0-test` tag; the floating `1` and `1.2` tags and `latest` were the 1.2.1 digest on 2026-10-24 and are not. A source checkout run with `uv run netbox-mcp-server` states no version and is not read. The rule reads the tag, not the transport or `MCP_AUTH_TOKEN`, so a 1.2.0 container on stdio is reported, and a 1.2.1 or later container serving HTTP with no token, which is still open, is not. `docker.io/netboxlabs/netbox-mcp-server` and mirrors under another registry are not matched, and commented-out lines are skipped.",
+      "owasp_agentic_references": [
+        "ASI03",
+        "ASI04"
+      ],
+      "owasp_ast_references": [],
+      "owasp_mcp_references": [
+        "MCP07:2025",
+        "MCP04:2025"
+      ],
+      "remediation": "Run `netboxlabs/netbox-mcp-server` 1.2.1 or later, pinned by version, and set `MCP_AUTH_TOKEN` to a long random value whenever it serves HTTP, or keep it on the stdio transport. Bind the port to loopback or a private network either way.",
+      "rule_id": "AAK-MCP-NETBOX-CVE-2026-57207-001",
+      "sarif_name": "NetboxMcpServerHttpNoAuth",
+      "severity": "medium",
+      "title": "NetBox MCP Server image below 1.2.1: the HTTP transport serves every NetBox tool without authentication"
     },
     {
       "adversa_references": [
@@ -6745,6 +7252,38 @@
       "sarif_name": "ObotCatalogEntryStaticSecretRead",
       "severity": "medium",
       "title": "Obot image v0.12.0 to v0.26.1: a user granted a catalog entry can read its static secrets"
+    },
+    {
+      "adversa_references": [
+        "ADV-SUPPLY-08"
+      ],
+      "aicm_references": [
+        "IAM-01",
+        "STA-08"
+      ],
+      "auto_fixable": false,
+      "category": "supply-chain",
+      "cve_references": [
+        "CVE-2026-115477",
+        "CVE-2026-115478"
+      ],
+      "description": "obsidian-tc, an MCP server for Obsidian vaults published on npm as `obsidian-tc` and as the image `ghcr.io/the-40-thieves/obsidian-tc`, has two flaws fixed in 1.31.4. CVE-2026-115477 (1.13.0 to 1.31.3): on a Streamable HTTP deployment with `auth.jwtSecret` set and a client that supports form elicitation, a dispatch-gated tool call offered an `inputRequired` confirmation could still complete after the human declined or cancelled it, or sent no answer, because the server took an authentic, call-bound `requestState` echoed on resubmission as proof of approval; tools marked `destructive: true`, or needing a scope with a human-in-the-loop floor, were reachable that way (GHSA-737x-cwfr-5vvc). CVE-2026-115478 (1.0.1 to 1.31.3): `create_entity`, `link_entities`, `rename_entity`, `unlink_entities` and `delete_entity` rewrote memory notes at their computed path without checking who owned the note there, so a hand-written note or another entity's orphan whose name sanitized to the same path lost its body, and several of them changed SQLite before filesystem work that could fail, leaving the memory graph out of step with the notes (GHSA-r3g7-r4hr-m258). Both are CVSS 4.0 7.1. 1.31.4 refuses to touch a note the entity does not own, checks ownership before any write, and no longer takes the echoed state as an answer.",
+      "incident_references": [],
+      "limitations": "Reports `obsidian-tc` from 1.0.1 below 1.31.4 where a package.json, lockfile or MCP config states the version, reporting a range that admits an affected version, and `ghcr.io/the-40-thieves/obsidian-tc` tags below 1.31.4 in compose files, Kubernetes manifests, Helm values, Dockerfiles and MCP configs. CVE-2026-115477 needs 1.13.0 or later, the HTTP transport and `auth.jwtSecret`, none of which the rule reads, so 1.0.1 to 1.12.x and stdio-only installs are reported although only CVE-2026-115478 reaches them. `latest` was 1.33.1 and states no version, so an unpinned `npx -y obsidian-tc` and the image's `latest` are not reported. Releases below 1.3.1 also fire `AAK-MCP-OBSIDIANTC-CVE-2026-77366-001`. The 0.0.1 placeholder is not reported. A file over 2 MB, or a lockfile over 32 MiB, is not read. A declaration nested more than 64 levels deep in package.json, a TOML manifest or an MCP config (an MCP server more than 62) is still judged, and reported without a line; a lockfile entry keeps its line at any depth.",
+      "owasp_agentic_references": [
+        "ASI09",
+        "ASI04"
+      ],
+      "owasp_ast_references": [],
+      "owasp_mcp_references": [
+        "MCP07:2025",
+        "MCP04:2025"
+      ],
+      "remediation": "Upgrade `obsidian-tc` (npm or the GHCR image) to 1.31.4 or later and pin it. Until then serve it over stdio, which uses the CLI `elicit_token` path rather than the HTTP `requestState` round trip, and enable snapshots so `restore_note` can recover a note the memory tools overwrote.",
+      "rule_id": "AAK-MCP-OBSIDIANTC-CVE-2026-115477-001",
+      "sarif_name": "ObsidianTcDeclinedElicitationAndNoteOwnership",
+      "severity": "high",
+      "title": "obsidian-tc from 1.0.1 below 1.31.4: a declined confirmation can still run a destructive call, and memory tools overwrite notes they do not own"
     },
     {
       "adversa_references": [
@@ -7397,6 +7936,37 @@
     },
     {
       "adversa_references": [
+        "ADV-INJECT-01"
+      ],
+      "aicm_references": [
+        "AIS-07",
+        "STA-08"
+      ],
+      "auto_fixable": false,
+      "category": "supply-chain",
+      "cve_references": [
+        "CVE-2026-113378"
+      ],
+      "description": "`mcp-ripgrep` (npm; mcollina/mcp-ripgrep), an MCP server that runs ripgrep for an agent, builds each `rg` command line as a string and runs it through `spawn` with `shell: true`. Its `advanced-search` and `list-files` tools append ` -t ${fileType}` to that string as given, where every pattern, path and glob goes through `escapeShellArg`, so a `fileType` holding `;`, `|` or `$(...)` runs a command as the server's user, and an agent that reads untrusted text can be steered into that call (CVE-2026-113378, CVSS 3.1 5.3, CWE-77/CWE-78, GHSA-qq9r-r4m4-c72m). NVD carries VulDB's note that the flaw's existence is doubted and the maintainer's answer, that the README warns the server runs shell commands. The published code decides it: escaping every sibling argument and not this one is an oversight, and a warning is not a fix. Every published version has it, 0.1.0 to 0.4.0 (2025-04-29), the newest; nothing has been pushed since, and there is no fixed release, so this is a presence-only pin.",
+      "incident_references": [],
+      "limitations": "Reports a reference that names `mcp-ripgrep`: a package.json or lockfile entry, the package an `npx` launch in an MCP config names, or a config that runs a global install by that bare name. Presence-only: every version is reported, a future fixed one included, until the pin gets a floor. It reads the name, not which tools the client lets the model call. npm's `ripgrep-mcp` (shk1447/ripgrep-mcp, another server), `@vscode/ripgrep` and `ripgrep` are other packages and are not matched; PyPI has no `mcp-ripgrep`, so a `uvx` launch is not read; and a source checkout started as `node dist/index.js` names no package and is not read. A file over 2 MB, or a lockfile over 32 MiB, is not read. A declaration nested more than 64 levels deep in package.json, a TOML manifest or an MCP config (an MCP server more than 62) is still judged, and reported without a line; a lockfile entry keeps its line at any depth.",
+      "owasp_agentic_references": [
+        "ASI04",
+        "ASI05"
+      ],
+      "owasp_ast_references": [],
+      "owasp_mcp_references": [
+        "MCP05:2025",
+        "MCP04:2025"
+      ],
+      "remediation": "There is no fixed release. Remove the server from agents that read untrusted content, or replace it with a ripgrep MCP server that passes its arguments to `execFile` or `spawn` as an array with no shell. Until then keep the `advanced-search` and `list-files` tools, whose argument `fileType` is, out of the model's reach in the client's tool allowlist. Pin the first fixed release once it ships.",
+      "rule_id": "AAK-MCP-RIPGREP-CVE-2026-113378-001",
+      "sarif_name": "McpRipgrepFileTypeShellInjection",
+      "severity": "medium",
+      "title": "mcp-ripgrep hands a tool's fileType argument to a shell unescaped (no fixed release)"
+    },
+    {
+      "adversa_references": [
         "ADV-AUTH-01"
       ],
       "aicm_references": [
@@ -7547,7 +8117,8 @@
     },
     {
       "adversa_references": [
-        "ADV-DOS-01"
+        "ADV-DOS-01",
+        "ADV-AUTH-01"
       ],
       "aicm_references": [
         "STA-08",
@@ -7557,24 +8128,30 @@
       "auto_fixable": false,
       "category": "supply-chain",
       "cve_references": [
-        "CVE-2026-59951"
+        "CVE-2026-59951",
+        "CVE-2026-116684",
+        "CVE-2026-116685",
+        "CVE-2026-116686"
       ],
-      "description": "The MCP Python SDK (`mcp` on PyPI) keeps a stateful Streamable HTTP session (FastMCP, `Server.streamable_http_app()`, `StreamableHTTPSessionManager`) with no idle expiry and no limit on how many are open. DELETE, refused opening requests and completed sessions do not reliably discard their entries, and each entry can keep its parsed initialize parameters, so a client that can reach the endpoint grows the server's memory with short ordinary requests until it restarts (CVE-2026-59951, CVSS 4.0 6.9, CWE-770). Checked in the source: the session manager arrives in 1.8.0, 1.29.1 still has only an optional idle timeout that is off by default, and 1.30.0 and 2.2.0 add a 30-minute default idle timeout and a 10,000-session cap. Stateless HTTP, stdio and SSE are not affected.",
+      "description": "The MCP Python SDK (`mcp` on PyPI) carries four flaws that 1.30.0 and, on the 2.x line, 2.2.0 fix. A stateful Streamable HTTP session (FastMCP, `Server.streamable_http_app()`, `StreamableHTTPSessionManager`) is kept with no idle expiry and no limit on how many are open, so a client that can reach the endpoint grows the server's memory with short ordinary requests until it restarts (CVE-2026-59951, CVSS 4.0 6.9, CWE-770; from 1.8.0, where the session manager arrives). The HTTP client transports follow a redirect to another origin and send it the caller's custom credential headers and, for a 307 or 308, the request body (CVE-2026-116685, CVSS 5.9, CWE-200; from 1.8.0). Server-side bearer authentication configured through `AuthSettings` with a `token_verifier` accepts a valid token issued for another resource when the verifier does not check its audience (CVE-2026-116684, CVSS 6.8, CWE-863; from 1.10.0). And a client that validates a tool result against the server's `outputSchema` fetches an unresolved `$ref` from its HTTP, HTTPS or file URL, synchronously and with no timeout, so a server can make the client send blind requests, read local files or stall every session (CVE-2026-116686, CVSS 6.5, CWE-918; from 1.10.0). Checked in the source for CVE-2026-59951: 1.29.1 still has only an optional idle timeout, off by default, and 1.30.0 and 2.2.0 add a 30-minute default and a 10,000-session cap.",
       "incident_references": [],
-      "limitations": "Reads `mcp` from 1.8.0 below 1.30.0, and from 2.0.0 below 2.2.0, where a version is stated, in the same files as the HIGH `mcp` pin: requirements*.txt at any depth and, at the project root only, pyproject.toml, Pipfile, .mcp.json, mcp.json, claude_desktop_config.json and the Pipfile.lock, poetry.lock and uv.lock lockfiles. A bare `mcp` is not reported. It reads versions, not code, so a stateless, stdio-only or SSE-only server, or one that already sets `session_idle_timeout`, is reported too. A file over 2 MB, or a lockfile over 32 MiB, is not read. A declaration nested more than 64 levels deep in package.json, a TOML manifest or an MCP config (an MCP server more than 62) is still judged, and reported without a line; a lockfile entry keeps its line at any depth.",
+      "limitations": "Reads `mcp` from 1.8.0 below 1.30.0, and from 2.0.0 below 2.2.0, where a version is stated, in the same files as the HIGH `mcp` pin: requirements*.txt at any depth and, at the project root only, pyproject.toml, Pipfile, .mcp.json, mcp.json, claude_desktop_config.json and the Pipfile.lock, poetry.lock and uv.lock lockfiles. A bare `mcp` is not reported. One finding stands for all four CVEs, so 1.8.0 to 1.9.x, which carry only CVE-2026-59951 and CVE-2026-116685, are reported with the rest. It reads versions, not code, so a project that uses none of the affected parts (stateful Streamable HTTP, bearer authentication with a `token_verifier`, the HTTP client transports, output-schema validation), or that already sets `session_idle_timeout`, is reported too. A file over 2 MB, or a lockfile over 32 MiB, is not read. A declaration nested more than 64 levels deep in package.json, a TOML manifest or an MCP config (an MCP server more than 62) is still judged, and reported without a line; a lockfile entry keeps its line at any depth.",
       "owasp_agentic_references": [
         "ASI04",
-        "ASI08"
+        "ASI08",
+        "ASI03"
       ],
       "owasp_ast_references": [],
       "owasp_mcp_references": [
-        "MCP04:2025"
+        "MCP04:2025",
+        "MCP07:2025",
+        "MCP01:2025"
       ],
-      "remediation": "Upgrade `mcp` to 1.30.0 or later, or to 2.2.0 or later on the 2.x line, and pin it. Until then, pass `session_idle_timeout` to the session manager, or run the server stateless.",
+      "remediation": "Upgrade `mcp` to 1.30.0 or later, or to 2.2.0 or later on the 2.x line, and pin it. Until then, pass `session_idle_timeout` to the session manager or run the server stateless, give a server's `TokenVerifier` an audience check, and keep custom credential headers off client transports whose endpoint can redirect.",
       "rule_id": "AAK-MCP-SDK-CVE-2026-59951-001",
       "sarif_name": "McpPythonSdkUnboundedSessions",
       "severity": "medium",
-      "title": "MCP Python SDK 1.8.0 to 1.29.x and 2.0.x/2.1.x: stateful Streamable HTTP sessions never expire"
+      "title": "MCP Python SDK 1.8.0 to 1.29.x and 2.0.x/2.1.x: unbounded sessions, credentials sent across redirects, audience-blind bearer auth and fetched schema $refs"
     },
     {
       "adversa_references": [
@@ -7757,6 +8334,38 @@
       "sarif_name": "McpSidecarRebind",
       "severity": "high",
       "title": "Loopback bind used as access control with no Host-header allow-list"
+    },
+    {
+      "adversa_references": [
+        "ADV-INJECT-06"
+      ],
+      "aicm_references": [
+        "AIS-07",
+        "DSP-17",
+        "STA-08"
+      ],
+      "auto_fixable": false,
+      "category": "supply-chain",
+      "cve_references": [
+        "CVE-2026-116168"
+      ],
+      "description": "SiYuan (siyuan-note/siyuan), a self-hosted notes app, serves MCP from its own kernel, and the Docker Hub image `b3log/siyuan` is how it runs on a server. Its `asset` MCP tool has an `upload` action that copies local files into the workspace, and the kernel serves workspace assets back over HTTP at `/assets/`. The action shipped in 3.7.0 reading any absolute path (GHSA-p23f-cm6q-2qp8, fixed in 3.8.1), and 3.8.1 checks paths against a sensitive-path list that leaves out `.env` and other secret files, so through 3.8.6 a client holding an API token could have a `.env` from the server user's home copied into the workspace and read it back (CVE-2026-116168, CVSS 3.1 6.2, CWE-22, GHSA-q768-4j87-gf3w). 3.8.7 adds `.env`, matched as a prefix so `.env.local` too, macOS `Library` and Windows `AppData` to the list.",
+      "incident_references": [],
+      "limitations": "Reads image references only: an `image:` value or any other mention of `b3log/siyuan:TAG` in YAML (compose files, Kubernetes manifests, MCP configs), a Helm values mapping of `repository` and `tag`, Dockerfile and Containerfile `FROM`, and `docker run` arguments in `*mcp*.json` and `claude_desktop_config.json`. Tags from v3.7.0 below v3.8.7 are reported, pre-release tags included (v3.7.0-rc.1 reads as 3.7.0); tags below v3.7.0 predate the MCP asset tool and are not. Every pre-release tag that reads as 3.8.7 or later was pushed after the fix, and `latest` was the v3.8.8 image on 2026-10-26, so an untagged reference is not reported. The rule reads the tag, not whether any MCP client holds a token for the kernel, so a container no agent talks to is reported too. A desktop install, or a kernel built from source, states no version AAK reads, and npm's and PyPI's `siyuan` are other projects. `docker.io/b3log/siyuan` and mirrors under another registry are not matched, and commented-out lines are skipped.",
+      "owasp_agentic_references": [
+        "ASI02",
+        "ASI04"
+      ],
+      "owasp_ast_references": [],
+      "owasp_mcp_references": [
+        "MCP01:2025",
+        "MCP04:2025"
+      ],
+      "remediation": "Run `b3log/siyuan` v3.8.7 or later, pinned by version. 3.8.7 still checks names against a list, so keep credential files out of the home directory of the user SiYuan runs as, and give MCP clients a token only on a workspace they may read in full.",
+      "rule_id": "AAK-MCP-SIYUAN-CVE-2026-116168-001",
+      "sarif_name": "SiyuanMcpAssetUploadSecretFileRead",
+      "severity": "medium",
+      "title": "SiYuan image from 3.7.0 below 3.8.7: the MCP asset tool copies .env files into the workspace, where /assets/ serves them back"
     },
     {
       "adversa_references": [
@@ -8289,11 +8898,45 @@
         "MCP04:2025",
         "MCP05:2025"
       ],
-      "remediation": "Upgrade `@toolbox-sdk/server`, and any toolbox binary or image, to 1.10.0 or later and pin it. Until then, keep symlinks out of the directories the Cloud Storage tools may use.",
+      "remediation": "Upgrade `@toolbox-sdk/server`, and any toolbox binary or image, to 1.10.0 or later and pin it. Until then, on 1.5.0 to 1.9.x, set `allowedLocalRoots` and keep symlinks out of those directories; below 1.5.0 the option does not exist and the tools take any absolute path (CVE-2026-93328, reported as `AAK-MCP-TOOLBOX-CVE-2026-93328-001`), so only the upgrade helps.",
       "rule_id": "AAK-MCP-TOOLBOX-CVE-2026-102242-001",
       "sarif_name": "McpToolboxSymlinkPathTraversal",
       "severity": "high",
       "title": "Google MCP Toolbox 1.2.0 to 1.9.0: local-path checks follow symlinks out of the allowed roots"
+    },
+    {
+      "adversa_references": [
+        "ADV-INJECT-06",
+        "ADV-SCOPE-02"
+      ],
+      "aicm_references": [
+        "AIS-07",
+        "IAM-01",
+        "STA-08"
+      ],
+      "auto_fixable": false,
+      "category": "supply-chain",
+      "cve_references": [
+        "CVE-2026-93328"
+      ],
+      "description": "Google MCP Toolbox for Databases (googleapis/mcp-toolbox), which MCP clients start through the npm launcher `@toolbox-sdk/server`, has a Cloud Storage source from 1.2.0 whose tools take the bucket and the local path from the tool call. Before 1.5.0 nothing limits either: `upload_object` sends any file the server process can read to whatever bucket the call names, `download_object` writes over any file it can write, and `ValidateLocalPath` asks only for an absolute path with no `..` segment. Anyone who can invoke those tools can send host files to a bucket outside the project or overwrite local files (CVE-2026-93328, CVSS 4.0 9.3, CWE-22/CWE-862). 1.5.0 adds the `allowedBuckets` and `allowedLocalRoots` source options (googleapis/mcp-toolbox#3454), and both still allow everything when omitted.",
+      "incident_references": [],
+      "limitations": "Reports an npm reference to `@toolbox-sdk/server` from 1.2.0 below 1.5.0 that states a version: a package.json or lockfile entry, or the launcher in an MCP config, reporting a range that admits an affected version. `latest` was 1.15.0 on 2026-10-27 and states no version, so an unversioned reference is not reported here (`AAK-MCP-TOOLBOX-CVE-2026-102242-001` reports one as unpinned). It reads the version, not the toolbox configuration: a server with no `cloud-storage` source is reported too, and 1.5.0 and later are not reported although a `cloud-storage` source that sets neither option is as exposed. The launcher runs the binary of its own version, so its number is the server's; a toolbox binary started by path, or the container image, states no version AAK reads and is not reported. 1.2.0 to 1.4.x also fire `AAK-MCP-TOOLBOX-CVE-2026-102242-001`. A file over 2 MB, or a lockfile over 32 MiB, is not read. A declaration nested more than 64 levels deep in package.json, a TOML manifest or an MCP config (an MCP server more than 62) is still judged, and reported without a line; a lockfile entry keeps its line at any depth.",
+      "owasp_agentic_references": [
+        "ASI02",
+        "ASI03",
+        "ASI04"
+      ],
+      "owasp_ast_references": [],
+      "owasp_mcp_references": [
+        "MCP04:2025",
+        "MCP07:2025"
+      ],
+      "remediation": "Upgrade `@toolbox-sdk/server`, and any toolbox binary or image, to 1.10.0 or later and pin it (1.5.0 adds the options; 1.10.0 also fixes CVE-2026-102242), then set `allowedBuckets` and `allowedLocalRoots` on every `cloud-storage` source: with either omitted, every bucket, or every absolute path the server process can reach, is allowed.",
+      "rule_id": "AAK-MCP-TOOLBOX-CVE-2026-93328-001",
+      "sarif_name": "McpToolboxCloudStorageUnrestricted",
+      "severity": "critical",
+      "title": "Google MCP Toolbox 1.2.0 to 1.4.x: the Cloud Storage tools take any bucket and any local path"
     },
     {
       "adversa_references": [],
@@ -8465,6 +9108,37 @@
       "title": "MCP TypeScript SDK 1.12.0 to 1.30.1 (2.x client below 2.2.0): the MCP server picks where OAuth credentials go"
     },
     {
+      "adversa_references": [
+        "ADV-SUPPLY-08"
+      ],
+      "aicm_references": [
+        "IAM-01",
+        "STA-08"
+      ],
+      "auto_fixable": false,
+      "category": "supply-chain",
+      "cve_references": [
+        "CVE-2026-111767"
+      ],
+      "description": "The official MCP TypeScript SDK (`@modelcontextprotocol/sdk` on npm) ships an experimental tasks feature: a server that passes a `taskStore` to `McpServer` or `Server` lets clients run requests as tasks and poll, list and cancel them later. From 1.24.0, where the feature and its `InMemoryTaskStore` first ship, until 1.32.0, every method of that store took the caller's session id and ignored it, so all clients sharing one store shared one pool of tasks: a client with a session of its own could list the tasks another session created, read their results and cancel them (CVE-2026-111767, CVSS 3.1 8.6, CWE-639/CWE-862, GHSA-22jm-h49p-29qw). 1.32.0 records the session on `createTask`, answers another session's lookup, result read, status update or cancel as a task not found, pages `listTasks` per session, and checks a request's related task against its session before queueing anything for it (modelcontextprotocol/typescript-sdk#2925). Only an HTTP server that passes `taskStore` is exposed; the 2.x packages (`@modelcontextprotocol/server`, `client` and `core`) are not affected. Experimental tasks are deprecated: the 2026-07-28 specification replaced them with a redesigned extension.",
+      "incident_references": [],
+      "limitations": "Reports `@modelcontextprotocol/sdk` from 1.24.0 up to 1.32.0 where a package.json, lockfile or MCP config states the version, reporting a range that admits an affected version. `latest` was 1.32.1 on 2026-10-21 and states no version, so it is not reported. It reads the version, not whether a server passes `taskStore`, so a server or client on an affected version that never uses experimental tasks is reported without being exposed; the advisory's own test is that `grep -ri taskstore` outside node_modules finds nothing. 1.23.1, published after 1.24.0, ships no task store and is not reported, and the 2.x packages are not read. A file over 2 MB, or a lockfile over 32 MiB, is not read. A declaration nested more than 64 levels deep in package.json, a TOML manifest or an MCP config (an MCP server more than 62) is still judged, and reported without a line; a lockfile entry keeps its line at any depth.",
+      "owasp_agentic_references": [
+        "ASI03",
+        "ASI04"
+      ],
+      "owasp_ast_references": [],
+      "owasp_mcp_references": [
+        "MCP07:2025",
+        "MCP04:2025"
+      ],
+      "remediation": "Upgrade `@modelcontextprotocol/sdk` to 1.32.0 or later and pin it. If you cannot upgrade yet, stop passing `taskStore`, or create one `InMemoryTaskStore` per session. Experimental tasks are deprecated in favour of the 2026-07-28 specification's redesigned extension, so plan to leave them.",
+      "rule_id": "AAK-MCP-TSSDK-CVE-2026-111767-001",
+      "sarif_name": "McpTypeScriptSdkTaskStoreSessionScope",
+      "severity": "high",
+      "title": "MCP TypeScript SDK 1.24.0 to 1.31.0: experimental tasks are not tied to the session that created them"
+    },
+    {
       "adversa_references": [],
       "aicm_references": [],
       "auto_fixable": false,
@@ -8567,6 +9241,37 @@
       "sarif_name": "UfoMobileMcpUnauthenticated",
       "severity": "critical",
       "title": "Microsoft UFO < 3.0.8 (mobile MCP servers on 8020/8021 with no authentication)"
+    },
+    {
+      "adversa_references": [
+        "ADV-SUPPLY-08"
+      ],
+      "aicm_references": [
+        "IVS-04",
+        "STA-08"
+      ],
+      "auto_fixable": false,
+      "category": "supply-chain",
+      "cve_references": [
+        "CVE-2026-58497"
+      ],
+      "description": "Uni-CLI (`@zenalexa/unicli` on npm; olo-dot-io/Uni-CLI) gives people and agents one command interface for websites, browsers, desktop applications, local tools and MCP, and can serve MCP over HTTP on loopback. Before 0.225.2 its legacy JSON-RPC-over-HTTP transport routed requests without checking the browser's `Origin`, so a web page could send a CORS-simple `POST` (`text/plain`) to the local `/mcp` endpoint and drive `tools/call` against the user's Uni-CLI server once that transport was started (CVE-2026-58497, CVSS 4.0 8.6, CWE-346/CWE-352, GHSA-v3f4-w7r7-v3hm). The Streamable HTTP transport already enforced that browser-to-localhost boundary; the legacy path had drifted from it. 0.225.2 routes every request on both transports through one `isOriginAllowed` guard. The flaw is the browser-to-localhost boundary, not Uni-CLI's local-code-execution trust model.",
+      "incident_references": [],
+      "limitations": "Reports `@zenalexa/unicli` from 0.208.0 below 0.225.2 where a package.json, lockfile or MCP config states the version, reporting a range that admits an affected version. 0.207.1, the first release, has no HTTP transport and is not reported. `latest` was 1.3.0 on 2026-10-24 and states no version, so an unversioned reference is not reported. It reads the version, not which transport runs, so a server only ever started over stdio is reported too. npm's `uni-cli` is another project and is not matched. A file over 2 MB, or a lockfile over 32 MiB, is not read. A declaration nested more than 64 levels deep in package.json, a TOML manifest or an MCP config (an MCP server more than 62) is still judged, and reported without a line; a lockfile entry keeps its line at any depth.",
+      "owasp_agentic_references": [
+        "ASI02",
+        "ASI04"
+      ],
+      "owasp_ast_references": [],
+      "owasp_mcp_references": [
+        "MCP07:2025",
+        "MCP04:2025"
+      ],
+      "remediation": "Upgrade `@zenalexa/unicli` to 0.225.2 or later and pin it. Until then serve MCP over stdio, or over the Streamable HTTP transport, which checked `Origin` before 0.225.2 too.",
+      "rule_id": "AAK-MCP-UNICLI-CVE-2026-58497-001",
+      "sarif_name": "UniCliLegacyHttpTransportOrigin",
+      "severity": "high",
+      "title": "Uni-CLI from 0.208.0 below 0.225.2: the legacy HTTP MCP transport answers a web page's request to loopback /mcp"
     },
     {
       "adversa_references": [
@@ -9637,6 +10342,102 @@
     },
     {
       "adversa_references": [
+        "ADV-SUPPLY-04"
+      ],
+      "aicm_references": [
+        "STA-08",
+        "IVS-04"
+      ],
+      "auto_fixable": false,
+      "category": "supply-chain",
+      "cve_references": [
+        "CVE-2026-109618",
+        "CVE-2026-109619",
+        "CVE-2026-111497"
+      ],
+      "description": "A Dockerfile `FROM`, a version file (`.nvmrc`, `.node-version`, `.python-version`, `.tool-versions`), `engines.node`, a managed runtime (`runtime:` in app.yaml or serverless.yml) or an MCP server's launcher path names a runtime release that an advisory in AAK's bundled advisory file covers: below the fixed release on its line, or on a line that got no fixed release. PHP2Shell (CVE-2026-109618 and CVE-2026-109619, remote code execution, fixed in PHP 8.2.35, 8.3.36, 8.4.27 and 8.5.12) and CVE-2026-111497 (an out-of-bounds write in the Brotli decoder Node.js bundles, fixed in 22.23.4, 24.22.1 and 26.12.1 only) are in CISA's Known Exploited Vulnerabilities catalog. No dependency pin sees them: the version that matters is the interpreter an MCP server runs on.",
+      "incident_references": [
+        "CISA-KEV-2026-10-26-PHP",
+        "CISA-KEV-2026-10-27-BROTLI"
+      ],
+      "limitations": "Judges a runtime against `data/runtime_advisories.json`, or a copy at `~/.agent-audit-kit/runtime_advisories.json`, read first; a scan never fetches it. The bundled file names PHP (CVE-2026-109618 from 7.3.0, CVE-2026-109619 from 5.4.0) and Node.js (CVE-2026-111497 from 10.16.0, 11.7.0 on the 11 line) and no Python advisory, so a Python runtime is read and reported by nothing today. A release is judged against the fixed release on its line (the major for Node.js, major.minor for PHP and Python); a line with no fixed release is affected when it is older than the newest fixed line, and a newer line is taken to carry the fix. Reads the `FROM` of Dockerfiles and Containerfiles naming the official `node`, `php` or `python` image (Docker Hub, `mirror.gcr.io/library` or `public.ecr.aws/docker/library`), with global `ARG` defaults filled in; an image pinned by digest alone, a stage built from another, and other publishers' images (`bitnami/node`) are not judged. Reads `.nvmrc` and `.node-version` (first line), `.python-version` and `.tool-versions` (every version listed), `engines.node`, judged at the lowest release the range admits, which says what the package supports and not what runs, `runtime:` in app.yaml and serverless.yml (a line with no fix is reported, a managed line with one is AAK-RUNTIME-ADV-002), and an MCP server's `command` or argument under an nvm, asdf, mise, Volta, fnm, n, pyenv or Homebrew Cellar path that carries a version. Reports one finding per declaration, at the most severe advisory's severity (CRITICAL for a KEV entry). A `FROM` reference that runs past 1,024 characters with its `ARG`s filled in is not judged, and a value repeated on one line is judged once. A file over 1 MB is not read.",
+      "owasp_agentic_references": [
+        "ASI04",
+        "ASI05"
+      ],
+      "owasp_ast_references": [],
+      "owasp_mcp_references": [
+        "MCP04:2025"
+      ],
+      "remediation": "Move to the fixed release on the same line (PHP 8.4.27, Node.js 24.22.1 and so on) or to a supported line that has one, and pin the full version (or the image digest) so the next fix is a visible change. An end-of-life line gets no fix: upgrade the line. Rebuild images after changing the base.",
+      "rule_id": "AAK-RUNTIME-ADV-001",
+      "sarif_name": "RuntimeBelowAdvisoryFix",
+      "severity": "critical",
+      "title": "Declared Node.js, PHP or Python runtime below the fixed release on its line"
+    },
+    {
+      "adversa_references": [
+        "ADV-SUPPLY-02"
+      ],
+      "aicm_references": [
+        "STA-08"
+      ],
+      "auto_fixable": false,
+      "category": "supply-chain",
+      "cve_references": [
+        "CVE-2026-109618",
+        "CVE-2026-109619",
+        "CVE-2026-111497"
+      ],
+      "description": "A Dockerfile `FROM`, a version file or a managed runtime names a Node.js, PHP or Python runtime that an advisory in AAK's bundled advisory file covers without naming a release: a floating tag (`node:24`, `php:8`, `latest`, `lts`), a line number in a version file, or a platform runtime such as App Engine's `nodejs22`, where the platform picks the patch. Whether it already runs the fixed release cannot be told from the file.",
+      "incident_references": [],
+      "limitations": "Reported only for a runtime some advisory in the advisory file covers, and only when the line it names has a fixed release, or it names no line at all (`latest`, `lts`, no tag, a major PHP tag such as `php:8`); a floating name on a line with no fix is AAK-RUNTIME-ADV-001. It reads the same files as AAK-RUNTIME-ADV-001, and an image pinned by digest is not reported.",
+      "owasp_agentic_references": [
+        "ASI04"
+      ],
+      "owasp_ast_references": [],
+      "owasp_mcp_references": [
+        "MCP04:2025"
+      ],
+      "remediation": "Pin a full version (`node:24.22.1-slim`) or an image digest so the release you run is the one you reviewed. For a managed runtime, confirm in the platform's release notes that it runs the fixed release.",
+      "rule_id": "AAK-RUNTIME-ADV-002",
+      "sarif_name": "RuntimeFloatingTagUnjudged",
+      "severity": "info",
+      "title": "Runtime named by a floating tag on a line an advisory fixed"
+    },
+    {
+      "adversa_references": [
+        "ADV-SUPPLY-04"
+      ],
+      "aicm_references": [
+        "STA-08"
+      ],
+      "auto_fixable": false,
+      "category": "supply-chain",
+      "cve_references": [
+        "CVE-2026-111497"
+      ],
+      "description": "A lockfile resolves, or a manifest pins exactly, a library that bundles a codec an advisory in AAK's bundled advisory file covers, below the library's fixed release: Brotli below 1.2.1 or brotlicffi below 1.2.1.0 on PyPI, which bundle the Brotli decoder with CVE-2026-111497 (an out-of-bounds write on a crafted stream, in CISA KEV since 2026-10-27). Google fixed the decoder in 1.0.10, 1.1.1 and 1.2.1; PyPI has only the 1.2 line's fix.",
+      "incident_references": [
+        "CISA-KEV-2026-10-27-BROTLI"
+      ],
+      "limitations": "Reads uv.lock, poetry.lock, Pipfile.lock, package-lock.json, npm-shrinkwrap.json, pnpm-lock.yaml and yarn.lock (v1) through the pin table's lockfile reader, and the exact pins (`==`, `===`) in requirements*.txt, pyproject.toml, Pipfile and package.json, for the libraries the advisory file names: today PyPI's Brotli (affected from 1.0.3, fixed 1.2.1) and brotlicffi (from 1.0.3, fixed 1.2.1.0). A range is not reported, since it does not say which release is installed, and neither is a copy of the decoder vendored in other code or a system library. A lockfile that resolves one release more than once is reported once, at its first entry. A manifest over 2 MB or a lockfile over 32 MiB is not read.",
+      "owasp_agentic_references": [
+        "ASI04",
+        "ASI05"
+      ],
+      "owasp_ast_references": [],
+      "owasp_mcp_references": [
+        "MCP04:2025"
+      ],
+      "remediation": "Upgrade to the fixed release (Brotli 1.2.1, brotlicffi 1.2.1.0) and re-lock. Until then, do not decompress Brotli data from a source you do not trust.",
+      "rule_id": "AAK-RUNTIME-ADV-003",
+      "sarif_name": "BundledCodecBelowFix",
+      "severity": "critical",
+      "title": "Lockfile or exact pin puts a library bundling an affected codec below its fix"
+    },
+    {
+      "adversa_references": [
         "ADV-EXEC-01"
       ],
       "aicm_references": [],
@@ -9698,7 +10499,7 @@
       "cve_references": [],
       "description": "An Anthropic API key (sk-ant-*) was found in a project file. This allows full API access and billing abuse.",
       "incident_references": [],
-      "limitations": "Looks for `sk-ant-` followed by 20 or more key characters in files whose extension is on a fixed list (`.json`, `.yml`, `.toml`, `.py`, `.ts`, `.sh` and similar, plus `.env` files, Dockerfiles and Markdown). In Markdown, a key shaped like a documentation stand-in (one repeated character after the prefix, a run of `x`, or REPLACE, YOUR, EXAMPLE, PLACEHOLDER or CHANGEME in it) is skipped. A key in any other kind of file is not reported: one pasted into a Jupyter notebook (`.ipynb`) is missed, although the same content in a `.json` file is found.",
+      "limitations": "Looks for `sk-ant-` followed by 20 or more key characters in files whose extension is on a fixed list (`.json`, `.yml`, `.toml`, `.py`, `.ts`, `.sh` and similar, plus `.env` files, Dockerfiles and Markdown). In Markdown, a key shaped like a documentation stand-in (one repeated character after the prefix, a run of `x`, or REPLACE, YOUR, EXAMPLE, PLACEHOLDER or CHANGEME in it) is skipped. A key in any other kind of file is not reported: one pasted into a Jupyter notebook (`.ipynb`) is missed, although the same content in a `.json` file is found. A file over 1,000,000 bytes is not read.",
       "owasp_agentic_references": [
         "ASI03"
       ],
@@ -9724,7 +10525,7 @@
       "cve_references": [],
       "description": "An OpenAI API key was found in a project file: a legacy user key (sk-*), or a project (sk-proj-*), service-account (sk-svcacct-*) or admin (sk-admin-*) key.",
       "incident_references": [],
-      "limitations": "Looks for the `sk-` shapes OpenAI issues: legacy user keys and the `sk-proj-`, `sk-svcacct-` and `sk-admin-` families. A key with no such prefix is not recognised, so an Azure OpenAI key, which is 32 hexadecimal characters, is not reported, although an `sk-proj-` key in the same place is. In Markdown, a key shaped like a documentation stand-in (one repeated character after the prefix, a run of `x`, or REPLACE, YOUR, EXAMPLE, PLACEHOLDER or CHANGEME in it) is skipped.",
+      "limitations": "Looks for the `sk-` shapes OpenAI issues: legacy user keys and the `sk-proj-`, `sk-svcacct-` and `sk-admin-` families. A key with no such prefix is not recognised, so an Azure OpenAI key, which is 32 hexadecimal characters, is not reported, although an `sk-proj-` key in the same place is. In Markdown, a key shaped like a documentation stand-in (one repeated character after the prefix, a run of `x`, or REPLACE, YOUR, EXAMPLE, PLACEHOLDER or CHANGEME in it) is skipped. A file over 1,000,000 bytes is not read.",
       "owasp_agentic_references": [
         "ASI03"
       ],
@@ -9750,7 +10551,7 @@
       "cve_references": [],
       "description": "AWS access key ID or secret access key found in a project file.",
       "incident_references": [],
-      "limitations": "Looks for an `AKIA` access key ID and for a secret key written as the lower-case assignment `aws_secret_access_key = <40 characters>`. The same secret as the upper-case environment variable, `AWS_SECRET_ACCESS_KEY=<40 characters>`, is not reported, so a file that holds the secret without its key ID is missed. In Markdown, a key shaped like a documentation stand-in (one repeated character after the prefix, a run of `x`, REPLACE, YOUR, EXAMPLE, PLACEHOLDER or CHANGEME in it, or the AWS IAM User Guide's example key) is skipped.",
+      "limitations": "Looks for an `AKIA` access key ID and for a secret key written as the lower-case assignment `aws_secret_access_key = <40 characters>`. The same secret as the upper-case environment variable, `AWS_SECRET_ACCESS_KEY=<40 characters>`, is not reported, so a file that holds the secret without its key ID is missed. In Markdown, a key shaped like a documentation stand-in (one repeated character after the prefix, a run of `x`, REPLACE, YOUR, EXAMPLE, PLACEHOLDER or CHANGEME in it, or the AWS IAM User Guide's example key) is skipped. A file over 1,000,000 bytes is not read.",
       "owasp_agentic_references": [
         "ASI03"
       ],
@@ -9776,7 +10577,7 @@
       "cve_references": [],
       "description": "A value assigned to a secret-like key has high Shannon entropy, indicating a likely credential or API key.",
       "incident_references": [],
-      "limitations": "Reads `NAME=value` pairs and quoted values (`\"NAME\": \"value\"`) whose name contains SECRET, PASSWORD, TOKEN, KEY or CREDENTIAL, and reports a value of 16 or more characters whose Shannon entropy exceeds 4.5 bits per character. A secret drawn from a small alphabet cannot reach that: a 64-digit hexadecimal secret, such as the output of `openssl rand -hex 32`, tops out at 4 bits per character and is never reported. An unquoted YAML value (`SECRET_KEY: value` in a compose file) is not read, and neither is Markdown: read, they gave 23% and at most 56% precision on 1,527 YAML and 1,909 Markdown files from public MCP repositories.",
+      "limitations": "Reads `NAME=value` pairs and quoted values (`\"NAME\": \"value\"`) whose name contains SECRET, PASSWORD, TOKEN, KEY or CREDENTIAL, and reports a value of 16 or more characters whose Shannon entropy exceeds 4.5 bits per character. A secret drawn from a small alphabet cannot reach that: a 64-digit hexadecimal secret, such as the output of `openssl rand -hex 32`, tops out at 4 bits per character and is never reported. An unquoted YAML value (`SECRET_KEY: value` in a compose file) is not read, and neither is Markdown: read, they gave 23% and at most 56% precision on 1,527 YAML and 1,909 Markdown files from public MCP repositories. A file over 1,000,000 bytes is not read.",
       "owasp_agentic_references": [
         "ASI03"
       ],
@@ -9854,7 +10655,7 @@
       "cve_references": [],
       "description": "Hardcoded secret values found in the env blocks of MCP servers, under `mcpServers` or VS Code's `servers`, in JSON files other than .mcp.json.",
       "incident_references": [],
-      "limitations": "Reads the `env` block of each server under a top-level `mcpServers` key, or VS Code's `servers`, in JSON files other than `.mcp.json`, and reports a hard-coded value whose variable name contains KEY, SECRET, TOKEN, PASSWORD, CREDENTIAL, ANTHROPIC, OPENAI or AWS_. The name alone decides: a credential under any other name, such as a `DATABASE_URL` that carries `user:password@host`, is not reported.",
+      "limitations": "Reads the `env` block of each server under a top-level `mcpServers` key, or VS Code's `servers`, in JSON files other than `.mcp.json`, and reports a hard-coded value whose variable name contains KEY, SECRET, TOKEN, PASSWORD, CREDENTIAL, ANTHROPIC, OPENAI or AWS_. The name alone decides: a credential under any other name, such as a `DATABASE_URL` that carries `user:password@host`, is not reported. A file over 1,000,000 bytes is not read.",
       "owasp_agentic_references": [
         "ASI03"
       ],
@@ -9880,7 +10681,7 @@
       "cve_references": [],
       "description": "A GitHub or GitLab personal access token (ghp_*, github_pat_*, glpat-*) was found in a project file.",
       "incident_references": [],
-      "limitations": "Reads GitHub personal access tokens (`ghp_` classic, `github_pat_` fine-grained) and GitLab `glpat-` tokens. GitHub's other token types are not reported: OAuth (`gho_`), GitHub App user (`ghu_`) and installation (`ghs_`), and refresh (`ghr_`) tokens. In Markdown, a key shaped like a documentation stand-in (one repeated character after the prefix, a run of `x`, or REPLACE, YOUR, EXAMPLE, PLACEHOLDER or CHANGEME in it) is skipped.",
+      "limitations": "Reads GitHub personal access tokens (`ghp_` classic, `github_pat_` fine-grained) and GitLab `glpat-` tokens. GitHub's other token types are not reported: OAuth (`gho_`), GitHub App user (`ghu_`) and installation (`ghs_`), and refresh (`ghr_`) tokens. In Markdown, a key shaped like a documentation stand-in (one repeated character after the prefix, a run of `x`, or REPLACE, YOUR, EXAMPLE, PLACEHOLDER or CHANGEME in it) is skipped. A file over 1,000,000 bytes is not read.",
       "owasp_agentic_references": [
         "ASI03"
       ],
@@ -9906,7 +10707,7 @@
       "cve_references": [],
       "description": "A Google Cloud service account key JSON file was found in the project.",
       "incident_references": [],
-      "limitations": "Reports a file with a `.json` extension, in any case, that contains `\"type\": \"service_account\"`. The same key saved under another extension, such as `.yml`, is not reported.",
+      "limitations": "Reports a file with a `.json` extension, in any case, that contains `\"type\": \"service_account\"`. The same key saved under another extension, such as `.yml`, is not reported. A file over 1,000,000 bytes is not read.",
       "owasp_agentic_references": [
         "ASI03"
       ],
@@ -10468,6 +11269,122 @@
       "sarif_name": "UrlAllowListToctou",
       "severity": "medium",
       "title": "Validate-then-fetch DNS-rebind / TOCTOU on URL allow-list"
+    },
+    {
+      "adversa_references": [
+        "ADV-SUPPLY-05"
+      ],
+      "aicm_references": [
+        "STA-08",
+        "IVS-04"
+      ],
+      "auto_fixable": false,
+      "category": "supply-chain",
+      "cve_references": [],
+      "description": "A Dockerfile or Containerfile copies a `.pth`, `sitecustomize.py` or `usercustomize.py` into the image, writes one in a RUN step, or sets `ENV PYTHONSTARTUP` in an image that runs an MCP server. A `.pth` or a `sitecustomize` in the image's site-packages runs at every Python start in every container started from it, and `PYTHONSTARTUP` runs a file at the start of every interactive Python session in it. A build step that places one is either a deliberate hook, which belongs in the application's own start-up code, or how a compromised build slips code into every process.",
+      "incident_references": [
+        "BERRIAI-LITELLM-2026-10-21"
+      ],
+      "limitations": "Reads every file named `Dockerfile`, `Containerfile`, `Dockerfile.*`, `Containerfile.*` or `*.dockerfile` outside AAK's skip directories, joining continuation lines and skipping heredoc bodies; a parser directive that changes the escape character is not read. Reports a COPY or ADD whose source or destination names a `.pth`, `sitecustomize.py` or `usercustomize.py` (or a `.pyc` of either), or a `.start` file under a site-packages or dist-packages path; a RUN that writes one through a redirect, `tee`, `cp`, `mv`, `install` or `ln`; and `ENV PYTHONSTARTUP` when the image looks like it runs an MCP server: an `mcp` word, `fastmcp` or `modelcontextprotocol` in a CMD, ENTRYPOINT, RUN or LABEL, an MCP SDK declared in a manifest beside the Dockerfile, or an `.mcp.json` there. `PYTHONSTARTUP` takes effect only in interactive sessions. A package that `pip install` or `npm install` installs with such a file, a directory copy that contains one (unless the directory is on `PYTHONPATH`, see AAK-STARTUP-HOOK-SITECUSTOMIZE-001), a file written by a script the RUN calls, and a path built from `ARG` or `$VAR` are not seen. A Dockerfile over 1 MB is not read.",
+      "owasp_agentic_references": [
+        "ASI04",
+        "ASI05"
+      ],
+      "owasp_ast_references": [],
+      "owasp_mcp_references": [
+        "MCP04:2025"
+      ],
+      "remediation": "Remove the step, or move what the hook does into the application's entry point where it is visible and tested. If the image must carry the hook, keep its source in the repository, pin its content and review changes to it like code.",
+      "rule_id": "AAK-STARTUP-HOOK-DOCKERFILE-001",
+      "sarif_name": "DockerfilePythonStartupHook",
+      "severity": "medium",
+      "title": "Dockerfile adds a Python startup hook, or sets PYTHONSTARTUP in an MCP server image"
+    },
+    {
+      "adversa_references": [
+        "ADV-SUPPLY-05"
+      ],
+      "aicm_references": [
+        "STA-08"
+      ],
+      "auto_fixable": false,
+      "category": "supply-chain",
+      "cve_references": [],
+      "description": "A package-lock.json or npm-shrinkwrap.json entry is marked `hasInstallScript: true` in a project that runs an MCP server. `npm install` and `npm ci` run that package's preinstall, install or postinstall script on the machine that installs it, with the installing user's access, before any code of the server runs. That is the npm counterpart of a Python startup hook and the usual way a malicious npm release runs.",
+      "incident_references": [],
+      "limitations": "Reads `package-lock.json` and `npm-shrinkwrap.json` of lockfileVersion 2 or 3 outside AAK's skip directories, and reports each `packages` entry marked `hasInstallScript: true`, the project's own root entry excepted, when the project runs an MCP server: the lockfile resolves `@modelcontextprotocol/sdk`, `@anthropic-ai/mcp` or `@anthropic-ai/claude-agent-sdk`, a manifest beside it declares an MCP SDK, or an `.mcp.json` beside it declares a server. A lockfile whose directory has an `.npmrc` setting `ignore-scripts=true` is not reported. It reads the flag, not the script, so what a script does is not judged, and an `--ignore-scripts` passed on a command line, or an `.npmrc` elsewhere, is not seen. lockfileVersion 1, yarn.lock and pnpm-lock.yaml record no install scripts and are not read; `node_modules` is never walked and npm is never run. A lockfile over 32 MiB is not read.",
+      "owasp_agentic_references": [
+        "ASI04"
+      ],
+      "owasp_ast_references": [],
+      "owasp_mcp_references": [
+        "MCP04:2025"
+      ],
+      "remediation": "Check that each listed package needs its install script (native builds such as esbuild and sharp do). Install with `npm ci --ignore-scripts`, or set `ignore-scripts=true` in the project's `.npmrc`, and run the scripts you need explicitly (`npm rebuild <pkg>`), so a new dependency cannot run code on install unseen.",
+      "rule_id": "AAK-STARTUP-HOOK-NPM-INSTALL-001",
+      "sarif_name": "NpmInstallScriptInMcpProject",
+      "severity": "low",
+      "title": "npm lockfile entry with an install script in an MCP project"
+    },
+    {
+      "adversa_references": [
+        "ADV-SUPPLY-05"
+      ],
+      "aicm_references": [
+        "STA-08",
+        "IVS-04"
+      ],
+      "auto_fixable": false,
+      "category": "supply-chain",
+      "cve_references": [],
+      "description": "A `.pth` file at the top of a site-packages or dist-packages directory has a line that starts with `import`, or a PEP 829 `.start` file names an entry point. Python runs that line, or calls that entry point, at every interpreter start, before any script and without the package being imported, so `pip`, a test run and an MCP server started from that environment all run it. litellm 1.107.0 (21 Oct 2026, OSV MAL-2026-2144) shipped `cook.pth` containing `import cook` and stole credentials that way. setuptools, virtualenv, uv and coverage write such files too; the ones AAK built and read are allowlisted by name and content together.",
+      "incident_references": [
+        "BERRIAI-LITELLM-2026-10-21"
+      ],
+      "limitations": "Reads the `.pth` and `.start` files at the top of each directory named `site-packages` or `dist-packages` up to 12 directories below the scan root, the root itself included, and looks inside `.venv`, `venv`, `env`, `.tox` and `vendor` to find them; it follows no symlinked directory and skips `node_modules`, `.git` and the other build and cache directories AAK skips. A `.pth` line is reported when it starts with `import ` or `import<TAB>` after optional whitespace: Python 3.15 strips the line first, while 3.9 to 3.14 test it as written, so an indented line runs only on 3.15 and later. Lines are split as `str.splitlines()` splits them and a leading BOM is dropped. A line that only names a directory is not reported, although Python puts that directory on `sys.path`. Every line of a `.start` file that is not blank or a comment is reported as an entry point. A file named in `data/startup_hook_allowlist.json` with the same normalised content is not reported: setuptools' `distutils-precedence.pth`, the `_virtualenv.pth` that virtualenv and uv write, coverage's `a1_coverage.pth` (7.13.0 to 7.17.0) and the finder of one placeholder editable install, so a setuptools editable install of any other project is reported. The module a reported line imports is not read. An image is read only as an unpacked root filesystem given as the scan path, never from a registry. A startup file that is a symlink is read where the image reads it: an absolute target is taken under the scan root, and a link that still leads outside the root is not read. A startup file over 1 MB is refused, which marks the scan incomplete, and a FIFO or a device in its place is skipped.",
+      "owasp_agentic_references": [
+        "ASI04",
+        "ASI05"
+      ],
+      "owasp_ast_references": [],
+      "owasp_mcp_references": [
+        "MCP04:2025"
+      ],
+      "remediation": "Open the file and the module it imports. If no package you installed on purpose wrote it (its dist-info RECORD lists the files a package installed), delete it, its module and any `__pycache__` copy, rebuild the environment or image from a pinned, known-good lockfile, and rotate every credential the environment could reach. If it is a hook you trust, exclude its path with `--ignore-paths`.",
+      "rule_id": "AAK-STARTUP-HOOK-PTH-001",
+      "sarif_name": "PythonStartupHookPth",
+      "severity": "high",
+      "title": "Startup code in a site-packages .pth or .start file"
+    },
+    {
+      "adversa_references": [
+        "ADV-SUPPLY-05"
+      ],
+      "aicm_references": [
+        "STA-08",
+        "IVS-04"
+      ],
+      "auto_fixable": false,
+      "category": "supply-chain",
+      "cve_references": [],
+      "description": "A `sitecustomize` or `usercustomize` module sits in a site-packages or dist-packages directory, or in a directory a Dockerfile puts on `PYTHONPATH`. Python's `site` module imports both at every interpreter start, before any script runs, so whatever the module does runs in every Python process of that environment or image. litellm 1.107.0 (21 Oct 2026, OSV MAL-2026-2144) installed a `sitecustomize.py` that started a daemon fetching and running remote code every hour.",
+      "incident_references": [
+        "BERRIAI-LITELLM-2026-10-21"
+      ],
+      "limitations": "Reports `sitecustomize` and `usercustomize` as a `.py` or a sourceless `.pyc`, an extension module (`.so`, `.pyd`), a package with an `__init__.py` or `__init__.pyc`, or a compiled copy in `__pycache__` (which Python loads only beside its source, so it shows the module was there), at the top of a site-packages or dist-packages directory that AAK-STARTUP-HOOK-PTH-001's walk reaches, or in a directory a Dockerfile's `ENV PYTHONPATH` names, read as a path under the scan root (an unpacked image) or as a build-context directory that a COPY or ADD puts at that path, the context taken to be the Dockerfile's own directory. A `PYTHONPATH` set anywhere else (an image's config, a compose file, a CI job, a shell) is not read, and neither is the standard library directory, where Debian and Ubuntu ship a `sitecustomize.py` of their own. A file named in `data/startup_hook_allowlist.json` with the same normalised content is not reported; none is listed today. A `PYTHONPATH` directory is read only where it resolves inside the scan root, so a path with `..` past the root, or through a symlink out of it, is not read, and a module that is a symlink is read as AAK-STARTUP-HOOK-PTH-001 reads a startup file. A file over 1 MB is refused, which marks the scan incomplete, and a FIFO or a device in its place is skipped.",
+      "owasp_agentic_references": [
+        "ASI04",
+        "ASI05"
+      ],
+      "owasp_ast_references": [],
+      "owasp_mcp_references": [
+        "MCP04:2025"
+      ],
+      "remediation": "Read the module. If no package you installed on purpose, and no file of your own, put it there, delete it and any `__pycache__` copy, rebuild the environment or image from a pinned, known-good lockfile, and rotate every credential it could reach. A hook of your own belongs in your application's start-up code, where it is visible and tested; if you keep this one, exclude its path with `--ignore-paths`.",
+      "rule_id": "AAK-STARTUP-HOOK-SITECUSTOMIZE-001",
+      "sarif_name": "PythonSitecustomizeHook",
+      "severity": "high",
+      "title": "sitecustomize or usercustomize module where Python imports it at every start"
     },
     {
       "adversa_references": [],
@@ -11348,9 +12265,9 @@
       "auto_fixable": true,
       "category": "trust-boundary",
       "cve_references": [],
-      "description": "No enabledMcpjsonServers allowlist is configured, meaning server approval relies entirely on user prompts.",
+      "description": "The project's settings file has no `enabledMcpjsonServers` key while a root `.mcp.json` declares servers, so which of them Claude Code may start is decided by whoever answers the prompt rather than by the project.",
       "incident_references": [],
-      "limitations": "Fires only when a settings file at the root of the scanned directory sits beside a root `.mcp.json`. A package directory that carries its own `.claude/settings.json` and `.mcp.json` (`packages/web/`) is not looked at.",
+      "limitations": "Fires only when a settings file at the root of the scanned directory sits beside a root `.mcp.json`. A package directory that carries its own `.claude/settings.json` and `.mcp.json` (`packages/web/`) is not looked at. A present `enabledMcpjsonServers` key is the allowlist, an empty list included: `[]` approves no server, the strictest allowlist there is, and it is what `aak fix` writes, so the fix clears the finding. Through 0.6.24 an empty list fired too, and `aak fix` reported a change that cleared nothing. It reads the key, not the value: a list of names is the allowlist whether or not `.mcp.json` declares them.",
       "owasp_agentic_references": [
         "ASI04"
       ],

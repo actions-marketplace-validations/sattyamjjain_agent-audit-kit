@@ -160,6 +160,28 @@ def format_results(
 
     lines.append(f"\n{DIM}Files scanned: {result.files_scanned}{RESET}")
     lines.append(f"{DIM}Rules evaluated: {result.rules_evaluated}{RESET}")
+    feed = result.data_feeds.get("maliciousReleases")
+    if feed:
+        shown = (
+            f"{feed.get('origin', '?')} copy, generated {feed.get('generatedAt') or 'at an unknown time'}"
+            if "error" not in feed else f"not read ({feed['error']})"
+        )
+        lines.append(f"{DIM}Malicious-release feed: {shown}{RESET}")
+    known = result.data_feeds.get("knownVulnerabilities")
+    if known:
+        shown = (
+            f"{known.get('origin', '?')} copy, generated {known.get('generatedAt') or 'at an unknown time'}"
+            + (f", {known['severityFloor']} and CRITICAL advisories only" if known.get("severityFloor") else "")
+            + (f", NVD CNA records modified {known['nvdWindow']}" if known.get("nvdWindow") else "")
+            if "error" not in known else f"not read ({known['error']})"
+        )
+        lines.append(f"{DIM}Advisory feed: {shown}{RESET}")
+    advisories = result.data_feeds.get("runtimeAdvisories")
+    if advisories and "error" not in advisories:
+        lines.append(
+            f"{DIM}Runtime advisories: {advisories.get('origin', '?')} copy, generated "
+            f"{advisories.get('generatedAt') or 'at an unknown time'}{RESET}"
+        )
     lines.append(f"{DIM}Time: {result.scan_duration_ms:.0f}ms{RESET}")
     lines.append(f"\n{DIM}\U0001f4a1 GitHub Action: uses: sattyamjjain/agent-audit-kit@v1{RESET}\n{DIM}\U0001f4a1 CI mode: agent-audit-kit scan . --ci{RESET}\n")
     return "\n".join(lines)

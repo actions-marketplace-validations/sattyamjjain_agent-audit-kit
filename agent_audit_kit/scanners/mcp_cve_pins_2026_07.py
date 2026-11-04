@@ -42,7 +42,8 @@ available) before shipping:
   - @langchain/langgraph-checkpoint-mongodb >= 1.3.1 (CVE-2026-48121)
   - awslabs.documentdb-mcp-server   >= 1.0.12  (CVE-2026-18954)
   - frontmcp                        >= 1.5.7   (CVE-2026-67531)
-  - langgraph-checkpoint-postgres/sqlite >= 3.1.1 (CVE-2026-71433)
+  - langgraph-checkpoint-postgres >= 3.1.3, langgraph-checkpoint-sqlite >= 3.1.2
+    (CVE-2026-71433, CVE-2026-115883; one rule, a row per package)
   - meta-ads-mcp                    >= 1.0.109 (CVE-2026-48039)
   - verygoodplugins/whatsapp-mcp   >= 0.2.1   (CVE-2026-46555; read from a reference to
     the GitHub repository that names a release, `_REPO_PINS`. npm's and PyPI's
@@ -90,12 +91,15 @@ available) before shipping:
     but CVE-2026-88938 is scoped "through 0.33.0" and its advisory names no
     patched version; npm's 0.34.0 and 0.34.1 are not confirmed fixed, so there
     is no floor to pin to)
-  - langflow                        >= 1.12.0  (CVE-2026-9186 raised the 1.11.0
+  - langflow                        >= 1.13.0  (CVE-2026-9186 raised the 1.11.0
     floor of CVE-2026-12940; CVE-2026-85025 / CVE-2026-78575 / CVE-2026-81941,
     all scoped 1.0.0–1.11.5, then raised it again, and CVE-2026-101861, eval() on
     Tool-Mode input options up to 1.11.6, raised it to 1.12.0 — same package, same rule.
-    CVE-2026-105697 / -105740 / -105741 sit under that floor. The same rule reads
-    `langflow-base` and `lfx` at 1.12.0, the release all three reached together)
+    CVE-2026-105697 / -105740 / -105741 sit under that floor. IBM's CVE-2026-110186,
+    -93680, -110193 and -110192, 1.0.0 through 1.12.8 and fixed in 1.13.0, raised
+    it to 1.13.0, with CVE-2026-104339 (fixed 1.12.4) and CVE-2026-107327 / -107329
+    (fixed 1.12.5) under it. The same rule reads `langflow-base` and `lfx` at
+    1.12.0, the release all three reached together; no record names them since)
   - awslabs.postgres-mcp-server     >= 1.1.7   (CVE-2026-85787 + CVE-2026-87911;
     the second is OS command injection through a crafted COPY-to-PROGRAM
     statement, CRITICAL 9.6, and the floor was already correct — only the rule's
@@ -204,7 +208,11 @@ available) before shipping:
     version is the Junie build, and 2548.5 is 26.8.3. A stated version is required)
   - mcp (MCP Python SDK)            1.8.0 <= v < 1.30.0, and 2.0.x/2.1.x below 2.2.0
     (CVE-2026-59951; stateful Streamable HTTP sessions never expire. MEDIUM, its own
-    rule beside the HIGH pin on the same name)
+    rule beside the HIGH pin on the same name. CVE-2026-116684, CVE-2026-116685 and
+    CVE-2026-116686 joined it on 2026-10-28: a bearer token issued for another
+    resource accepted, credentials sent across a cross-origin redirect, and a
+    server-chosen `$ref` fetched. Each falls inside the range and the same releases
+    fix all four)
   - network-ai                     5.14.0 <= v < 5.15.2  (CVE-2026-109331 and
     CVE-2026-73614; ClaudeHookBridge matches deny patterns against one truncated
     field. A stated version is required)
@@ -229,6 +237,60 @@ available) before shipping:
   - langchain-chatchat             presence-only  (CVE-2026-75128; `POST /tools/call`
     runs the always-registered shell tool for an unauthenticated caller, in every
     release from 0.3.0 to 0.3.1.3, the newest; the images are image-pin rows)
+  - @modelcontextprotocol/sdk      1.24.0 <= v < 1.32.0  (CVE-2026-111767; the
+    experimental tasks feature kept every task of one InMemoryTaskStore in one pool,
+    so a client with a session of its own could list, read and cancel another
+    session's tasks. Its own HIGH rule beside the 1.31.0 OAuth pin above, since
+    1.31.0 is fixed for that bug and affected by this one. A stated version is
+    required, and only a server that configures the SDK's task store is exposed)
+  - mcp-ripgrep                    presence-only  (CVE-2026-113378; the advanced-search
+    and list-files tools append `-t ${fileType}` unescaped to a command line run
+    through a shell. Every release, 0.1.0 to 0.4.0, the newest, has it, and there
+    is no fixed release)
+  - d365fo-mcp                     < 1.11.0  (CVE-2026-114123; the documented Azure
+    one-click deployment left the apiKey parameter empty, the middleware passed
+    every request through with API_KEY empty, and the HTTP listener bound 0.0.0.0,
+    so a public App Service answered unauthenticated tools/call on /mcp. 1.11.0
+    requires the key and refuses a keyless listener off loopback. A stated version
+    is required; the deployment template and the App Service setting are not read)
+  - litellm                        1.87.0 <= v < 1.100.4, and 1.101.0-1.101.2,
+    1.102.0-1.102.1 and 1.103.0  (CVE-2026-114612; session tokens were sealed with
+    the at-rest secrets helper, and the key API seals a key's callback_vars with it,
+    so an internal user could have an administrator session minted and replay it.
+    Its own CRITICAL rule above the 1.84.0 row; PyPI only, a stated version
+    required; 1.104.0rc1 reads as 1.104.0, which is fixed)
+  - @zenalexa/unicli               0.208.0 <= v < 0.225.2  (CVE-2026-58497; the legacy
+    JSON-RPC-over-HTTP MCP transport took a web page's cross-origin POST to loopback
+    /mcp with no Origin check. 0.207.1 has no HTTP transport; a stated version is
+    required)
+  - obsidian-tc                    1.0.1 <= v < 1.31.4  (CVE-2026-115477, CVE-2026-115478;
+    a declined human-in-the-loop confirmation could still complete over HTTP, and the
+    memory tools overwrote notes they did not own. Its own HIGH rule beside the
+    CRITICAL 1.3.1 row, with an image row in container_image_pins)
+  - mcp-from-openapi               2.2.0 <= v < 2.9.0  (CVE-2026-115750, CVE-2026-115751;
+    spec fetches carried Authorization and Cookie across a cross-origin redirect, and
+    a trailing dot slipped past ssrf.blockedHosts. Its own LOW rule beside the 2.5.0
+    row)
+  - langgraph-cli                  0.4.15 <= v < 0.4.32  (CVE-2026-115885; `langgraph
+    deploy --verbose` printed the registry push token it hands to docker login)
+  - @toolbox-sdk/server            1.2.0 <= v < 1.5.0  (CVE-2026-93328; Google MCP
+    Toolbox's Cloud Storage tools took any bucket and any absolute local path, so a
+    caller could send a host file to an outside bucket or write over a local one.
+    Its own CRITICAL rule beside the HIGH 1.10.0 row; 1.5.0 adds allowedBuckets and
+    allowedLocalRoots, which allow everything when omitted. A stated version is
+    required)
+  - @google-cloud/cloud-run-mcp    < 1.11.0  (CVE-2026-85297; source deploys were
+    staged in `<project id>-source-bucket` without checking that the project owns
+    it, so a bucket made first under that global name received the source. A stated
+    version is required. The unscoped `cloud-run-mcp` is the same 1.0.0 build, its
+    only release, and is reported unversioned too)
+  - awslabs.aws-api-mcp-server     1.3.0 <= v < 1.6.0  (CVE-2026-115413; the OAuth mode
+    added in 1.3.0, on by default in HTTP mode, did not check which application a
+    token was issued to. Its own HIGH rule beside the 1.3.47 row. A stated version
+    is required)
+  - mcp-ffmpeg                     >= 1.0.3, presence-only  (CVE-2026-117568; video
+    paths reach a double-quoted `child_process.exec` string. No fixed release, and
+    1.0.0 to 1.0.2 had no MCP tools. npm only: PyPI's `mcp-ffmpeg` is another project)
 
 CVEs without a pinnable PyPI/npm artifact (aerostack-mcp SSRF, MaxKB stdio
 command-injection, mastergo-magic-mcp path-traversal/SSRF with no vendor fix,
@@ -242,10 +304,11 @@ module — see CHANGELOG.cves.md.
 from __future__ import annotations
 
 import bisect
+import itertools
 import re
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Callable
+from typing import AbstractSet, Callable, Iterable, Iterator
 
 try:
     import tomllib
@@ -327,8 +390,9 @@ _Ver = tuple[int, int, int]
 # an unpinned reference resolves to a release the advisory does not cover:
 # mcp-remote (`npx mcp-remote` installs 0.14.x, and it sits in a large share of
 # all MCP configs), the MCP TypeScript SDKs, Payload's plugin, the two
-# LangChain.js integrations, obsidian-tc, Junie CLI and both Claude Agent SDKs
-# (`latest` resolved to a fixed release for each),
+# LangChain.js integrations, obsidian-tc, Junie CLI, both Claude Agent SDKs,
+# d365fo-mcp and LiteLLM's CVE-2026-114612 row (`latest` resolved to a fixed
+# release for each),
 # Claude Code (the CLI updates itself), pi-llm-wiki (upstream registers it by a
 # node_modules path, which states none), bare `mcp` (a lone `mcp` names too much
 # to report unversioned), and `next`, where only a declared version says which
@@ -536,9 +600,21 @@ _PINS: tuple[_Pin, ...] = (
     # GHSA-33p4-w7j3-33mw scopes both below 1.12.0, the version all three reached
     # together on 2026-09-01. So the rule reads them at 1.12.0 as well: one rule,
     # three pins, the @agenticmail shape.
+    # Floor raised 1.12.0 -> 1.13.0 (2026-10-30) for IBM's Langflow OSS records of
+    # 29 Oct, whose CNA ranges NVD carried while OSV had no record of them:
+    # CVE-2026-110186 (code generation, 9.8), CVE-2026-93680 (improper
+    # authentication, 9.8), CVE-2026-110193 (Agentic Assistant component code, 8.8)
+    # and CVE-2026-110192 (API credentials, 6.5), 1.0.0 through 1.12.8 and fixed in
+    # 1.13.0 (IBM bulletin 7294467); CVE-2026-104339 (OS command, 9.8), through
+    # 1.12.3 and fixed in 1.12.4 (bulletin 7293015); CVE-2026-107327 and
+    # CVE-2026-107329 (code execution, 9.9), through 1.12.4 and fixed in 1.12.5
+    # (bulletin 7293016). The three Hono CVEs bulletin 7294467 also lists are npm
+    # `hono`'s records, not Langflow's. No bulletin or CNA record names
+    # `langflow-base` or `lfx`, so their rows stay at 1.12.0.
     _Pin("AAK-MCP-LANGFLOW-CVE-2026-12940-001", "langflow", ("langflow",),
-         (1, 12, 0), introduced=(1, 0, 0),
-         fix_label="1.12.0 (affected 1.0.0–1.11.6)",
+         (1, 13, 0), introduced=(1, 0, 0),
+         fix_label="1.13.0 (affected 1.0.0–1.12.8: CVE-2026-110186, CVE-2026-93680, CVE-2026-110193, "
+                   "CVE-2026-110192, CVE-2026-104339, CVE-2026-107327, CVE-2026-107329)",
          ecosystem="py"),
     _Pin("AAK-MCP-LANGFLOW-CVE-2026-12940-001", "langflow-base", ("langflow-base",),
          (1, 12, 0), fix_label="1.12.0 (its 0.x line, up to 0.11.6, is affected)",
@@ -611,10 +687,20 @@ _PINS: tuple[_Pin, ...] = (
     # langgraph-checkpoint-postgres / -sqlite (PyPI) < 3.1.1: namespaces stored as a
     # dot-joined string and read by simple prefix match → a scoped read spills into a
     # sibling namespace, cross-tenant checkpoint leak (CVE-2026-71433). Fixed 3.1.1.
+    # Floors raised 2026-10-24 (#1091) for CVE-2026-115883, the same flattening: the
+    # stores join namespace labels with "." and validated labels only on put and
+    # aput, so a dotted label passed to get, search, delete or list_namespaces
+    # reached another tenant's namespace (CVSS 4.0 6.0, GHSA-6hmw-9432-67qq). Checked
+    # in the sdists: postgres 3.1.2 and sqlite 3.1.1 never call
+    # `validate_op_namespace`; postgres 3.1.3 and sqlite 3.1.2 do (bfcfea55). The two
+    # packages are fixed at different releases, so the row splits in two on the one
+    # rule, one name each.
     _Pin("AAK-MCP-LANGGRAPH-CHECKPOINT-CVE-2026-71433-001",
-         "langgraph-checkpoint-postgres/sqlite",
-         ("langgraph-checkpoint-postgres", "langgraph-checkpoint-sqlite"),
-         (3, 1, 1), fix_label="3.1.1"),
+         "langgraph-checkpoint-postgres", ("langgraph-checkpoint-postgres",),
+         (3, 1, 3), fix_label="3.1.3"),
+    _Pin("AAK-MCP-LANGGRAPH-CHECKPOINT-CVE-2026-71433-001",
+         "langgraph-checkpoint-sqlite", ("langgraph-checkpoint-sqlite",),
+         (3, 1, 2), fix_label="3.1.2"),
     # meta-ads-mcp (PyPI) < 1.0.109: AuthInjectionMiddleware forwards unauthenticated
     # requests without a 401, and a failed Graph API call serialises the request URL
     # (with the access_token) into the response → unauth tool invocation + token leak
@@ -884,8 +970,11 @@ _PINS: tuple[_Pin, ...] = (
     # across 0.12.13, 0.12.15, 1.0.29, 1.0.30, 1.0.31 and 1.0.32. One floor at the
     # highest of those covers all eight, which is why this is one pin and not
     # eight: reporting a single dependency eight times is noise, not coverage.
+    # CVE-2026-120323 (VulDB, 2 Nov 2026, CVSS 4.3, passthroughHeaders leaks
+    # credentials) lists every 1.0.x up to 1.0.45 and 1.1.x up to 1.1.7 as affected
+    # and 1.1.8 as the fix; it names no 1.0.x fix, so the floor is 1.1.8.
     _Pin("AAK-MCP-MCPHUB-CVE-2026-79748-001", "@samanhappy/mcphub",
-         ("@samanhappy/mcphub",), (1, 0, 32), fix_label="1.0.32"),
+         ("@samanhappy/mcphub",), (1, 1, 8), fix_label="1.1.8"),
     _Pin("AAK-MCP-SEQTHINKING-CVE-2026-81845-001", "mcp-sequential-thinking",
          ("mcp-sequential-thinking",), (0, 6, 0), fix_label="0.6.0"),
     # --- 2026-09-04..07 wave (deferred 2026-09-06, shipped 2026-09-08) ---
@@ -1220,6 +1309,8 @@ _PINS: tuple[_Pin, ...] = (
     # googleapis/mcp-toolbox#3810 (`ResolveSymlinks`), is in v1.10.0 and not v1.9.0.
     # The server is a Go binary, but the docs register it with an MCP client as
     # the npm `@toolbox-sdk/server`, which runs the binary of its own version.
+    # Below 1.5.0 there are no roots to escape and the tools take any absolute
+    # path: that is CVE-2026-93328, its own CRITICAL row below.
     _Pin("AAK-MCP-TOOLBOX-CVE-2026-102242-001", "@toolbox-sdk/server",
          ("@toolbox-sdk/server",), (1, 10, 0), introduced=(1, 2, 0),
          fix_label="1.10.0 (affected 1.2.0–1.9.0)",
@@ -1386,6 +1477,9 @@ _PINS: tuple[_Pin, ...] = (
     # session with no idle expiry or count limit (CVE-2026-59951, CVSS 4.0 6.9). The
     # manager arrives in 1.8.0; 1.30.0 and 2.2.0 add a 30-minute default idle timeout
     # and a 10,000-session cap. MEDIUM, so its own rule beside the HIGH pin above.
+    # CVE-2026-116684, -116685 and -116686 (#1113, #1117, #1118) joined it on
+    # 2026-10-28: their advisories give 1.10.0, 1.8.0 and 1.10.0 below 1.30.0, and
+    # 2.0.0 below 2.2.0, each inside this range, and the same releases fix them.
     _Pin("AAK-MCP-SDK-CVE-2026-59951-001", "mcp (MCP Python SDK)", ("mcp",), (1, 30, 0),
          introduced=(1, 8, 0), also=(((2, 0, 0), (2, 2, 0)),),
          fix_label="1.30.0, or 2.2.0 on the 2.x line (affected from 1.8.0)",
@@ -1471,6 +1565,189 @@ _PINS: tuple[_Pin, ...] = (
          ("langchain-chatchat",), None,
          fix_label="no fixed release (0.3.1.3 is the newest); keep the API port, "
                    "7861, off networks you do not trust"),
+    # --- 2026-10-21 (#1059, #1065) ---
+    # The MCP TypeScript SDK's experimental tasks feature kept every task of one
+    # InMemoryTaskStore in one pool: each of the store's methods took the caller's
+    # session id and ignored it, so a client with a session of its own could list,
+    # read and cancel another session's tasks (CVE-2026-111767, CVSS 3.1 8.6,
+    # CWE-639/CWE-862, GHSA-22jm-h49p-29qw). Checked in the tarballs: 1.23.1
+    # (published after 1.24.0) ships no task store; 1.24.0 and 1.31.0 give every
+    # store method a `_sessionId` they never read; 1.32.0 records the session on
+    # createTask and answers another session's lookup as a task not found
+    # (727075b5, typescript-sdk#2925). The OAuth pin above has a 1.31.0 floor and
+    # 1.31.0 is affected here, so this is its own rule rather than a raised floor.
+    # Only a server that configures the SDK's task store is exposed, which the
+    # version cannot tell; the 2.x packages are not affected. `latest` is 1.32.1, so a
+    # stated version is required.
+    _Pin("AAK-MCP-TSSDK-CVE-2026-111767-001", "@modelcontextprotocol/sdk",
+         ("@modelcontextprotocol/sdk",), (1, 32, 0), introduced=(1, 24, 0),
+         fix_label="1.32.0 (affected from 1.24.0)",
+         requires_version=True, ecosystem="js"),
+    # mcp-ripgrep builds its rg command line as a string and runs it through
+    # `spawn(program, args, {shell: true})`. The advanced-search and list-files
+    # tools append ` -t ${fileType}` as given, where every pattern, path and glob
+    # goes through escapeShellArg, so a fileType holding `;` or `$(...)` runs a
+    # command as the server's user (CVE-2026-113378, CVSS 3.1 5.3, CWE-77/CWE-78,
+    # GHSA-qq9r-r4m4-c72m). Checked in the npm tarballs: 0.1.0, the first release,
+    # and 0.4.0, the newest (2025-04-29), both have it in dist/index.js. Nothing
+    # has been pushed since, the maintainer points at the README's warning, and
+    # there is no fixed release, so floor=None (presence-only). PyPI has no
+    # `mcp-ripgrep`, and npm's `ripgrep-mcp` is another server.
+    _Pin("AAK-MCP-RIPGREP-CVE-2026-113378-001", "mcp-ripgrep", ("mcp-ripgrep",), None,
+         fix_label="no fixed release (0.4.0 is the newest and the maintainer cites the "
+                   "README's warning); keep it away from agents that read untrusted text",
+         ecosystem="js"),
+    # --- 2026-10-22 (#1071) ---
+    # d365fo-mcp (dynamics365ninja/d365fo-mcp-server), the D365 F&O MCP Server,
+    # ships an HTTP mode for Azure App Service. Before 1.11.0 its documented
+    # one-click deployment (infrastructure/azuredeploy.json, main.bicep) defaulted
+    # the apiKey parameter to "" and passed it to the App Service's API_KEY
+    # setting; with API_KEY empty the middleware passed every request through,
+    # and index.js bound `HOST || '0.0.0.0'`, so a deployer who left the optional
+    # key blank got a public App Service answering unauthenticated tools/call on
+    # /mcp, read-only mode included (CVE-2026-114123, CVSS 3.1 7.5, CWE-306/
+    # CWE-1188, GHSA-8764-fh3m-wf7g). Checked in the npm tarballs: 1.0.0 and
+    # 1.10.1 have the pass-through and the 0.0.0.0 default; 1.11.0 (e70bd051,
+    # 384394a8) makes the template's apiKey required, defaults a keyless server
+    # to loopback and refuses to start a non-loopback listener without a key.
+    # The scanner reads the version a project declares, never the template
+    # default or the App Service setting. `latest` is 1.21.0, fixed, so a stated
+    # version is required; PyPI has no d365fo-mcp.
+    _Pin("AAK-MCP-D365FO-CVE-2026-114123-001", "d365fo-mcp", ("d365fo-mcp",), (1, 11, 0),
+         fix_label="1.11.0",
+         requires_version=True, ecosystem="js"),
+    # --- 2026-10-23 (#1081) ---
+    # LiteLLM sealed UI and CLI session tokens with `encrypt_value_helper`, the
+    # helper that seals secrets at rest, and from 1.87.0 (#27141, 3b2ce201) the key
+    # API seals a key's `callback_vars` metadata with the same helper, so an
+    # internal user could have a forged proxy_admin session sealed for them and
+    # present it as a bearer token (CVE-2026-114612, CVSS 3.1 9.9, CWE-269/CWE-345/
+    # CWE-441, GHSA-7hp6-4w63-5g45). 1.87.0 to 1.90.x accept that token only with
+    # EXPERIMENTAL_UI_LOGIN turned on; from 1.91.0 it is accepted unless the
+    # variable is false. Checked at every release tag and in the PyPI sdists: the
+    # fix (`encrypt_bearer_token`, its prefix doubling as the AES-GCM associated
+    # data) is in 1.100.4, 1.101.3, 1.102.2, 1.103.1, 1.104.0rc2 and every later
+    # release, and absent from 1.100.3, 1.101.2, 1.102.1, 1.103.0 and 1.104.0rc1;
+    # 1.86.7 never seals callback_vars. The 1.101 to 1.103 lines sort above the
+    # 1.100.4 floor, so they are `also` ranges on this row. 1.104.0rc1 reads as
+    # 1.104.0 (a pre-release folds into its release), which is fixed, so it cannot
+    # be a range here. The older litellm row's 1.84.0 floor sits below 1.87.0, so
+    # this is its own rule. `latest` is 1.106.2, fixed, so a stated version is
+    # required, and npm's `litellm` is a JavaScript port on its own 0.x line.
+    _Pin("AAK-MCP-LITELLM-CVE-2026-114612-001", "litellm", ("litellm",), (1, 100, 4),
+         introduced=(1, 87, 0),
+         also=(((1, 101, 0), (1, 101, 3)), ((1, 102, 0), (1, 102, 2)),
+               ((1, 103, 0), (1, 103, 1))),
+         fix_label="1.100.4, 1.101.3, 1.102.2, 1.103.1 or 1.104.0 (affected from 1.87.0)",
+         requires_version=True, ecosystem="py"),
+    # --- 2026-10-24 (#1083 to #1092) ---
+    # Uni-CLI (npm `@zenalexa/unicli`) served its legacy JSON-RPC-over-HTTP MCP
+    # transport on loopback without checking a browser's Origin, so a web page's
+    # CORS-simple POST to the local /mcp endpoint reached the dispatcher and drove
+    # tools/call (CVE-2026-58497, CVSS 4.0 8.6, CWE-346/CWE-352,
+    # GHSA-v3f4-w7r7-v3hm). Checked in the npm tarballs: 0.207.1, the first release,
+    # has no HTTP transport; 0.208.0 adds one with no Origin check; 0.225.1 still has
+    # none; 0.225.2 (d675c267) routes every request through the shared
+    # `isOriginAllowed` guard. `latest` is 1.3.0, fixed, so a stated version is
+    # required. npm's `uni-cli` is another project.
+    _Pin("AAK-MCP-UNICLI-CVE-2026-58497-001", "@zenalexa/unicli", ("@zenalexa/unicli",),
+         (0, 225, 2), introduced=(0, 208, 0), fix_label="0.225.2 (affected from 0.208.0)",
+         requires_version=True, ecosystem="js"),
+    # obsidian-tc, two more flaws fixed in 1.31.4 (GHSA-737x-cwfr-5vvc,
+    # GHSA-r3g7-r4hr-m258, both CVSS 4.0 7.1). CVE-2026-115477, 1.13.0 to 1.31.3: on
+    # a Streamable HTTP deployment with auth.jwtSecret set, a dispatch-gated
+    # destructive call could still complete after the human declined the elicitation
+    # form, because an authentic call-bound requestState was taken as approval.
+    # CVE-2026-115478, 1.0.1 to 1.31.3: the memory tools rewrote a note at its computed
+    # path without checking who owned it. Checked in the npm tarballs: 1.31.3 carries
+    # neither fix, 1.31.4 both (101c91c6, 99f7914c). The CRITICAL row above is fixed at
+    # 1.3.1 and 1.3.1 to 1.31.3 are affected here, so a raised floor would report those
+    # releases as the vault-binding flaw: this is its own HIGH rule, from 1.0.1, the
+    # first 1.x release. `latest` is 1.33.1, fixed.
+    _Pin("AAK-MCP-OBSIDIANTC-CVE-2026-115477-001", "obsidian-tc", ("obsidian-tc",),
+         (1, 31, 4), introduced=(1, 0, 1), fix_label="1.31.4 (affected from 1.0.1)",
+         requires_version=True, ecosystem="js"),
+    # mcp-from-openapi: CVE-2026-115750 (2.5.0 to 2.8.x) carries the caller's
+    # Authorization and Cookie headers when safeFetch follows a cross-origin
+    # redirect, and CVE-2026-115751 (2.2.0 to 2.8.x) lets a trailing-dot hostname
+    # past ssrf.blockedHosts (CVSS 3.1 3.7 each, GHSA-ff5q-5r4v-fw4v). Checked in the
+    # tarballs: `blockedHosts` first ships in 2.2.0 and `safeFetch` in 2.5.0, and
+    # 2.9.0 (47fb7a65) adds `normalizeHostname` and keeps credentials on their origin.
+    # The 2.5.0 row above is HIGH for another SSRF, fixed in 2.5.0, so this is its own
+    # LOW rule rather than a raised floor. `latest` is 2.9.1, fixed. PyPI's
+    # mcp-from-openapi is another project.
+    _Pin("AAK-MCP-FROMOPENAPI-CVE-2026-115750-001", "mcp-from-openapi",
+         ("mcp-from-openapi",), (2, 9, 0), introduced=(2, 2, 0),
+         fix_label="2.9.0 (affected from 2.2.0)", requires_version=True, ecosystem="js"),
+    # LangGraph CLI from 0.4.15 printed the temporary registry push token that
+    # `langgraph deploy --verbose` hands to `docker login --password-stdin`, since its
+    # subprocess helper echoes a command's input in verbose mode (CVE-2026-115885,
+    # CVSS 4.0 4.1, CWE-532, GHSA-8prr-f582-jqq3). Checked in the sdists: 0.4.14 has
+    # no `--password-stdin`, 0.4.15 adds it; 0.4.31 runs that docker login with
+    # `verbose=verbose`, 0.4.32 with `verbose=False`. `latest` is 0.4.38, fixed. npm's
+    # LangGraph CLI is the scoped `@langchain/langgraph-cli`, another package.
+    _Pin("AAK-MCP-LANGGRAPH-CLI-CVE-2026-115885-001", "langgraph-cli", ("langgraph-cli",),
+         (0, 4, 32), introduced=(0, 4, 15), fix_label="0.4.32 (affected from 0.4.15)",
+         requires_version=True, ecosystem="py"),
+    # --- 2026-10-27 (#1100, #1101) ---
+    # Google MCP Toolbox's Cloud Storage tools took any bucket and any absolute local
+    # path before 1.5.0, so a caller could send a host file to a bucket outside the
+    # project or write over a local file (CVE-2026-93328, CVSS 4.0 9.3, CWE-22/
+    # CWE-862). The cloud-storage source arrives in v1.2.0 (v1.1.0 has none), and
+    # `ValidateLocalPath` asks only for an absolute path with no `..` segment. The
+    # fix, googleapis/mcp-toolbox#3454 (2c3ca5d2), is in v1.5.0 and not v1.4.0, and
+    # adds `allowedBuckets` and `allowedLocalRoots`, which still allow everything
+    # when omitted (through 1.15.0). Its own CRITICAL rule beside the HIGH 102242 row
+    # above, whose symlink flaw presumes the roots 1.5.0 adds. `latest` is 1.15.0, so
+    # a stated version is required.
+    _Pin("AAK-MCP-TOOLBOX-CVE-2026-93328-001", "@toolbox-sdk/server",
+         ("@toolbox-sdk/server",), (1, 5, 0), introduced=(1, 2, 0),
+         fix_label="1.5.0 (affected 1.2.0 to 1.4.0), once allowedBuckets and "
+                   "allowedLocalRoots are set, since either allows everything when omitted",
+         requires_version=True, ecosystem="js"),
+    # Cloud Run MCP stages a source deploy in a bucket named `<project id>-source-bucket`
+    # and, before 1.11.0, used an existing bucket of that name without asking which
+    # project owns it. Bucket names are global, so a bucket made first in another
+    # project received the source, and its owner could read it or change it before
+    # the build (CVE-2026-85297, CVSS 4.0 7.7, CWE-340). Checked in the npm tarballs:
+    # 1.0.0, the first release, to 1.10.0 name the bucket so and only ask whether it
+    # exists; 1.11.0 (GoogleCloudPlatform/cloud-run-mcp#300, 0c707803) compares the
+    # bucket's project number with the project's and otherwise falls back to a
+    # randomized name. `latest` is 1.11.0, so a stated version is required. The
+    # unscoped `cloud-run-mcp` is the same 1.0.0 build, published by Google under the
+    # project's first name and never updated, so its row reports an unversioned
+    # reference too.
+    _Pin("AAK-MCP-CLOUDRUN-CVE-2026-85297-001", "@google-cloud/cloud-run-mcp",
+         ("@google-cloud/cloud-run-mcp",), (1, 11, 0), fix_label="1.11.0",
+         requires_version=True, ecosystem="js"),
+    _Pin("AAK-MCP-CLOUDRUN-CVE-2026-85297-001", "cloud-run-mcp", ("cloud-run-mcp",),
+         (1, 11, 0),
+         fix_label="@google-cloud/cloud-run-mcp 1.11.0 (the unscoped name has only 1.0.0)",
+         ecosystem="js"),
+    # --- 2026-10-28 batch (#1109-#1118) ---
+    # AWS API MCP Server: the OAuth mode added in 1.3.0 (awslabs/mcp#1902) did not
+    # check which application a token was issued to, so a token the same identity
+    # provider issued to another application was accepted (CVE-2026-115413). 1.6.0
+    # (awslabs/mcp#4865, b97eefc7c) adds AUTH_AUDIENCE and AUTH_CLIENT_ID and requires
+    # one of them; 1.5.6 has neither. Its own HIGH rule beside the 1.3.47 row above.
+    # `latest` is 1.6.0, so a stated version is required.
+    _Pin("AAK-MCP-AWSAPIMCP-CVE-2026-115413-001", "awslabs.aws-api-mcp-server",
+         ("awslabs.aws-api-mcp-server",), (1, 6, 0), introduced=(1, 3, 0),
+         fix_label="1.6.0, with AUTH_AUDIENCE or AUTH_CLIENT_ID set (affected from 1.3.0, "
+                   "in OAuth mode)",
+         requires_version=True),
+    # mcp-ffmpeg (bitscorp-mcp/mcp-ffmpeg): the MCP server, first published as 1.0.3
+    # (1.0.0 to 1.0.2 are an Express upload service with no MCP tools), builds
+    # `ffmpeg -i "${absVideoPath}" ...` strings from the tools' videoPath and outputDir
+    # and runs them with child_process.exec (CVE-2026-117568). 1.0.5 (2025-03-13) is
+    # the newest and still does, and issue #8 is open, so presence-only from 1.0.3.
+    # PyPI's `mcp-ffmpeg` is priyanshum143/MCP-FFMPEG, another project.
+    _Pin("AAK-MCP-FFMPEG-CVE-2026-117568-001", "mcp-ffmpeg", ("mcp-ffmpeg",), None,
+         introduced=(1, 0, 3),
+         fix_label="no fixed release (1.0.5, 2025-03-13, is the newest and "
+                   "bitscorp-mcp/mcp-ffmpeg#8 is open); keep it away from agents that read "
+                   "untrusted text",
+         ecosystem="js"),
 )
 
 _CANDIDATE_NAMES = (
@@ -2089,7 +2366,10 @@ def _lockfile_findings(path: Path, rel: str, text: str) -> list[Finding]:
 # one, and compared whole: a window of fixed length reached into the next entry,
 # and a substring test read 1.0.1 inside 1.0.10. Every pattern is bounded.
 _NPM_LOCK_KEY_RE = re.compile(r'node_modules/((?:@[^"/\\\n]{1,214}/)?[^"/\\\n]{1,214})"[ \t]*:[ \t]*\{')
-_JSON_OBJECT_KEY_RE = re.compile(r'"((?:[^"\\\n]|\\.){1,214})"[ \t]*:[ \t]*\{')
+# A JSON string's body, read in one match: plain runs, each escape with the run after it.
+_JSON_STRING_BODY_RE = re.compile(r'[^"\\\n]*(?:\\[^\n][^"\\\n]*)*')
+_JSON_ESCAPE_RE = re.compile(r'\\[^\n]')
+_JSON_KEY_TAIL_RE = re.compile(r'[ \t]*:[ \t]*\{')
 _JSON_VERSION_RE = re.compile(r'"version"[ \t]*:[ \t]*"([^"\\\n]{0,64})"')
 _YARN_HEADER_RE = re.compile(r'^(?![ \t#\r\n])"?((?:@[^@"\s/]{1,214}/)?[^@"\s/,:]{1,214})@', re.MULTILINE)
 _YARN_VERSION_RE = re.compile(r'^[ \t]+version:?[ \t]+"?([0-9][\w.\-]{0,64})', re.MULTILINE)
@@ -2098,19 +2378,55 @@ _TOML_NAME_RE = re.compile(r'^name[ \t]*=[ \t]*"([^"\n]{1,214})"', re.MULTILINE)
 _TOML_VERSION_RE = re.compile(r'^version[ \t]*=[ \t]*"([0-9][^"\n]{0,64})"', re.MULTILINE)
 
 
+def _json_object_heads(text: str) -> Iterator[tuple[int, int, str]]:
+    """(start, end, key) for each JSON string of 1 to 214 characters, an escape
+    counting as one, that is followed by `:` and `{`, the key decoded only when it
+    holds an escape.
+
+    Each string is read once, its body in one match, from its opening quote to its
+    closing one. A regular expression tried every quote as an opening one and read
+    up to 214 escaped characters past each before giving up: 2.3 s a megabyte on a
+    Pipfile.lock of escaped quotes, 73 s at the 32 MiB lockfile cap. A newline, or a
+    backslash before one, ends a string unclosed, and reading resumes after it.
+    """
+    i, n = 0, len(text)
+    while True:
+        quote = text.find('"', i)
+        if quote < 0:
+            return
+        end = _JSON_STRING_BODY_RE.match(text, quote + 1).end()  # type: ignore[union-attr]
+        if end >= n:
+            return
+        if text[end] != '"':  # a newline, or a backslash before one: unclosed on this line
+            i = end + 1
+            continue
+        tail = _JSON_KEY_TAIL_RE.match(text, end + 1)
+        if tail is not None and end - quote <= 429:  # 214 escapes are 428 characters
+            key = text[quote + 1:end]
+            if 1 <= len(key) - len(_JSON_ESCAPE_RE.findall(key)) <= 214:
+                yield quote, tail.end(), (_json_key('"' + key + '"') if "\\" in key else key)
+        i = end + 1
+
+
 def _entry_versions(
-    text: str, filename: str, heads: list[tuple[int, int, str]],
-    version_re: re.Pattern[str], wanted: set[str],
+    text: str, filename: str, heads: Iterable[tuple[int, int, str]],
+    version_re: re.Pattern[str], wanted: AbstractSet[str],
 ) -> list[tuple[int, str, str]]:
     """(offset, name, version) for each entry head of a wanted package, its
-    version read between the head and the next head."""
+    version read between the head and the next head. The heads are read as they
+    come, one ahead, so a lockfile of millions holds none of them in memory."""
     out: list[tuple[int, str, str]] = []
-    for i, (start, end, name) in enumerate(heads):
-        if _lockfile_canon(name, filename) not in wanted:
-            continue
-        stop = heads[i + 1][0] if i + 1 < len(heads) else len(text)
-        m = version_re.search(text, end, stop)
-        out.append((start, name, m.group(1) if m else ""))
+    pending: tuple[int, int, str] | None = None
+    for head in heads:
+        if pending is not None:
+            m = version_re.search(text, pending[1], head[0])
+            out.append((pending[0], pending[2], m.group(1) if m else ""))
+            pending = None
+        if _lockfile_canon(head[2], filename) in wanted:
+            pending = head
+    if pending is not None:
+        m = version_re.search(text, pending[1], len(text))
+        out.append((pending[0], pending[2], m.group(1) if m else ""))
     return out
 
 
@@ -2123,18 +2439,35 @@ def _lockfile_entries(
     One pass over the file, for every reported package at once: the line of a
     finding used to be searched for from the top of the file for each finding.
     """
+    return {
+        name: [(line, _semver3(version)) for line, version in rows]
+        for name, rows in _lockfile_raw_entries(text, filename, wanted).items()
+    }
+
+
+def _lockfile_raw_entries(
+    text: str, filename: str, wanted: AbstractSet[str]
+) -> dict[str, list[tuple[int, str]]]:
+    """`_lockfile_entries` with each version as the lockfile writes it.
+
+    `malicious_releases` compares versions whole (1.107.0rc1 is not 1.107.0),
+    which the first three numbers cannot do.
+    """
     found: list[tuple[int, str, str]] = []
     if filename in ("package-lock.json", "pipfile.lock"):
-        heads = [] if filename == "pipfile.lock" else [
-            (m.start(), m.end(), m.group(1)) for m in _NPM_LOCK_KEY_RE.finditer(text)]
+        heads: Iterable[tuple[int, int, str]] = ()
+        if filename == "package-lock.json":
+            npm = ((m.start(), m.end(), m.group(1)) for m in _NPM_LOCK_KEY_RE.finditer(text))
+            first = next(npm, None)
+            if first is not None:
+                heads = itertools.chain((first,), npm)
         if not heads:
-            heads = [(m.start(), m.end(), _json_key('"' + m.group(1) + '"'))
-                     for m in _JSON_OBJECT_KEY_RE.finditer(text)]
+            heads = _json_object_heads(text)
         found = [(offset, name, version.lstrip("=")) for offset, name, version
                  in _entry_versions(text, filename, heads, _JSON_VERSION_RE, wanted)]
     elif filename == "yarn.lock":
-        heads = [(m.start(), m.end(), m.group(1)) for m in _YARN_HEADER_RE.finditer(text)]
-        found = _entry_versions(text, filename, heads, _YARN_VERSION_RE, wanted)
+        yarn = ((m.start(), m.end(), m.group(1)) for m in _YARN_HEADER_RE.finditer(text))
+        found = _entry_versions(text, filename, yarn, _YARN_VERSION_RE, wanted)
     elif filename == "pnpm-lock.yaml":
         # pnpm states the version in the entry itself.
         found = [(m.start(), m.group(1), m.group(2)) for m in _PNPM_ENTRY_RE.finditer(text)
@@ -2148,12 +2481,12 @@ def _lockfile_entries(
             version_m = _TOML_VERSION_RE.search(text, start, stop)
             if version_m is not None:
                 found.append((name_m.start(), name_m.group(1), version_m.group(1)))
-    entries: dict[str, list[tuple[int, _Ver | None]]] = {}
+    entries: dict[str, list[tuple[int, str]]] = {}
     line, last = 1, 0
     for offset, name, version in found:  # in file order
         line += text.count("\n", last, offset)
         last = offset
-        entries.setdefault(_lockfile_canon(name, filename), []).append((line, _semver3(version)))
+        entries.setdefault(_lockfile_canon(name, filename), []).append((line, version))
     return entries
 
 

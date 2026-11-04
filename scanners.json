@@ -1,6 +1,6 @@
 {
   "_comment": "count = scanner modules the engine registers and runs. unregistered_shims are back-compat re-exports kept so old import paths resolve; they run no detection of their own. count + len(unregistered_shims) == non-private *.py files in agent_audit_kit/scanners/, asserted by scripts/check_counts.py.",
-  "count": 103,
+  "count": 111,
   "scanners": [
     {
       "module": "a2a_protocol",
@@ -17,6 +17,10 @@
     {
       "module": "agent_harness_shared_state",
       "name": "Multi-agent shared-state lock (Code-as-Harness, arXiv:2605.18747)"
+    },
+    {
+      "module": "agent_server_noauth",
+      "name": "OpenHands sandbox agent server without a session key (CVE-2026-112346)"
     },
     {
       "module": "agent_trust_surface",
@@ -107,6 +111,14 @@
       "name": "JVM MCP SDK pins in Gradle / Maven manifests (CVE-2026-53937, CVE-2026-108714)"
     },
     {
+      "module": "known_vulns",
+      "name": "Locked, pinned and installed packages against OSV advisories (offline feed)"
+    },
+    {
+      "module": "known_vulns_launch",
+      "name": "Launched MCP servers, binaries and images against NVD advisories (offline feed)"
+    },
+    {
       "module": "langchain_prompt_loader",
       "name": "LangChain load_prompt path traversal (CVE-2026-34070)"
     },
@@ -135,6 +147,14 @@
       "name": "Token-shaped values in log sinks (CVE-2026-20205)"
     },
     {
+      "module": "malicious_extensions",
+      "name": "Installed editor extensions the malicious-release feed lists (Cursor, VS Code)"
+    },
+    {
+      "module": "malicious_releases",
+      "name": "Known malicious releases from the offline feed (OSV MAL- records, image digests)"
+    },
+    {
       "module": "marketplace_manifest",
       "name": "Marketplace manifest"
     },
@@ -153,6 +173,10 @@
     {
       "module": "mcp_auth_patterns",
       "name": "MCP auth patterns"
+    },
+    {
+      "module": "mcp_codeexec_sandbox",
+      "name": "Code-execution tool sandboxes with open runtime permissions (prefab-ui GenerativeUI, Deno)"
     },
     {
       "module": "mcp_config",
@@ -307,6 +331,10 @@
       "name": "Claude Code routines"
     },
     {
+      "module": "runtime_advisories",
+      "name": "Runtime and bundled-codec advisories: Node.js, PHP, Python, Brotli (PHP2Shell, CVE-2026-111497)"
+    },
+    {
       "module": "rust_pattern_scan",
       "name": "Rust pattern scan"
     },
@@ -369,6 +397,10 @@
     {
       "module": "stainless_lineage",
       "name": "Stainless-generator provenance (Anthropic acquisition 2026-05-18)"
+    },
+    {
+      "module": "startup_hooks",
+      "name": "Python startup hooks (.pth, .start, sitecustomize) and npm install scripts (litellm 1.107.0)"
     },
     {
       "module": "state_privacy",

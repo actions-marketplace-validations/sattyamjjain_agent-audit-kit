@@ -123,8 +123,18 @@ _OPTIONAL_SCANNERS: list[tuple[str, str, list[str]]] = [
     ("mcp_deprecated_features", "MCP 2026-07-28 deprecated features roots/sampling/logging (SEP-2577/2596)", []),
     ("mcp_routing_desync", "MCP 2026-07-28 routable-header ↔ body desync (SEP-2243)", []),
     ("mcp_apps_ui", "MCP Apps UI iframe sandbox / sanitization (SEP-1865)", []),
+    ("mcp_codeexec_sandbox", "Code-execution tool sandboxes with open runtime permissions (prefab-ui GenerativeUI, Deno)", []),
     ("mcp_cve_pins_2026_07", "MCP/agent CVE version-pins — 2026-07 disclosure wave", []),
     ("container_image_pins", "Container image tag pins for image-only MCP platforms (Obot, MetaMCP, heym, mcp-filesystem-server, Dify, mcp-k6)", []),
+    ("startup_hooks", "Python startup hooks (.pth, .start, sitecustomize) and npm install scripts (litellm 1.107.0)", []),
+    ("malicious_releases", "Known malicious releases from the offline feed (OSV MAL- records, image digests)",
+     ["include_user_config"]),
+    ("malicious_extensions", "Installed editor extensions the malicious-release feed lists (Cursor, VS Code)",
+     ["include_user_config"]),
+    ("known_vulns", "Locked, pinned and installed packages against OSV advisories (offline feed)", []),
+    ("known_vulns_launch", "Launched MCP servers, binaries and images against NVD advisories (offline feed)", []),
+    ("agent_server_noauth", "OpenHands sandbox agent server without a session key (CVE-2026-112346)", []),
+    ("runtime_advisories", "Runtime and bundled-codec advisories: Node.js, PHP, Python, Brotli (PHP2Shell, CVE-2026-111497)", []),
 ]
 
 
@@ -328,14 +338,40 @@ def run_scan(
         kept.append(finding)
 
     result.findings.extend(
-        _drop_launches_supply_chain_reports(_drop_covered_composition_findings(kept))
+        _drop_known_vulns_a_rule_reports(
+            _drop_launches_supply_chain_reports(_drop_covered_composition_findings(kept))
+        )
     )
 
     result.files_scanned = len(all_scanned_files)
+    result.data_feeds = _data_feeds()
     result.scan_duration_ms = (time.monotonic() - start) * 1000
     _log(f"Scan complete: {result.files_scanned} files, {len(result.findings)} findings in {result.scan_duration_ms:.0f}ms")
 
     return result
+
+
+def _data_feeds() -> dict[str, dict[str, str]]:
+    """Which copy of each offline data feed the scan read, and when it was built.
+
+    A scan's verdict on a known-malicious release depends on the feed's age as
+    much as on the project, so every report says which feed it used. A feed
+    that cannot be read is reported as such rather than failing the scan.
+    """
+    from agent_audit_kit import advisory_feed, malicious_feed
+    from agent_audit_kit.scanners import runtime_advisories
+
+    feeds: dict[str, dict[str, str]] = {}
+    for name, summary in (
+        ("maliciousReleases", malicious_feed.feed_summary),
+        ("knownVulnerabilities", advisory_feed.feed_summary),
+        ("runtimeAdvisories", runtime_advisories.advisories_summary),
+    ):
+        try:
+            feeds[name] = summary()
+        except (OSError, ValueError) as exc:
+            feeds[name] = {"error": f"{type(exc).__name__}: {exc}"}
+    return feeds
 
 
 def _drop_covered_composition_findings(findings: list[Finding]) -> list[Finding]:
@@ -396,8 +432,68 @@ def _drop_covered_composition_findings(findings: list[Finding]) -> list[Finding]
     ]
 
 
+def _drop_known_vulns_a_rule_reports(findings: list[Finding]) -> list[Finding]:
+    """Stand AAK-KNOWN-VULN-001 and -002 down where another rule reports their advisory's CVEs.
+
+    The advisory feed and the hand-written version pins overlap: on 2026-10-29,
+    82 of the 134 pin-table rows named a CVE that OSV also lists for the pinned
+    package, and so did seven of the pins kept beside a code check (langchain-core,
+    mcp, @modelcontextprotocol/sdk and others). A pin is a judgement someone read
+    the advisory for, so where one reports the flaw, its finding stands.
+
+    Which files a pin reads differs by pin: the pin table reads the root's
+    manifests and lockfiles plus requirements files anywhere, other pins search
+    the tree, and none reads a site-packages directory. A list of the CVEs the
+    pins carry, built at import, would also drop the findings no pin makes (a
+    lockfile below the root, an installed dist-info), so this compares findings:
+    an AAK-KNOWN-VULN-001 finding is dropped when every CVE id it names
+    (`known_vulns.evidence_cves`) is in another rule's finding on the same line of
+    the same file, the declaration or lockfile entry a version pin points at too,
+    at or above its own severity, which as in the passes above keeps a
+    `--severity` floor from hiding the flaw. It runs after the `--rules`,
+    `--exclude-rules` and `ignore_paths` filter, so it stands down only for a
+    finding that is going to be reported. An advisory without a CVE id, a range
+    that names several advisories of which only some are pinned, a range that
+    counts advisories it does not name, and a finding whose CVE a rule cites for a
+    finding on another line (a configuration check says nothing about the version
+    a lockfile resolves) are kept.
+    The scanner's module is imported here under the registry's rule: when it does
+    not load, it reported nothing, and every scan goes on.
+
+    AAK-KNOWN-VULN-002, the same feed's records matched to what a project
+    launches, names its advisory's CVE ids the same way and stands down the same
+    way. Neither feed rule counts as the other rule here: two findings that only
+    the feed made would stand each other down, and the flaw would go unreported.
+    """
+    try:
+        from agent_audit_kit.scanners.known_vulns import RULE, evidence_cves
+    except ImportError:
+        return findings
+    feed_rules = {RULE, "AAK-KNOWN-VULN-002"}
+
+    reported: dict[tuple[str, int, str], int] = {}
+    for f in findings:
+        if f.rule_id in feed_rules or f.line_number is None:
+            continue
+        for cve in f.cve_references:
+            key = (f.file_path, f.line_number, cve)
+            reported[key] = max(reported.get(key, 0), f.severity.numeric())
+    if not reported:
+        return findings
+    kept: list[Finding] = []
+    for f in findings:
+        if f.rule_id in feed_rules and f.line_number is not None:
+            cves = evidence_cves(f.evidence)
+            level = f.severity.numeric()
+            if cves and all(reported.get((f.file_path, f.line_number, cve), 0) >= level for cve in cves):
+                continue
+        kept.append(f)
+    return kept
+
+
 def _drop_launches_supply_chain_reports(findings: list[Finding]) -> list[Finding]:
-    """Stand AAK-MCP-007 down on a launch AAK-SUPPLY-001 reports in the same run.
+    """Stand AAK-MCP-007 down on a launch AAK-SUPPLY-001 reports in the same run,
+    and both down on one AAK-MALICIOUS-RELEASE-002 reports.
 
     Both rules report one fact, a server launch that fetches a package without
     pinning it (`npx -y pkg`, `uvx pkg`). AAK-SUPPLY-001 reads the launcher's
@@ -428,24 +524,46 @@ def _drop_launches_supply_chain_reports(findings: list[Finding]) -> list[Finding
     As in the composition pass, it stands down only for a finding at or above
     its own severity, so the `--severity` floor can never hide a launch that
     AAK-MCP-007 alone would have shown.
+
+    AAK-MALICIOUS-RELEASE-002 reports the same unpinned launch once more, when
+    the malicious-release feed lists a release of the package: the fix is the
+    same pin, and the finding says which releases to keep out. Both AAK-MCP-007
+    and AAK-SUPPLY-001 stand down for it, on the same terms. Its evidence opens
+    with the launch's `Server '<name>' arg: <spec>` head and goes on in prose,
+    so a launch is the same when that evidence starts with the subject the
+    other rule's evidence gives (`_launchers.names_launch`). A launch that is
+    not an entry of a top-level server map gets no head, and both findings stay.
     """
-    from agent_audit_kit.scanners._launchers import launch_subject
+    from agent_audit_kit.scanners._launchers import launch_subject, names_launch
+
+    def _file(finding: Finding) -> str:
+        return (finding.file_path or "").replace("\\", "/")
 
     reported: dict[tuple[str, str], int] = {}
+    unpinned: dict[str, list[tuple[str, int]]] = {}
     for f in findings:
-        if f.rule_id != "AAK-SUPPLY-001":
-            continue
-        subject = launch_subject(f.evidence)
-        if subject is not None:
-            key = (f.file_path, subject)
-            reported[key] = max(reported.get(key, 0), f.severity.numeric())
-    if not reported:
+        if f.rule_id == "AAK-MALICIOUS-RELEASE-002":
+            unpinned.setdefault(_file(f), []).append((f.evidence, f.severity.numeric()))
+        elif f.rule_id == "AAK-SUPPLY-001":
+            subject = launch_subject(f.evidence)
+            if subject is not None:
+                key = (_file(f), subject)
+                reported[key] = max(reported.get(key, 0), f.severity.numeric())
+    if not reported and not unpinned:
         return findings
 
     def _reported(finding: Finding) -> bool:
         subject = launch_subject(finding.evidence)
         if subject is None:
             return False
-        return reported.get((finding.file_path, subject), 0) >= finding.severity.numeric()
+        own = finding.severity.numeric()
+        if finding.rule_id == "AAK-MCP-007" and reported.get((_file(finding), subject), 0) >= own:
+            return True
+        return any(rank >= own and names_launch(evidence, subject)
+                   for evidence, rank in unpinned.get(_file(finding), ()))
 
-    return [f for f in findings if f.rule_id != "AAK-MCP-007" or not _reported(f)]
+    return [f for f in findings if f.rule_id not in _LAUNCH_DUPLICATES or not _reported(f)]
+
+
+# The rules `_drop_launches_supply_chain_reports` may stand down.
+_LAUNCH_DUPLICATES = frozenset({"AAK-MCP-007", "AAK-SUPPLY-001"})

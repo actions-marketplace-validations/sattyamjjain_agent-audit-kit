@@ -57,8 +57,38 @@ SEVERITY_OVERRIDE_MODULES = {
         "AAK-IDE-TASK-001 escalates HIGH -> CRITICAL when the auto-run command "
         "is a shell, interpreter or network fetch"
     ),
+    "runtime_advisories.py": (
+        "AAK-RUNTIME-ADV-001 and -003 take the severity of the advisory that "
+        "decided them; a KEV entry is CRITICAL, the registry's level"
+    ),
+    "gha_hardening.py": (
+        "AAK-GHA-SECRET-DUMP-001 escalates HIGH -> CRITICAL when the workflow "
+        "carries a published Gheist campaign marker"
+    ),
+    "known_vulns.py": (
+        "AAK-KNOWN-VULN-001 takes the severity of the advisory that decided it "
+        "(CRITICAL, the registry's level, from CVSS 9.0), and INFO for a range "
+        "that admits affected and unaffected releases"
+    ),
+    "known_vulns_launch.py": (
+        "AAK-KNOWN-VULN-002 takes the severity of the advisory that decided it "
+        "(CRITICAL, the registry's level, from CVSS 9.0), and MEDIUM for a launch "
+        "whose release could not be read"
+    ),
+    "agent_server_noauth.py": (
+        "AAK-AGENT-SERVER-NOAUTH-001 is MEDIUM for a Docker launch on 1.52.0 or a "
+        "release it cannot read, whose port is published on loopback only"
+    ),
 }
-SEVERITY_OVERRIDE_RULES = {"AAK-IDE-TASK-001": {Severity.CRITICAL}}
+SEVERITY_OVERRIDE_RULES = {
+    "AAK-IDE-TASK-001": {Severity.CRITICAL},
+    "AAK-RUNTIME-ADV-001": {Severity.HIGH, Severity.MEDIUM, Severity.LOW},
+    "AAK-RUNTIME-ADV-003": {Severity.HIGH, Severity.MEDIUM, Severity.LOW},
+    "AAK-GHA-SECRET-DUMP-001": {Severity.CRITICAL},
+    "AAK-KNOWN-VULN-001": {Severity.HIGH, Severity.MEDIUM, Severity.INFO},
+    "AAK-KNOWN-VULN-002": {Severity.HIGH, Severity.MEDIUM},
+    "AAK-AGENT-SERVER-NOAUTH-001": {Severity.MEDIUM},
+}
 
 # The fixtures root fires most scanners. These three only read configs at the
 # project root, so they get their own fixture directories as roots.

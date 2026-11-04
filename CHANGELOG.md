@@ -7,11 +7,127 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.6.32] - 2026-11-02
+
+### Added
+
+- AAK-KNOWN-VULN-001 reads NVD records whose CNA names a PyPI or npm package by `collectionURL`, with no packageURL and no map row (#1175). JFrog's CVE-2026-120338 (CVSS 10.0, prefab-ui 0.14.0 up to 0.21.0, the Generative UI sandbox FastMCP's `generate_prefab_ui` tool runs) names prefab-ui only as `collectionURL` `https://pypi.org/project/prefab-ui/` and `packageName`, and `aak update` dropped it as unmapped, so a lockfile with prefab-ui 0.20.2 scanned clean on 0.6.31. A package's own page (`https://pypi.org/project/<name>/`, `https://www.npmjs.com/package/<name>` or `@scope/<name>`) and the registry root the CVE JSON 5 schema's examples use (`https://pypi.python.org`, `https://registry.npmjs.org`, with the name in `packageName`) now map after a packageURL and before the reviewed rows. A page and a `packageName` that disagree map nothing and count as unmapped, and any other `collectionURL` goes to the rows as before. The CVE watcher's issue body says "by its collectionURL".
+- The bundled advisory feed holds NVD's record of CVE-2026-120338, saved unedited under `tests/fixtures/nvd_cna/`, so a project locking prefab-ui 0.14.0 up to 0.21.0 gets a CRITICAL AAK-KNOWN-VULN-001 finding naming the fix, 0.21.0, without `aak update` (#1175).
+- New rules for code-execution tools whose sandbox keeps open runtime permissions (`mcp_codeexec_sandbox`) (#1175). AAK-MCP-CODEEXEC-SANDBOX-001 (CRITICAL): Python that registers FastMCP's Generative UI provider (`add_provider(GenerativeUI())`, whose `generate_prefab_ui` tool runs caller Python) in a project whose lockfiles or installed packages give prefab-ui 0.14.0 up to 0.21.0, or that pins it nowhere, since fastmcp's `apps` extra asks only for 0.18.0 (CVE-2026-120338). AAK-MCP-CODEEXEC-SANDBOX-002 (HIGH): a Deno launch with `-A`, `--allow-all` or an unscoped `--allow-read`, `--allow-write`, `--allow-net`, `--allow-run`, `--allow-env`, `--allow-ffi`, `--allow-sys` or `--allow-import`, in Python or JS/TS, whose own file or a script it names hands the runtime code that is not a fixed literal (`runPython`, `runPythonAsync`, `eval`, `new Function`) and never revokes the open permission. Both read prefab-ui's own fix as closed: 0.21.0 keeps unscoped read and write for bootstrap, scopes the network flag and revokes all three with `Deno.permissions.revoke` before taking code. The evidence says to upgrade, start the runtime with no or scoped permissions, and check the environment for unexpected `.pth` files, and makes no claim of exploitation.
+
 ### Changed
 
-- The Docker image no longer ships pip, setuptools or wheel: they are removed after the package is installed, which takes the last two Trivy rows (CVE-2026-24049 on wheel, CVE-2026-23949 on the jaraco.context setuptools vendors) off the Security tab. The image runs the CLI and installs nothing at runtime.
-- The nightly and release Trivy scans skip CVEs with no fix in the base image's distribution (`ignore-unfixed`), the action is pinned by commit, and the base image digest is refreshed; the Security tab stops collecting unfixable base-image rows.
-- The `--llm-scan` canary and the MCPTox eval were run on 0.6.23 against claude-haiku-5-5, claude-sonnet-5-5 and claude-opus-5-5; benchmarks/llm_scan_eval/RESULTS.md carries the figures and cost.
+- `AAK-MCP-MCPHUB-CVE-2026-79748-001` reports `@samanhappy/mcphub` below 1.1.8, up from 1.0.32, for VulDB's CVE-2026-120323 of 2 Nov (passthroughHeaders leaks credentials, CVSS 4.3) (#1175). The record lists every 1.0.x through 1.0.45 and 1.1.x through 1.1.7 as affected and names no 1.0.x fix. It carries no packageURL and no repository, so a reviewed map row now names npm `@samanhappy/mcphub` for VulDB's "samanhappy MCPHub", and the record is bundled. The npmjs.com page shows the project only in its README, since no published version carries a `repository` field; the row says how it was checked.
+
+## [0.6.31] - 2026-11-01
+
+### Added
+
+- New rule AAK-MALICIOUS-RELEASE-002 (HIGH): an MCP config launches a package with no version, a tag, or a range that admits a listed release, while the malicious-release feed lists particular releases of that package (#1162). GitHub published local-commander-agent 0.3.52, an MCP bridge, as malware on 31 Oct (GHSA-7j62-5j84-72fv, OSV MAL-2026-18425), and `npx -y local-commander-agent` drew only a MEDIUM "no version pin" on 0.6.30, because AAK-MALICIOUS-RELEASE-001 matches a version-specific entry only against an exact pin. Such a launch is now reported whenever the package has any version-specific entry, naming the entries and their releases, and AAK-SUPPLY-001 and AAK-MCP-007 stand down on it, so it is reported once. A package the feed lists in every release stays AAK-MALICIOUS-RELEASE-001's.
+- `aak scan --include-user-config` also reads the launchers' caches on this host: npm's npx cache (`<cache>/_npx/<hash>/node_modules/<name>/package.json`, the cache `npm_config_cache` names, else `~/.npm` or `%LocalAppData%\npm-cache`) and uv's tool environments (`<cache>/environments-v*/`, the cache `UV_CACHE_DIR` names, else `$XDG_CACHE_HOME/uv`, `~/.cache/uv` or `%LOCALAPPDATA%\uv\cache`) (#1162). A listed release in either is AAK-MALICIOUS-RELEASE-001, and the evidence names the cache path. Without the flag a scan still reads nothing outside the project.
+- The bundled malicious-release feed holds OSV MAL-2026-18425 (local-commander-agent 0.3.52) beside MAL-2026-2144, written as `aak update` reads the OSV record, so a scan without `aak update` reports both (#1162).
+- New rule AAK-MALICIOUS-EXTENSION-001 (`malicious_extensions`, CRITICAL): the extensions a VS Code-based editor installed, checked against a new `extensions` list in the malicious-release feed (#1162). On 29 Oct Cursor's marketplace served tampered builds of `anthropic.claude-code` 2.1.312 and 2.1.313 under Anthropic's publisher id, which added an SSH key and a LaunchAgent, scheduled task or crontab line, and AAK read no extension folder. The rule reads `<home>/.<editor>/extensions/<publisher>.<name>-<version>[-<platform>]/` and the `extensions.json` index beside them in the scan root, `root/`, `home/*/` and `Users/*/`, and with `--include-user-config` in your own home. The bundled entry lists 2.1.313 on every editor, since Anthropic never published one, and any build whose `extension.js` has the SHA-256 Cursor's notice gives, which catches the tampered 2.1.312 and leaves Anthropic's real 2.1.312 alone. The finding says to remove the extension, update to 2.1.314, and check for the persistence Cursor names; it does not say whether the build ran. A workspace's `.vscode/extensions.json` recommendation is reported only for an entry that lists every version. `aak update` keeps the bundled entries.
+
+## [0.6.30] - 2026-10-31
+
+### Added
+
+- NVD's CNA records written in GitHub's advisory grammar are read (#1150). GitHub's CNA writes every range as text in `version` (`< 0.5.0`, `>= 2.2.0, < 3.0.1`), never with `lessThan`, so even a record a reviewed row mapped gave no range. Now `< x`, `<= x`, `> x`, `>= x` and `= x`, comma-separated, are read on the package registry's own order; `> x` starts at the first version after x, which semver has and PEP 440 does not, so it stays unread on PyPI. Other text is still not read, and a mapped record left with no range is counted.
+- New rule AAK-KNOWN-VULN-002 (`known_vulns_launch`): NVD records for MCP servers and agent apps on neither PyPI nor npm, matched to what a project launches (#1150). MoLing 0.4.0 started from `.mcp.json` (a Go binary, no auth on its SSE endpoints before 0.5.0, CVSS 9.6) and TAKO's image `fctrid/ai-agent-for-okta` below 3.0.1-beta (CVSS 9.8) scanned clean: their records name a vendor and product and no package. Reviewed launch rows in `data/cna_package_map.json` now name how each project starts its software (the binary, the Go module, the image), taken from its own repository; `aak update` writes the matching records to a third feed list, `launch`, and prints the ten (vendor, product) pairs that most often mapped to nothing. The rule reads an MCP config's `command`, `go run`, `docker run` and repository URLs, and image references in compose files, Kubernetes manifests, Helm values and Dockerfiles, on semver. A launch in the range takes the record's severity; one whose release could not be read is MEDIUM. A cached feed written before a list existed reads the bundled one until `aak update` writes it.
+- The bundled advisory feed holds NVD's record of CVE-2026-119706 (CVSS 9.8): InternLM LMDeploy 0.9.0 through 0.18.0 runs code an unauthenticated client sends to its `/update_weights` endpoint, and no fixed release is out (#1150). VulnCheck's CNA record names the package by packageURL, so it needs no map row and no hand pin, and OSV holds the CVE only as a git commit range, with nothing for PyPI `lmdeploy`. A project that locks `lmdeploy` 0.18.0 now gets a CRITICAL AAK-KNOWN-VULN-001 finding saying the advisory lists no fixed release and 0.18.0 as the last affected one; 0.8.0 gets none. The bundled NVD list is now seven entries from five records.
+- AAK-KNOWN-VULN-001 also reads NVD's records of CNA version data, for the CVEs OSV has no package record of (#1149). langflow 1.12.8 locked in a project passed 0.6.29: IBM's CVE-2026-110186 (CVSS 9.8) of 29 Oct names Langflow OSS 1.0.0 through 1.12.8, and OSV had no record of it. `aak update` reads every NVD record modified in the last 120 days (`--nvd-days`, with `NVD_API_KEY` when set; about 20 minutes and 200 MB), maps a record to a PyPI or npm package only by its CNA's packageURL or a reviewed row of `data/cna_package_map.json`, counts and drops the rest, and drops an NVD entry once OSV lists its CVE for the package. The bundled feed holds the six entries from four such records (langflow, and npm's open, @modelcontextprotocol/inspector and opencode-ai). When NVD cannot be read, `aak update` rebuilds the OSV half, keeps the NVD entries scans read before and exits 2.
+- The CVE watcher reads a third source: every NVD record published in its window whose CNA data names an npm or PyPI package the pin tables carry, mapped the same way, whatever its text says (#1149). When the record's range admits a release at or above a pin's floor that no pin reports, the issue is titled `pin floor stale: <rule>, <CVE>` and its body names the floor, the range's end and the fixed release; it still holds the release. `tests/test_pin_floors_vs_advisories.py` fails the same way offline, for every bundled advisory a pin names.
+
+### Changed
+
+- `AAK-MCP-LANGFLOW-CVE-2026-12940-001` reports `langflow` below 1.13.0, up from 1.12.0, for IBM's Langflow OSS records of 29 Oct: CVE-2026-110186, CVE-2026-93680, CVE-2026-110193 and CVE-2026-110192 (1.0.0 through 1.12.8, fixed in 1.13.0), CVE-2026-104339 (through 1.12.3, fixed in 1.12.4) and CVE-2026-107327 and CVE-2026-107329 (through 1.12.4, fixed in 1.12.5). `langflow-base` and `lfx` stay at 1.12.0: no IBM bulletin or CNA record names them (#1149).
+
+## [0.6.29] - 2026-10-29
+
+### Added
+
+- New rule AAK-KNOWN-VULN-001: every locked, pinned or installed PyPI and npm package is checked against OSV advisories at scan time, offline, from the feed `aak update` builds (#1136). The vLLM and MLflow advisories of 26-27 Oct passed 0.6.28; OSV had no record for the OpenHands SDK one on 29 Oct, so the rule reports it only once OSV publishes one and `aak update` reads it.
+- New rule AAK-AGENT-SERVER-NOAUTH-001: sandbox agent servers launched on all interfaces without session keys (CVE-2026-112346), in OpenHands' `DockerWorkspace` and `ApptainerWorkspace` launches, compose services and `docker run` (#1137). 1.52.0 moved only the Docker launcher's port to loopback; the Apptainer one still binds every interface.
+
+### Changed
+
+- `aak update` builds the advisory feed from the same OSV exports as the malicious-release feed, in one pass, so each is still downloaded once, and exits 2 when either feed fails to build (#1136).
+
+## [0.6.28] - 2026-10-28
+
+### Added
+
+- New scanner `startup_hooks`: flags executable .pth lines, sitecustomize/usercustomize in site-packages, Dockerfiles that add them, and npm install scripts in MCP projects (#1119). litellm 1.107.0 (21 Oct 2026) used this route.
+- New rule AAK-MALICIOUS-RELEASE-001 with an offline feed seeded from OSV MAL-2026-2144; `aak update` refreshes it (#1119). Scans stay offline.
+- New scanner `runtime_advisories`: Node, PHP and Python runtime versions in Dockerfiles, version files, engines and MCP launchers, plus Brotli/brotlicffi in lockfiles, against a bundled advisory file (#1120). Triggers: PHP2Shell (KEV, 26 Oct) and CVE-2026-111497.
+- AAK-GHA-SECRET-DUMP-001 flags workflow steps that print secrets through an encoder, the route the Gheist campaign used (#1121).
+- `AAK-MCP-AWSAPIMCP-CVE-2026-115413-001` (HIGH): `awslabs.aws-api-mcp-server`, the AWS API MCP Server, from 1.3.0 below 1.6.0 (CVE-2026-115413, #1111, #1123). The OAuth mode added in 1.3.0, which HTTP mode turns on unless `AUTH_TYPE=no-auth` is set, did not check which application a token was issued to, so a token the same identity provider issued to another application could run AWS operations with the server's credentials. 1.6.0 adds `AUTH_AUDIENCE` and `AUTH_CLIENT_ID` and requires one of them. `latest` is fixed, so only a stated version is reported. It is its own rule beside the 1.3.47 one, whose range ends at 1.3.46.
+- `AAK-MCP-FFMPEG-CVE-2026-117568-001` (HIGH): `mcp-ffmpeg` on npm from 1.0.3, every version (CVE-2026-117568, #1112, #1123). Its `resize-video`, `extract-audio` and `get-video-info` tools put video paths inside a double-quoted string run through `child_process.exec`, so a file name holding a command substitution or a quote runs commands. There is no fixed release: 1.0.5 is the newest and the project's issue is open. 1.0.0 to 1.0.2 were an upload service with no MCP tools and are not reported, and PyPI's `mcp-ffmpeg` is another project.
+
+### Changed
+
+- `aak update` now also rebuilds the malicious-release feed from OSV's PyPI and npm exports (about 260 MB), adds GitHub's malware advisories with `--github-malware` and a token, and exits 2 when either update fails, where it used to exit 0; a failed rebuild keeps the cached feed as it was (#1119).
+- cve-watcher now also reads OSV for every package the pin tables name (#1122).
+- `AAK-MCP-SDK-CVE-2026-59951-001` also covers CVE-2026-116684, CVE-2026-116685 and CVE-2026-116686 (#1113, #1117, #1118, #1123), three more MCP Python SDK flaws that 1.30.0 and 2.2.0 fix: server-side bearer authentication that accepts a token issued for another resource, client transports that send custom credential headers across a cross-origin redirect, and output-schema validation that fetches a server-chosen `$ref`. Their ranges sit inside the rule's, so what it reports is unchanged; its title, remediation and limitations now name all four.
+- The State of MCP Security report is version 1.2 (#1120). `AAK-RUNTIME-ADV-001` finds a critical flaw in one more config of the same 2026-07-26 corpus, an MCP server launched from an nvm install of Node.js 22.22.3, so configs with a critical finding go from 1,184 (51.4%) to 1,185 (51.5%) and one config moves from grade A to B; nothing else moved. The AAK-MCP-001 measurement's re-derivation of the headline follows.
+
+## [0.6.27] - 2026-10-27
+
+### Added
+
+- `AAK-MCP-TOOLBOX-CVE-2026-93328-001` (CRITICAL): `@toolbox-sdk/server`, the npm launcher for Google MCP Toolbox for Databases, from 1.2.0 below 1.5.0 (CVE-2026-93328, #1100, #1102). The Cloud Storage tools took any bucket and any absolute local path from the tool call, so anyone who could invoke them could send host files to a bucket outside the project or overwrite local files. 1.5.0 adds `allowedBuckets` and `allowedLocalRoots`, which still allow everything when omitted, so the fix advice names 1.10.0 and setting both. It is its own rule beside the HIGH CVE-2026-102242 one, whose symlink flaw presumes the roots 1.5.0 adds, and `latest` is fixed, so only a stated version is reported.
+- `AAK-MCP-CLOUDRUN-CVE-2026-85297-001` (HIGH): `@google-cloud/cloud-run-mcp`, Google's Cloud Run MCP server, below 1.11.0, and the unscoped `cloud-run-mcp`, the same 1.0.0 build under its first name (CVE-2026-85297, #1101, #1102). Source deploys were staged in a bucket named `<project id>-source-bucket` without checking that the project owns it, and bucket names are global, so a bucket created first under that name elsewhere received the source. `latest` is fixed, so only a stated version of the scoped package is reported; the unscoped name has no other release, so any reference to it is.
+
+### Changed
+
+- `AAK-MCP-TOOLBOX-CVE-2026-102242-001` no longer tells a server below 1.5.0 to keep symlinks out of the Cloud Storage tools' directories (#1100, #1102). Below 1.5.0 there is no `allowedLocalRoots` and the tools take any absolute path, so that stopgap protected nothing; it now applies to 1.5.0 to 1.9.x and points older releases at the upgrade and at the CVE-2026-93328 rule.
+
+## [0.6.26] - 2026-10-26
+
+### Added
+
+- `AAK-MCP-LITELLM-CVE-2026-114612-001` (CRITICAL): `litellm` from 1.87.0 below the fixed releases, 1.100.4, 1.101.3, 1.102.2 and 1.103.1 on their lines and 1.104.0 (CVE-2026-114612, #1081, #1088). LiteLLM sealed UI and CLI session tokens with the helper that seals its secrets at rest, and from 1.87.0 the key API seals a key's `callback_vars` metadata with it too, so an internal user could have a forged administrator session sealed for them and present it as a bearer token: administrator access, and commands run through the proxy's MCP stdio endpoint. 1.87.0 to 1.90.x are exposed only with `EXPERIMENTAL_UI_LOGIN` turned on, later releases by default. Only a stated version on PyPI is reported, since `latest` is fixed, and 1.104.0rc1, the one affected 1.104 pre-release, reads as 1.104.0, which is fixed, so it is not reported. The older LiteLLM rule keeps its 1.84.0 floor.
+- `AAK-MCP-UNICLI-CVE-2026-58497-001` (HIGH): `@zenalexa/unicli`, Uni-CLI on npm, from 0.208.0 below 0.225.2 (CVE-2026-58497, #1083, #1093). Its legacy HTTP MCP transport answered a web page's cross-origin request to loopback `/mcp` without checking `Origin`, so a page the user opened could drive the local server's tools. 0.207.1 has no HTTP transport and is not reported, and `latest` is fixed, so only a stated version is.
+- `AAK-MCP-OBSIDIANTC-CVE-2026-115477-001` (HIGH): `obsidian-tc` from 1.0.1 below 1.31.4, on npm and as the GHCR image (CVE-2026-115477, CVE-2026-115478, #1084, #1085, #1093). A declined human-in-the-loop confirmation could still run a destructive call over HTTP, and the memory tools overwrote vault notes they did not own. It is its own rule beside the CRITICAL 1.3.1 one, so 1.3.1 to 1.31.3 are not reported as that rule's flaws.
+- `AAK-MCP-NETBOX-CVE-2026-57207-001` (MEDIUM): the NetBox MCP Server image, `netboxlabs/netbox-mcp-server` below 1.2.1 (CVE-2026-57207, #1086, #1093). Its HTTP transport had no authentication. 1.2.1 adds a bearer token but leaves it optional, which the rule's limitations say, and the server is on neither npm nor PyPI, so the image tag is what the rule reads.
+- `AAK-MCP-FROMOPENAPI-CVE-2026-115750-001` (LOW): `mcp-from-openapi` from 2.2.0 below 2.9.0 (CVE-2026-115750, CVE-2026-115751, #1087, #1089, #1093). Spec fetches carried `Authorization` and `Cookie` across a cross-origin redirect, and a trailing dot slipped past `ssrf.blockedHosts`. It is its own rule beside the HIGH 2.5.0 one.
+- `AAK-MCP-LANGGRAPH-CLI-CVE-2026-115885-001` (MEDIUM): `langgraph-cli` from 0.4.15 below 0.4.32 (CVE-2026-115885, #1092, #1093). `langgraph deploy --verbose` printed the temporary registry push token it hands to `docker login`.
+- `AAK-MCP-SIYUAN-CVE-2026-116168-001` (MEDIUM): the SiYuan image, `b3log/siyuan` from v3.7.0 below v3.8.7 (CVE-2026-116168, #1096, #1098). The kernel's MCP asset tool copies local files into the workspace on `upload`, and its sensitive-path list left out `.env`, so a client holding an API token could have the server user's `.env` copied in and read it back through `/assets/`. npm's and PyPI's `siyuan` are other projects, so the image tag is what the rule reads; tags below v3.7.0 predate the tool and are not reported. SiYuan's earlier records were closed as out of scope before AAK read image tags.
+
+### Changed
+
+- `AAK-MCP-LANGGRAPH-CHECKPOINT-CVE-2026-71433-001` also covers CVE-2026-115883 (#1091, #1093), the same cross-tenant namespace flaw reached through a dotted label on a read: `langgraph-checkpoint-postgres` now floors at 3.1.3 and `langgraph-checkpoint-sqlite` at 3.1.2, up from 3.1.1 for both. A file that declares both packages below their floors now gets one finding for each.
+
+## [0.6.25] - 2026-10-22
+
+### Added
+
+- `AAK-MCP-D365FO-CVE-2026-114123-001` (HIGH): `d365fo-mcp`, the D365 F&O MCP Server on npm, below 1.11.0 (CVE-2026-114123, #1071, #1074). Before 1.11.0 the documented Azure one-click deployment left the `apiKey` parameter empty, the middleware passed every request through when `API_KEY` was empty, and the HTTP listener bound `0.0.0.0`, so a public App Service answered unauthenticated `tools/call` on `/mcp` and served the indexed X++ source, security roles and labels, read-only mode included. 1.11.0 requires the key in the templates, keeps a keyless server on loopback and refuses to start on a public interface without one. The rule reads the package version a project declares, not the deployment template or the App Service setting, and `latest` is fixed, so only a stated version is reported.
+
+### Changed
+
+- The standards crosswalk page, `docs/crosswalk/nsa-csi-owasp-agentic.md`, is checked against its generator: `make crosswalk-check` (`scripts/sync_crosswalk.py --check`) runs in CI's counts job and pytest asserts the same equality, so a rule added, retired or remapped without `make crosswalk` turns the build red instead of leaving the page stale (#1060, #1079).
+
+### Fixed
+
+- `aak corpus update` writes only a bare file name from the manifest: an entry whose `target_filename` (or, without one, whose id) holds a path separator, is `.` or `..`, or is absolute is skipped with a warning that names it, where before `<data dir>/<target_filename>` was written wherever the name led (#1060, #1075).
+- AAK-TRUST-007 no longer fires on an empty `enabledMcpjsonServers` list, so `aak fix` clears it: a present key is the allowlist, and `[]` approves no server, the strictest allowlist there is. Through 0.6.24 the fix wrote `[]`, reported a fix, and the finding stayed (#1060, #1076).
+- `suggest --auto-pr` shows each fixed file in the draft PR's File column relative to the project root, never as the operator's absolute local path; a path outside the project, which no fix writes, shows its name alone (#1060, #1077).
+- The secret scanner (AAK-SECRET-001 to 004 and 007 to 009, and the private-key walk of AAK-SECRET-005) and AAK-MCP-016's source reader enforce their 1,000,000-byte cap in the read itself, through the capped reader, where before a stat decided and the read that followed took the file whole; a file whose reported size is under the cap but whose bytes are not is refused. The seven secret rules whose limitations did not state the cap now do (#1060, #1078).
+- AAK-STDIO-001's TypeScript and JavaScript reader places its findings in one pass over the file, where before each match's line was looked up on its own and the cost grew with the square of the file: 20,000 distinct matches in 489 KB took 0.82 s and doubling them cost 2.6x, now 0.44 s and 2.0x (#1060, #1080).
+
+## [0.6.24] - 2026-10-21
+
+### Added
+
+- `AAK-MCP-TSSDK-CVE-2026-111767-001` (HIGH): the MCP TypeScript SDK, `@modelcontextprotocol/sdk` from 1.24.0 below 1.32.0 (CVE-2026-111767, #1065, #1069). The experimental tasks feature's `InMemoryTaskStore` took each call's session id and ignored it, so every client sharing one store shared one pool of tasks and could list, read and cancel another session's. 1.32.0 ties each task to the session that created it. Only a server that passes `taskStore` is exposed, which the version cannot tell, and the 2.x packages are not affected. `latest` is fixed, so only a stated version is reported. Its own rule beside `AAK-MCP-TSSDK-CVE-2026-104850-001`, whose 1.31.0 floor stays: 1.31.0 is fixed for the OAuth bug and affected by this one.
+- `AAK-MCP-RIPGREP-CVE-2026-113378-001` (MEDIUM): `mcp-ripgrep`, every release (CVE-2026-113378, #1059, #1069). The server runs its ripgrep command line through a shell and appends the `advanced-search` and `list-files` tools' `fileType` argument to it unescaped, where every other argument is quoted, so a model-supplied file type holding a shell metacharacter runs a command as the server's user. Every published release, 0.1.0 to 0.4.0, has it, nothing has shipped since 2025-04-29, and the maintainer points at the README's warning rather than a fix, so the rule reports the package with or without a version, from a dependency, a lockfile or an MCP config. Keep it away from agents that read untrusted text, or keep those two tools out of the model's reach.
+
+### Changed
+
+- The Docker image no longer ships pip, setuptools or wheel: they are removed after the package is installed, which takes the last two Trivy rows (CVE-2026-24049 on wheel, CVE-2026-23949 on the jaraco.context setuptools vendors) off the Security tab. The image runs the CLI and installs nothing at runtime (#1062).
+- The nightly and release Trivy scans skip CVEs with no fix in the base image's distribution (`ignore-unfixed`), the action is pinned by commit, and the base image digest is refreshed; the Security tab stops collecting unfixable base-image rows (#1061).
+- The `--llm-scan` canary and the MCPTox eval were run on 0.6.23 against claude-haiku-5-5, claude-sonnet-5-5 and claude-opus-5-5; benchmarks/llm_scan_eval/RESULTS.md carries the figures and cost (#1063).
 
 ## [0.6.23] - 2026-10-20
 

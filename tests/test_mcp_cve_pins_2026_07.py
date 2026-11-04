@@ -147,6 +147,24 @@ PINS = {
     "AAK-MCP-CLAUDEAGENTSDK-CVE-2026-96620-001": "critical",
     # 2026-10-20 (#1055)
     "AAK-CHATCHAT-CVE-2026-75128-001": "critical",
+    # 2026-10-21 (#1059, #1065)
+    "AAK-MCP-TSSDK-CVE-2026-111767-001": "high",
+    "AAK-MCP-RIPGREP-CVE-2026-113378-001": "medium",
+    # 2026-10-22 (#1071)
+    "AAK-MCP-D365FO-CVE-2026-114123-001": "high",
+    # 2026-10-23 (#1081)
+    "AAK-MCP-LITELLM-CVE-2026-114612-001": "critical",
+    # 2026-10-24 (#1083 to #1092)
+    "AAK-MCP-UNICLI-CVE-2026-58497-001": "high",
+    "AAK-MCP-OBSIDIANTC-CVE-2026-115477-001": "high",
+    "AAK-MCP-FROMOPENAPI-CVE-2026-115750-001": "low",
+    "AAK-MCP-LANGGRAPH-CLI-CVE-2026-115885-001": "medium",
+    # 2026-10-27 (#1100, #1101)
+    "AAK-MCP-TOOLBOX-CVE-2026-93328-001": "critical",
+    "AAK-MCP-CLOUDRUN-CVE-2026-85297-001": "high",
+    # 2026-10-28 (#1111, #1112)
+    "AAK-MCP-AWSAPIMCP-CVE-2026-115413-001": "high",
+    "AAK-MCP-FFMPEG-CVE-2026-117568-001": "high",
 }
 
 
@@ -1000,12 +1018,13 @@ def test_langflow_patched_passes(tmp_path: Path) -> None:
     # 1.0.0-1.11.2), then 1.11.3 -> 1.11.6 on 2026-09-12 for CVE-2026-85025,
     # CVE-2026-78575 and CVE-2026-81941 (all scoped 1.0.0-1.11.5), then 1.11.6 ->
     # 1.12.0 on 2026-10-05 for CVE-2026-101861 (eval() on Tool-Mode input options,
-    # 1.0.16-1.11.6). The version in this assertion moves each time rather than the
-    # test being deleted, because "the patched release does not fire" is still the
-    # property worth holding. The versions the old floors called patched are
+    # 1.0.16-1.11.6), then 1.12.0 -> 1.13.0 on 2026-10-30 for IBM's CVE-2026-110186
+    # batch (1.0.0-1.12.8). The version in this assertion moves each time rather than
+    # the test being deleted, because "the patched release does not fire" is still
+    # the property worth holding. The versions the old floors called patched are
     # asserted to fire in tests/test_cve_deferral_queue_2026_09_08.py.
     assert "AAK-MCP-LANGFLOW-CVE-2026-12940-001" not in _ids(
-        tmp_path, "requirements.txt", "langflow==1.12.0\n"
+        tmp_path, "requirements.txt", "langflow==1.13.0\n"
     )
 
 
@@ -1118,8 +1137,10 @@ def test_langgraph_checkpoint_sqlite_below_floor_fires(tmp_path: Path) -> None:
 
 
 def test_langgraph_checkpoint_patched_passes(tmp_path: Path) -> None:
+    """3.1.1 fixed CVE-2026-71433; CVE-2026-115883 (#1091) moved the floors to
+    postgres 3.1.3 and sqlite 3.1.2, so 3.1.3 is now the first quiet postgres."""
     assert "AAK-MCP-LANGGRAPH-CHECKPOINT-CVE-2026-71433-001" not in _ids(
-        tmp_path, "requirements.txt", "langgraph-checkpoint-postgres==3.1.1\n"
+        tmp_path, "requirements.txt", "langgraph-checkpoint-postgres==3.1.3\n"
     )
 
 
@@ -2305,7 +2326,7 @@ def test_claudecode_is_its_own_low_rule_beside_the_high_pin() -> None:
 
 def test_langflow_floor_moves_to_1_12_0_for_cve_2026_101861(tmp_path: Path) -> None:
     pin = next(p for p in _PINS if p.rule_id == _LANGFLOW)
-    assert pin.floor == (1, 12, 0)
+    assert pin.floor is not None and pin.floor >= (1, 12, 0)  # 1.13.0 since 2026-10-30
     assert "CVE-2026-101861" in RULES[_LANGFLOW].cve_references
     assert _LANGFLOW in _ids(tmp_path, "requirements.txt", "langflow==1.11.6\n")
 
@@ -2346,12 +2367,15 @@ _LANGFLOW_CVES_2026_10_06 = (
 
 def test_langflow_rule_carries_the_october_cves_at_the_same_floor() -> None:
     """#903-#905 and #908: fixed in 1.10.3, 1.9.0, 1.10.3 and 1.9.1, all under the
-    1.12.0 floor, so they join the rule and no floor moves. One rule, three pins."""
+    1.12.0 floor, so they join the rule and no floor moves. One rule, three pins.
+    IBM's records of 29 Oct moved the `langflow` row alone to 1.13.0: none names
+    `langflow-base` or `lfx`."""
     for cve in _LANGFLOW_CVES_2026_10_06:
         assert cve in RULES[_LANGFLOW].cve_references
     pins = [p for p in _PINS if p.rule_id == _LANGFLOW]
     assert sorted(p.display for p in pins) == ["langflow", "langflow-base", "lfx"]
-    assert {p.floor for p in pins} == {(1, 12, 0)}
+    assert {p.display: p.floor for p in pins} == {
+        "langflow": (1, 13, 0), "langflow-base": (1, 12, 0), "lfx": (1, 12, 0)}
     assert {p.ecosystem for p in pins} == {"py"}
 
 
@@ -2390,6 +2414,43 @@ def test_langflow_base_is_no_longer_read_as_an_unpinned_langflow(tmp_path: Path)
 ])
 def test_langflow_lookalikes_are_quiet(tmp_path: Path, name: str, content: str) -> None:
     assert _LANGFLOW not in _ids(tmp_path, name, content)
+
+
+# --- 2026-10-30: IBM's Langflow OSS records of 29 Oct, read from NVD's CNA data ---
+_LANGFLOW_CVES_2026_10_30 = (
+    "CVE-2026-110186", "CVE-2026-93680", "CVE-2026-110193", "CVE-2026-110192",
+    "CVE-2026-104339", "CVE-2026-107327", "CVE-2026-107329",
+)
+
+
+def test_langflow_2026_10_30_fixtures_positive_and_negative() -> None:
+    """A uv.lock resolving 1.12.8, the last release IBM's records name, fires; one
+    resolving 1.13.0, the release bulletin 7294467 names as fixed, does not."""
+    root = _CVE_FIXTURES / "cve-2026-110186-langflow"
+    assert _LANGFLOW in {f.rule_id for f in scan(root / "vulnerable")[0]}
+    assert _LANGFLOW not in {f.rule_id for f in scan(root / "negative")[0]}
+
+
+@pytest.mark.parametrize(("line", "fires"), [
+    ("langflow==1.12.0\n", True),       # the floor until 2026-10-30
+    ("langflow==1.12.3\n", True),       # CVE-2026-104339's last affected release
+    ("langflow==1.12.4\n", True),       # CVE-2026-107327 and -107329's
+    ("langflow==1.12.8\n", True),       # CVE-2026-110186, -93680, -110193 and -110192's
+    ("langflow==1.13.0\n", False),
+    ("langflow-base==1.12.0\n", False),  # no October record names it
+    ("lfx==1.12.0\n", False),
+])
+def test_langflow_floor_is_1_13_0_for_ibm_s_october_records(tmp_path: Path, line: str, fires: bool) -> None:
+    assert (_LANGFLOW in _ids(tmp_path, "requirements.txt", line)) is fires
+
+
+def test_langflow_rule_names_ibm_s_october_records() -> None:
+    pin = next(p for p in _PINS if p.rule_id == _LANGFLOW and p.display == "langflow")
+    assert pin.fix_label.startswith("1.13.0 ")
+    for cve in _LANGFLOW_CVES_2026_10_30:
+        assert cve in RULES[_LANGFLOW].cve_references
+        assert cve in RULES[_LANGFLOW].description
+        assert cve in pin.fix_label
 
 
 def _write_and_root(tmp_path: Path, name: str, content: str) -> Path:
@@ -3985,3 +4046,706 @@ def test_chatchat_fixtures_positive_and_negative() -> None:
 ])
 def test_chatchat_versions(tmp_path: Path, line: str, fires: bool) -> None:
     assert (_CHATCHAT in _ids(tmp_path, "requirements.txt", line + "\n")) is fires
+
+
+# --- 2026-10-21 (#1065, #1059): the TS SDK's experimental tasks, and mcp-ripgrep ---
+
+_TSSDK_TASKS = "AAK-MCP-TSSDK-CVE-2026-111767-001"
+_RIPGREP = "AAK-MCP-RIPGREP-CVE-2026-113378-001"
+
+
+def test_ts_sdk_tasks_is_its_own_rule_beside_the_oauth_pin() -> None:
+    """CVE-2026-111767 (#1065) is fixed in 1.32.0, above the OAuth pin's 1.31.0 floor,
+    and 1.31.0 is affected by it, so raising that floor would report 1.31.0 as the
+    OAuth bug. Its own HIGH rule, one pin from 1.24.0, where the task store first
+    ships, up to 1.32.0, a stated version required (`latest` is 1.32.1, fixed). The
+    OAuth pin's rows do not move and do not take the CVE."""
+    rule = RULES[_TSSDK_TASKS]
+    assert rule.severity.value == "high"
+    assert rule.cve_references == ["CVE-2026-111767"]
+    assert [(p.names, p.floor, p.introduced, p.requires_version, p.ecosystem)
+            for p in _PINS if p.rule_id == _TSSDK_TASKS] == [
+        (("@modelcontextprotocol/sdk",), (1, 32, 0), (1, 24, 0), True, "js"),
+    ]
+    assert [(p.floor, p.introduced) for p in _PINS if p.rule_id == _TSSDK] == [
+        ((1, 31, 0), (1, 12, 0)), ((2, 2, 0), None),
+    ]
+    assert "CVE-2026-111767" not in RULES[_TSSDK].cve_references
+
+
+def test_ts_sdk_tasks_fixtures_positive_and_negative() -> None:
+    """1.31.0, the last affected release, fires on this rule alone: it is fixed for
+    the OAuth bug. 1.32.0 (727075b5, typescript-sdk#2925) fires on neither."""
+    root = _CVE_FIXTURES / "cve-2026-111767-mcp-ts-sdk-tasks"
+    vulnerable = scan(root / "vulnerable")[0]
+    assert [(f.file_path, f.line_number) for f in vulnerable
+            if f.rule_id == _TSSDK_TASKS] == [("package.json", 5)]
+    assert _TSSDK not in {f.rule_id for f in vulnerable}
+    negative = {f.rule_id for f in scan(root / "negative")[0]}
+    assert _TSSDK_TASKS not in negative and _TSSDK not in negative
+
+
+@pytest.mark.parametrize(("dep", "fires"), [
+    ('"@modelcontextprotocol/sdk": "1.23.1"', False),   # published after 1.24.0; no task store
+    ('"@modelcontextprotocol/sdk": "1.24.0"', True),    # the task store's first release
+    ('"@modelcontextprotocol/sdk": "1.30.1"', True),
+    ('"@modelcontextprotocol/sdk": "^1.31.0"', True),
+    ('"@modelcontextprotocol/sdk": "1.31.0"', True),    # the last affected release
+    ('"@modelcontextprotocol/sdk": "1.32.0"', False),   # ties each task to its session
+    ('"@modelcontextprotocol/sdk": "1.32.1"', False),
+    ('"@modelcontextprotocol/sdk": "latest"', False),   # resolves to a fixed release
+    ('"@modelcontextprotocol/server": "2.1.0"', False),  # the 2.x packages are not affected
+    ('"@modelcontextprotocol/client": "2.1.0"', False),
+    ('"@modelcontextprotocol/core": "2.1.0"', False),
+])
+def test_ts_sdk_tasks_versions(tmp_path: Path, dep: str, fires: bool) -> None:
+    content = '{"dependencies": {%s}}' % dep
+    assert (_TSSDK_TASKS in _ids(tmp_path, "package.json", content)) is fires
+
+
+@pytest.mark.parametrize(("version", "fires"), [("1.31.0", True), ("1.32.0", False)])
+def test_ts_sdk_tasks_lockfile_reads_the_resolved_version(
+    tmp_path: Path, version: str, fires: bool
+) -> None:
+    lock = (
+        '{"lockfileVersion": 3, "packages": {"": {"name": "server"}, '
+        '"node_modules/@modelcontextprotocol/sdk": {"version": "%s"}}}' % version
+    )
+    assert (_TSSDK_TASKS in _ids(tmp_path, "package-lock.json", lock)) is fires
+
+
+def test_ts_sdk_1_30_fires_both_sdk_rules_and_1_31_only_the_tasks_one(tmp_path: Path) -> None:
+    both = _ids(tmp_path, "package.json", '{"dependencies": {"@modelcontextprotocol/sdk": "1.30.1"}}')
+    assert {_TSSDK, _TSSDK_TASKS} <= both
+    only = _ids(tmp_path, "package.json", '{"dependencies": {"@modelcontextprotocol/sdk": "1.31.0"}}')
+    assert _TSSDK_TASKS in only
+    assert _TSSDK not in only
+
+
+def test_ripgrep_rule_is_medium_and_presence_only_on_npm() -> None:
+    """CVE-2026-113378 (#1059): every release, 0.1.0 to 0.4.0 (the newest), appends
+    `-t ${fileType}` unescaped to a command line run through a shell, nothing has
+    shipped since 2025-04-29, and PyPI has no `mcp-ripgrep`, so the pin is
+    presence-only on npm. MEDIUM, from NVD's CVSS 3.1 5.3."""
+    rule = RULES[_RIPGREP]
+    assert rule.severity.value == "medium"
+    assert rule.cve_references == ["CVE-2026-113378"]
+    assert [(p.names, p.floor, p.introduced, p.requires_version, p.ecosystem)
+            for p in _PINS if p.rule_id == _RIPGREP] == [
+        (("mcp-ripgrep",), None, None, False, "js"),
+    ]
+
+
+def test_ripgrep_fixtures_positive_and_negative() -> None:
+    """The `npx` launch and the dependency each fire on their own line; another
+    ripgrep server (`ripgrep-mcp`) and the two ripgrep wrappers do not."""
+    root = _CVE_FIXTURES / "cve-2026-113378-mcp-ripgrep"
+    assert sorted((f.file_path, f.line_number) for f in scan(root / "vulnerable")[0]
+                  if f.rule_id == _RIPGREP) == [(".mcp.json", 5), ("package.json", 5)]
+    assert _RIPGREP not in {f.rule_id for f in scan(root / "negative")[0]}
+
+
+@pytest.mark.parametrize("version", ["0.1.0", "0.4.0", "0.5.0"])
+def test_ripgrep_every_version_fires_until_a_fix_ships(tmp_path: Path, version: str) -> None:
+    """Presence-only. 0.5.0 does not exist; it stands for whatever ships next."""
+    content = '{"dependencies": {"mcp-ripgrep": "%s"}}' % version
+    assert _RIPGREP in _ids(tmp_path, "package.json", content)
+
+
+@pytest.mark.parametrize("content", [
+    '{"mcpServers": {"rg": {"command": "npx", "args": ["-y", "mcp-ripgrep"]}}}',
+    '{"mcpServers": {"rg": {"command": "npx", "args": ["mcp-ripgrep@0.4.0"]}}}',
+    '{"mcpServers": {"rg": {"command": "mcp-ripgrep"}}}',  # a global install, run by name
+])
+def test_ripgrep_launches_fire(tmp_path: Path, content: str) -> None:
+    assert _RIPGREP in _ids(tmp_path, ".mcp.json", content)
+
+
+@pytest.mark.parametrize(("name", "content"), [
+    ("package.json", '{"dependencies": {"ripgrep-mcp": "0.4.0"}}'),  # shk1447/ripgrep-mcp, another server
+    ("package.json", '{"dependencies": {"@vscode/ripgrep": "1.18.0", "ripgrep": "0.3.1"}}'),
+    (".mcp.json", '{"mcpServers": {"rg": {"command": "uvx", "args": ["mcp-ripgrep"]}}}'),  # PyPI has no such package
+    (".mcp.json", '{"mcpServers": {"rg": {"command": "node", "args": ["/srv/mcp-ripgrep/dist/index.js"]}}}'),
+    ("requirements.txt", "mcp-ripgrep\n"),
+])
+def test_ripgrep_lookalikes_and_other_registries_are_quiet(
+    tmp_path: Path, name: str, content: str
+) -> None:
+    assert _RIPGREP not in _ids(tmp_path, name, content)
+
+
+# --- 2026-10-22 (#1071): d365fo-mcp's keyless Azure deployment default ---
+
+_D365FO = "AAK-MCP-D365FO-CVE-2026-114123-001"
+
+
+def test_d365fo_rule_is_high_and_pins_the_npm_package_below_1_11_0() -> None:
+    """CVE-2026-114123 (#1071): before 1.11.0 the documented Azure deployment left
+    `apiKey` empty, the middleware passed every request through with API_KEY empty,
+    and the listener bound 0.0.0.0, so a public App Service answered tools/call
+    unauthenticated. 1.11.0 (e70bd051, 384394a8) requires the key and refuses a
+    keyless listener off loopback. `latest` is 1.21.0, fixed, so a stated version is
+    required; PyPI has no `d365fo-mcp`. HIGH, from GitHub's CVSS 3.1 7.5."""
+    rule = RULES[_D365FO]
+    assert rule.severity.value == "high"
+    assert rule.cve_references == ["CVE-2026-114123"]
+    assert [(p.names, p.floor, p.introduced, p.requires_version, p.ecosystem)
+            for p in _PINS if p.rule_id == _D365FO] == [
+        (("d365fo-mcp",), (1, 11, 0), None, True, "js"),
+    ]
+
+
+def test_d365fo_fixtures_positive_and_negative() -> None:
+    """1.10.1, the last affected release, fires from the dependency and from the
+    versioned npx launch, each on its own line; 1.11.0 and an unversioned launch,
+    which resolves to a fixed release, do not."""
+    root = _CVE_FIXTURES / "cve-2026-114123-d365fo-mcp"
+    assert sorted((f.file_path, f.line_number) for f in scan(root / "vulnerable")[0]
+                  if f.rule_id == _D365FO) == [(".mcp.json", 5), ("package.json", 5)]
+    assert _D365FO not in {f.rule_id for f in scan(root / "negative")[0]}
+
+
+@pytest.mark.parametrize(("dep", "fires"), [
+    ('"d365fo-mcp": "1.0.0"', True),      # the first release has the HTTP mode and the pass-through
+    ('"d365fo-mcp": "1.10.0"', True),
+    ('"d365fo-mcp": "^1.10.0"', True),    # the range admits 1.10.x
+    ('"d365fo-mcp": "1.10.1"', True),     # the last affected release
+    ('"d365fo-mcp": "1.11.0"', False),    # requires the key, refuses a keyless public listener
+    ('"d365fo-mcp": "1.12.0"', False),
+    ('"d365fo-mcp": "1.21.0"', False),    # latest on 2026-10-22
+    ('"d365fo-mcp": "latest"', False),    # resolves to a fixed release
+    ('"@zhound/d365fo-mcp-server": "2.0.1"', False),   # zhound420/D365FO-claude-connector, another project
+    ('"@d365portal/d365fo-context-mcp": "1.0.4"', False),
+    ('"@iflow-mcp/dynamics365ninja-d365fo-mcp-server": "1.0.2"', False),   # a republication on its own line
+    ('"d365fo-mcp-server": "1.10.1"', False),   # the repository's name; npm has no such package
+])
+def test_d365fo_versions(tmp_path: Path, dep: str, fires: bool) -> None:
+    content = '{"dependencies": {%s}}' % dep
+    assert (_D365FO in _ids(tmp_path, "package.json", content)) is fires
+
+
+@pytest.mark.parametrize(("version", "fires"), [("1.10.1", True), ("1.11.0", False)])
+def test_d365fo_lockfile_reads_the_resolved_version(
+    tmp_path: Path, version: str, fires: bool
+) -> None:
+    lock = (
+        '{"lockfileVersion": 3, "packages": {"": {"name": "xpp-assistant"}, '
+        '"node_modules/d365fo-mcp": {"version": "%s"}}}' % version
+    )
+    assert (_D365FO in _ids(tmp_path, "package-lock.json", lock)) is fires
+
+
+@pytest.mark.parametrize(("content", "fires"), [
+    ('{"mcpServers": {"d365fo": {"command": "npx", "args": ["-y", "d365fo-mcp@1.10.1"]}}}', True),
+    ('{"mcpServers": {"d365fo": {"command": "npx", "args": ["-y", "d365fo-mcp@1.11.0"]}}}', False),
+    ('{"mcpServers": {"d365fo": {"command": "npx", "args": ["-y", "d365fo-mcp"]}}}', False),   # resolves to latest, fixed
+    ('{"mcpServers": {"d365fo": {"command": "d365fo-mcp"}}}', False),   # a global install by name states no version
+    ('{"mcpServers": {"d365fo": {"url": "https://d365fo-mcp.example.invalid/mcp"}}}', False),   # a deployed App Service carries no version
+    ('{"mcpServers": {"d365fo": {"command": "uvx", "args": ["d365fo-mcp@1.10.1"]}}}', False),   # PyPI has no such package
+])
+def test_d365fo_launches_report_only_a_stated_npm_version(
+    tmp_path: Path, content: str, fires: bool
+) -> None:
+    assert (_D365FO in _ids(tmp_path, ".mcp.json", content)) is fires
+
+
+# --- 2026-10-23 (#1081): LiteLLM's shared session-token encryption context ---
+
+_LITELLM_114612 = "AAK-MCP-LITELLM-CVE-2026-114612-001"
+
+
+def test_litellm_114612_is_its_own_critical_rule_beside_the_older_litellm_row() -> None:
+    """CVE-2026-114612 (#1081): from 1.87.0 the key API seals `callback_vars` with the
+    same helper that seals session tokens. Fixed in 1.100.4, 1.101.3, 1.102.2, 1.103.1
+    and 1.104.0rc2 (GHSA-7hp6-4w63-5g45; checked at every release tag and in the
+    sdists). The 1.101 to 1.103 lines sort above the 1.100.4 floor, so they are
+    `also` ranges. The older row's 1.84.0 floor does not move and does not take the
+    CVE. PyPI only, a stated version required: `latest` (1.106.2) is fixed."""
+    rule = RULES[_LITELLM_114612]
+    assert rule.severity.value == "critical"
+    assert rule.cve_references == ["CVE-2026-114612"]
+    assert [(p.names, p.floor, p.introduced, p.also, p.requires_version, p.ecosystem)
+            for p in _PINS if p.rule_id == _LITELLM_114612] == [
+        (("litellm",), (1, 100, 4), (1, 87, 0),
+         (((1, 101, 0), (1, 101, 3)), ((1, 102, 0), (1, 102, 2)), ((1, 103, 0), (1, 103, 1))),
+         True, "py"),
+    ]
+    assert [p.floor for p in _PINS if p.rule_id == _LITELLM] == [(1, 84, 0)]
+    assert "CVE-2026-114612" not in RULES[_LITELLM].cve_references
+
+
+def test_litellm_114612_fixtures_positive_and_negative() -> None:
+    """1.100.3, the last affected 1.100 release, fires on this rule alone, on its own
+    line; 1.100.4 fires on neither litellm rule."""
+    root = _CVE_FIXTURES / "cve-2026-114612-litellm"
+    vulnerable = scan(root / "vulnerable")[0]
+    assert [(f.file_path, f.line_number) for f in vulnerable
+            if f.rule_id == _LITELLM_114612] == [("requirements.txt", 2)]
+    assert _LITELLM not in {f.rule_id for f in vulnerable}
+    negative = {f.rule_id for f in scan(root / "negative")[0]}
+    assert _LITELLM_114612 not in negative and _LITELLM not in negative
+
+
+@pytest.mark.parametrize(("version", "fires"), [
+    ("1.86.7", False),     # never seals callback_vars, so there is nothing to replay
+    ("1.87.0", True),      # #27141: callback_vars sealed with the session-token helper
+    ("1.90.7", True),      # exposed only with EXPERIMENTAL_UI_LOGIN turned on
+    ("1.91.0", True),      # on by default
+    ("1.99.4", True),      # no fixed 1.99 release
+    ("1.100.3", True),
+    ("1.100.4", False),    # encrypt_bearer_token
+    ("1.100.5", False),
+    ("1.101.0rc1", True),  # a pre-release reads as its release, here an affected one
+    ("1.101.2", True),
+    ("1.101.3", False),
+    ("1.101.6", False),
+    ("1.102.1", True),
+    ("1.102.2", False),
+    ("1.103.0", True),
+    ("1.103.1", False),
+    ("1.104.0rc1", False),  # affected, but it reads as 1.104.0, which is fixed (stated)
+    ("1.104.0rc2", False),
+    ("1.104.0", False),
+    ("1.106.2", False),    # latest on 2026-10-23
+])
+def test_litellm_114612_versions(tmp_path: Path, version: str, fires: bool) -> None:
+    assert (_LITELLM_114612 in _ids(tmp_path, "requirements.txt", f"litellm=={version}\n")) is fires
+
+
+@pytest.mark.parametrize(("spec", "fires"), [
+    ("litellm>=1.100.4", True),     # still admits 1.101.0 to 1.101.2, 1.102.0 to 1.102.1, 1.103.0
+    ("litellm>=1.103.1", False),
+    ("litellm~=1.101.0", True),
+    ("litellm[proxy]>=1.90,<2", True),
+    ("litellm<1.87", False),
+    ("litellm", False),             # a bare name resolves to latest, which is fixed
+])
+def test_litellm_114612_ranges_report_an_admitted_affected_version(
+    tmp_path: Path, spec: str, fires: bool
+) -> None:
+    assert (_LITELLM_114612 in _ids(tmp_path, "requirements.txt", spec + "\n")) is fires
+
+
+@pytest.mark.parametrize(("name", "content", "fires"), [
+    ("uv.lock", '[[package]]\nname = "litellm"\nversion = "1.100.3"\n', True),
+    ("uv.lock", '[[package]]\nname = "litellm"\nversion = "1.100.4"\n', False),
+    ("poetry.lock", '[[package]]\nname = "litellm"\nversion = "1.102.1"\n', True),
+    ("poetry.lock", '[[package]]\nname = "litellm"\nversion = "1.102.2"\n', False),
+    ("pyproject.toml", '[project]\nname = "gw"\ndependencies = ["litellm[proxy]==1.95.0"]\n', True),
+    ("pyproject.toml", '[tool.poetry.dependencies]\n'
+                       'litellm = {version = "1.103.0", extras = ["proxy"]}\n', True),
+    ("Pipfile", '[packages]\nlitellm = "==1.91.0"\n', True),
+])
+def test_litellm_114612_lockfiles_and_manifests(
+    tmp_path: Path, name: str, content: str, fires: bool
+) -> None:
+    assert (_LITELLM_114612 in _ids(tmp_path, name, content)) is fires
+
+
+@pytest.mark.parametrize(("content", "fires"), [
+    ('{"mcpServers": {"gw": {"command": "uvx", "args": ["litellm@1.100.3"]}}}', True),
+    ('{"mcpServers": {"gw": {"command": "uvx", "args": ["litellm[proxy]@1.100.3"]}}}', True),
+    ('{"mcpServers": {"gw": {"command": "uvx", "args": ["litellm@1.100.4"]}}}', False),
+    ('{"mcpServers": {"gw": {"command": "uvx", "args": ["litellm"]}}}', False),  # resolves to latest
+    ('{"mcpServers": {"gw": {"command": "npx", "args": ["-y", "litellm@0.12.0"]}}}', False),  # npm's JS port
+])
+def test_litellm_114612_launches_read_pypi_only(tmp_path: Path, content: str, fires: bool) -> None:
+    assert (_LITELLM_114612 in _ids(tmp_path, ".mcp.json", content)) is fires
+
+
+def test_litellm_114612_ignores_npm_litellm_and_longer_names(tmp_path: Path) -> None:
+    """npm's `litellm` is zya/litellmjs, a JavaScript port on its own 0.x line, and
+    `litellm-proxy-extras` is another PyPI package."""
+    assert _LITELLM_114612 not in _ids(tmp_path, "package.json", '{"dependencies": {"litellm": "1.100.3"}}')
+    assert _LITELLM_114612 not in _ids(tmp_path, "requirements.txt", "litellm-proxy-extras==0.4.3\n")
+
+
+# --- 2026-10-24 (#1083 to #1092): Uni-CLI, obsidian-tc, mcp-from-openapi, LangGraph ---
+
+_UNICLI = "AAK-MCP-UNICLI-CVE-2026-58497-001"
+_OBSIDIANTC_115477 = "AAK-MCP-OBSIDIANTC-CVE-2026-115477-001"
+_OBSIDIANTC_77366 = "AAK-MCP-OBSIDIANTC-CVE-2026-77366-001"
+_FROMOPENAPI_115750 = "AAK-MCP-FROMOPENAPI-CVE-2026-115750-001"
+_FROMOPENAPI_59973 = "AAK-MCP-FROMOPENAPI-CVE-2026-59973-001"
+_LANGGRAPH_CLI = "AAK-MCP-LANGGRAPH-CLI-CVE-2026-115885-001"
+_LANGGRAPH_CKPT = "AAK-MCP-LANGGRAPH-CHECKPOINT-CVE-2026-71433-001"
+
+
+def _rows(rule_id: str) -> list[tuple]:
+    return [(p.names, p.floor, p.introduced, p.requires_version, p.ecosystem)
+            for p in _PINS if p.rule_id == rule_id]
+
+
+def test_the_2026_10_24_pins_are_the_ranges_the_artifacts_show() -> None:
+    """Each range was read in the published artifacts, not only the advisory.
+    Uni-CLI: 0.207.1 has no HTTP transport, 0.208.0 adds one without an Origin
+    check, 0.225.2 adds the guard. obsidian-tc: 1.31.3 has neither fix string,
+    1.31.4 both. mcp-from-openapi: blockedHosts from 2.2.0, safeFetch from 2.5.0,
+    normalizeHostname in 2.9.0. langgraph-cli: --password-stdin from 0.4.15,
+    verbose=False on it in 0.4.32."""
+    assert _rows(_UNICLI) == [(("@zenalexa/unicli",), (0, 225, 2), (0, 208, 0), True, "js")]
+    assert _rows(_OBSIDIANTC_115477) == [(("obsidian-tc",), (1, 31, 4), (1, 0, 1), True, "js")]
+    assert _rows(_FROMOPENAPI_115750) == [(("mcp-from-openapi",), (2, 9, 0), (2, 2, 0), True, "js")]
+    assert _rows(_LANGGRAPH_CLI) == [(("langgraph-cli",), (0, 4, 32), (0, 4, 15), True, "py")]
+    assert RULES[_OBSIDIANTC_115477].cve_references == ["CVE-2026-115477", "CVE-2026-115478"]
+    assert RULES[_FROMOPENAPI_115750].cve_references == ["CVE-2026-115750", "CVE-2026-115751"]
+
+
+def test_obsidian_tc_and_mcp_from_openapi_keep_their_older_rows() -> None:
+    """A raised floor would have reported 1.3.1 to 1.31.3 as obsidian-tc's CRITICAL
+    vault-binding flaw, and 2.5.0 to 2.8.x as mcp-from-openapi's HIGH $ref SSRF, both
+    fixed at those floors. The older rows do not move and do not take the new CVEs."""
+    assert _rows(_OBSIDIANTC_77366) == [(("obsidian-tc",), (1, 3, 1), (1, 0, 0), True, "js")]
+    assert _rows(_FROMOPENAPI_59973) == [(("mcp-from-openapi",), (2, 5, 0), None, False, "js")]
+    assert RULES[_OBSIDIANTC_77366].severity.value == "critical"
+    assert RULES[_FROMOPENAPI_59973].severity.value == "high"
+    assert not {"CVE-2026-115477", "CVE-2026-115478"} & set(RULES[_OBSIDIANTC_77366].cve_references)
+    assert not {"CVE-2026-115750", "CVE-2026-115751"} & set(RULES[_FROMOPENAPI_59973].cve_references)
+
+
+def test_langgraph_checkpoint_floors_split_per_package() -> None:
+    """CVE-2026-115883 (#1091) is the same cross-tenant namespace flaw, fixed in
+    postgres 3.1.3 and sqlite 3.1.2, so the one rule takes a row per package."""
+    assert _rows(_LANGGRAPH_CKPT) == [
+        (("langgraph-checkpoint-postgres",), (3, 1, 3), None, False, None),
+        (("langgraph-checkpoint-sqlite",), (3, 1, 2), None, False, None),
+    ]
+    assert RULES[_LANGGRAPH_CKPT].cve_references == ["CVE-2026-71433", "CVE-2026-115883"]
+    assert RULES[_LANGGRAPH_CKPT].severity.value == "medium"
+
+
+@pytest.mark.parametrize(("fixture", "rule_id", "where"), [
+    ("cve-2026-58497-unicli", _UNICLI, [("package.json", 5)]),
+    ("cve-2026-115477-obsidian-tc", _OBSIDIANTC_115477, [("package.json", 5)]),
+    ("cve-2026-115750-mcp-from-openapi", _FROMOPENAPI_115750, [("package.json", 5)]),
+    ("cve-2026-115885-langgraph-cli", _LANGGRAPH_CLI, [("requirements-dev.txt", 2)]),
+    ("cve-2026-115883-langgraph-checkpoint", _LANGGRAPH_CKPT, [("requirements.txt", 2), ("requirements.txt", 3)]),
+])
+def test_2026_10_24_fixtures_positive_and_negative(fixture: str, rule_id: str, where: list) -> None:
+    """The last affected release fires, on its own line, and nothing else from the
+    table does; the first fixed release is quiet. The langgraph-checkpoint file
+    declares both packages below their floors and gets one finding for each."""
+    root = _CVE_FIXTURES / fixture
+    vulnerable = scan(root / "vulnerable")[0]
+    assert sorted((f.file_path, f.line_number) for f in vulnerable if f.rule_id == rule_id) == where
+    assert {f.rule_id for f in vulnerable} == {rule_id}
+    assert scan(root / "negative")[0] == []
+
+
+@pytest.mark.parametrize(("version", "fires"), [
+    ("0.207.1", False),   # the first release: no HTTP transport at all
+    ("0.208.0", True),    # the HTTP transport arrives without an Origin check
+    ("0.213.3", True),    # split out into dist/mcp/http-transport.js
+    ("0.225.1", True),
+    ("^0.224.0", True),
+    ("0.225.2", False),   # isOriginAllowed on every transport (d675c267)
+    ("1.3.0", False),     # latest on 2026-10-24
+    ("latest", False),    # resolves to a fixed release
+])
+def test_unicli_versions(tmp_path: Path, version: str, fires: bool) -> None:
+    content = '{"dependencies": {"@zenalexa/unicli": "%s"}}' % version
+    assert (_UNICLI in _ids(tmp_path, "package.json", content)) is fires
+
+
+@pytest.mark.parametrize(("content", "fires"), [
+    ('{"mcpServers": {"u": {"command": "npx", "args": ["-y", "@zenalexa/unicli@0.225.1", "mcp", "serve"]}}}', True),
+    ('{"mcpServers": {"u": {"command": "npx", "args": ["-y", "@zenalexa/unicli", "mcp", "serve"]}}}', False),
+])
+def test_unicli_launches_report_only_a_stated_version(tmp_path: Path, content: str, fires: bool) -> None:
+    assert (_UNICLI in _ids(tmp_path, ".mcp.json", content)) is fires
+
+
+def test_unicli_lookalike_is_quiet(tmp_path: Path) -> None:
+    """npm's `uni-cli` (ImagineZzf/uni-cli) is another project."""
+    assert _UNICLI not in _ids(tmp_path, "package.json", '{"dependencies": {"uni-cli": "0.1.0"}}')
+
+
+@pytest.mark.parametrize(("version", "new", "old"), [
+    ("0.0.1", False, False),    # the placeholder
+    ("1.0.1", True, True),      # below 1.3.1: both obsidian-tc rules
+    ("1.2.1", True, True),
+    ("1.13.0", True, False),    # CVE-2026-115477's floor; the CRITICAL rule is fixed
+    ("1.31.3", True, False),
+    ("1.31.4", False, False),   # both fixes (101c91c6, 99f7914c)
+    ("1.33.1", False, False),
+    ("latest", False, False),
+])
+def test_obsidian_tc_115477_versions(tmp_path: Path, version: str, new: bool, old: bool) -> None:
+    found = _ids(tmp_path, "package.json", '{"dependencies": {"obsidian-tc": "%s"}}' % version)
+    assert (_OBSIDIANTC_115477 in found, _OBSIDIANTC_77366 in found) == (new, old)
+
+
+@pytest.mark.parametrize(("version", "new", "old"), [
+    ("2.1.0", False, True),     # no blockedHosts yet; the 2.5.0 rule still applies
+    ("2.2.0", True, True),      # blockedHosts arrives: CVE-2026-115751
+    ("2.4.0", True, True),
+    ("2.5.0", True, False),     # safeFetch arrives: CVE-2026-115750 too
+    ("2.8.0", True, False),
+    ("2.9.0", False, False),    # normalizeHostname, credentials kept on their origin
+    ("2.9.1", False, False),
+])
+def test_mcp_from_openapi_115750_versions(tmp_path: Path, version: str, new: bool, old: bool) -> None:
+    found = _ids(tmp_path, "package.json", '{"dependencies": {"mcp-from-openapi": "%s"}}' % version)
+    assert (_FROMOPENAPI_115750 in found, _FROMOPENAPI_59973 in found) == (new, old)
+
+
+def test_mcp_from_openapi_115750_needs_a_stated_version_and_npm(tmp_path: Path) -> None:
+    """`latest` is fixed, and PyPI's mcp-from-openapi (0.1.0) is another project."""
+    assert _FROMOPENAPI_115750 not in _ids(tmp_path, "package.json", '{"dependencies": {"mcp-from-openapi": "latest"}}')
+    assert _FROMOPENAPI_115750 not in _ids(tmp_path, "requirements.txt", "mcp-from-openapi==0.1.0\n")
+
+
+@pytest.mark.parametrize(("name", "content", "fires"), [
+    ("requirements.txt", "langgraph-cli==0.4.14\n", False),   # no --password-stdin yet
+    ("requirements.txt", "langgraph-cli==0.4.15\n", True),
+    ("requirements.txt", "langgraph-cli==0.4.31\n", True),
+    ("requirements.txt", "langgraph-cli==0.4.32\n", False),   # docker login runs with verbose=False
+    ("requirements.txt", "langgraph-cli==0.4.38\n", False),   # latest on 2026-10-24
+    ("requirements.txt", "langgraph-cli\n", False),
+    ("requirements.txt", "langgraph-cli[inmem]>=0.4,<0.5\n", True),
+    ("pyproject.toml", '[dependency-groups]\ndev = ["langgraph-cli[inmem]==0.4.20"]\n', True),
+    ("package.json", '{"dependencies": {"@langchain/langgraph-cli": "1.5.5"}}', False),
+])
+def test_langgraph_cli_versions(tmp_path: Path, name: str, content: str, fires: bool) -> None:
+    assert (_LANGGRAPH_CLI in _ids(tmp_path, name, content)) is fires
+
+
+@pytest.mark.parametrize(("line", "fires"), [
+    ("langgraph-checkpoint-postgres==3.1.1", True),   # fixed for CVE-2026-71433, not CVE-2026-115883
+    ("langgraph-checkpoint-postgres==3.1.2", True),
+    ("langgraph-checkpoint-postgres==3.1.3", False),
+    ("langgraph-checkpoint-postgres==3.2.0", False),
+    ("langgraph-checkpoint-sqlite==3.1.1", True),
+    ("langgraph-checkpoint-sqlite==3.1.2", False),
+])
+def test_langgraph_checkpoint_115883_floors(tmp_path: Path, line: str, fires: bool) -> None:
+    assert (_LANGGRAPH_CKPT in _ids(tmp_path, "requirements.txt", line + "\n")) is fires
+
+
+# --- 2026-10-27 (#1100, #1101): MCP Toolbox's Cloud Storage tools, Cloud Run MCP's bucket ---
+
+_TOOLBOX_93328 = "AAK-MCP-TOOLBOX-CVE-2026-93328-001"
+_CLOUDRUN = "AAK-MCP-CLOUDRUN-CVE-2026-85297-001"
+
+
+def test_the_2026_10_27_pins_are_the_ranges_the_artifacts_show() -> None:
+    """MCP Toolbox: v1.1.0 has no cloud-storage source, v1.2.0 adds it with
+    `ValidateLocalPath` (absolute, no `..`) and no bucket check, and v1.5.0 carries
+    googleapis/mcp-toolbox#3454 (2c3ca5d2), which v1.4.0 does not. Cloud Run MCP:
+    every npm release from 1.0.0 to 1.10.0 stages source in `<project
+    id>-source-bucket` and only asks whether it exists; 1.11.0 (#300, 0c707803)
+    checks the owner. The unscoped `cloud-run-mcp` is the 1.0.0 build, its only
+    release, so an unversioned reference to it is reported."""
+    assert _rows(_TOOLBOX_93328) == [(("@toolbox-sdk/server",), (1, 5, 0), (1, 2, 0), True, "js")]
+    assert _rows(_CLOUDRUN) == [
+        (("@google-cloud/cloud-run-mcp",), (1, 11, 0), None, True, "js"),
+        (("cloud-run-mcp",), (1, 11, 0), None, False, "js"),
+    ]
+    assert RULES[_TOOLBOX_93328].cve_references == ["CVE-2026-93328"]
+    assert RULES[_CLOUDRUN].cve_references == ["CVE-2026-85297"]
+
+
+def test_toolbox_93328_is_its_own_critical_rule_beside_the_high_symlink_pin() -> None:
+    """Below 1.5.0 there are no allowed roots, so CVE-2026-102242's symlink escape is
+    not the flaw a 1.4.x server has. The older row keeps its range, severity and CVE,
+    and its stopgap no longer tells a 1.4.x user that keeping symlinks out helps."""
+    assert _rows(_TOOLBOX) == [(("@toolbox-sdk/server",), (1, 10, 0), (1, 2, 0), False, "js")]
+    assert RULES[_TOOLBOX_93328].severity.value == "critical"
+    assert RULES[_TOOLBOX].severity.value == "high"
+    assert "CVE-2026-93328" not in RULES[_TOOLBOX].cve_references
+    assert "below 1.5.0 the option does not exist" in RULES[_TOOLBOX].remediation
+    assert _TOOLBOX_93328 in RULES[_TOOLBOX].remediation
+    assert "`allowedBuckets` and `allowedLocalRoots`" in RULES[_TOOLBOX_93328].remediation
+
+
+@pytest.mark.parametrize(("fixture", "fires", "quiet"), [
+    ("cve-2026-93328-mcp-toolbox", {_TOOLBOX_93328, _TOOLBOX}, {_TOOLBOX}),
+    ("cve-2026-85297-cloud-run-mcp", {_CLOUDRUN}, set()),
+])
+def test_2026_10_27_fixtures_positive_and_negative(fixture: str, fires: set, quiet: set) -> None:
+    """The last affected release fires on its launch line, and nothing else from the
+    table does but the Toolbox's HIGH symlink pin, which covers 1.4.0 and 1.5.0
+    alike; the first fixed release leaves the new rule quiet."""
+    root = _CVE_FIXTURES / fixture
+    vulnerable = scan(root / "vulnerable")[0]
+    assert {f.rule_id for f in vulnerable} == fires
+    assert {(f.file_path, f.line_number) for f in vulnerable} == {(".mcp.json", 5)}
+    assert {f.rule_id for f in scan(root / "negative")[0]} == quiet
+
+
+@pytest.mark.parametrize(("version", "new", "old"), [
+    ("1.1.0", False, False),    # no cloud-storage source yet
+    ("1.2.0", True, True),      # the source arrives: any bucket, any absolute path
+    ("1.3.0", True, True),
+    ("1.4.0", True, True),
+    ("^1.4.0", True, True),     # a range reads as its lowest version
+    ("1.5.0", False, True),     # allowedBuckets and allowedLocalRoots (#3454)
+    ("1.9.0", False, True),
+    ("1.10.0", False, False),   # ResolveSymlinks (#3810)
+    ("1.15.0", False, False),   # latest on 2026-10-27
+    ("latest", False, True),    # the 102242 row reports an unversioned reference; this one does not
+])
+def test_toolbox_93328_versions(tmp_path: Path, version: str, new: bool, old: bool) -> None:
+    found = _ids(tmp_path, "package.json", '{"dependencies": {"@toolbox-sdk/server": "%s"}}' % version)
+    assert (_TOOLBOX_93328 in found, _TOOLBOX in found) == (new, old)
+
+
+@pytest.mark.parametrize(("name", "content", "fires"), [
+    (".mcp.json", '{"mcpServers": {"s": {"command": "npx", "args": ["-y", "@toolbox-sdk/server@1.4.0", '
+                  '"--prebuilt=cloud-storage", "--stdio"]}}}', True),
+    (".mcp.json", '{"mcpServers": {"s": {"command": "npx", "args": ["-y", "@toolbox-sdk/server", '
+                  '"--prebuilt=cloud-storage", "--stdio"]}}}', False),
+    ("package-lock.json", '{"lockfileVersion": 3, "packages": {"": {"name": "x"}, '
+                          '"node_modules/@toolbox-sdk/server": {"version": "1.4.0"}}}', True),
+    ("package.json", '{"optionalDependencies": {"@toolbox-sdk/server-linux-x64": "1.4.0"}}', False),
+])
+def test_toolbox_93328_reads_a_stated_launcher_version(tmp_path: Path, name: str, content: str,
+                                                       fires: bool) -> None:
+    """`latest` is 1.15.0, so an unversioned launch is not this rule's to report, and
+    the per-platform binary packages are not the launcher."""
+    assert (_TOOLBOX_93328 in _ids(tmp_path, name, content)) is fires
+
+
+@pytest.mark.parametrize(("spec", "fires"), [
+    ("1.0.0", True),      # the first release: `<project id>-source-bucket`, exists() only
+    ("1.6.0", True),      # moved to lib/cloud-api/storage.js, unchanged
+    ("1.10.0", True),
+    ("^1.10.0", True),
+    ("1.11.0", False),    # the bucket's project number is checked (#300, 0c707803)
+    ("^1.11.0", False),
+    ("latest", False),    # resolves to 1.11.0
+])
+def test_cloud_run_mcp_versions(tmp_path: Path, spec: str, fires: bool) -> None:
+    content = '{"dependencies": {"@google-cloud/cloud-run-mcp": "%s"}}' % spec
+    assert (_CLOUDRUN in _ids(tmp_path, "package.json", content)) is fires
+
+
+@pytest.mark.parametrize(("name", "content", "fires"), [
+    # the README's own config installs latest, which is fixed
+    (".mcp.json", '{"mcpServers": {"cloud-run": {"command": "npx", '
+                  '"args": ["-y", "@google-cloud/cloud-run-mcp"]}}}', False),
+    # the unscoped name's only release is the affected 1.0.0 build
+    (".mcp.json", '{"mcpServers": {"cloud-run": {"command": "npx", "args": ["-y", "cloud-run-mcp"]}}}', True),
+    (".mcp.json", '{"mcpServers": {"cloud-run": {"command": "npx", '
+                  '"args": ["-y", "cloud-run-mcp@1.0.0"]}}}', True),
+    ("package.json", '{"dependencies": {"cloud-run-mcp": "1.0.0"}}', True),
+    # a server run by the bare executable name states neither package nor version
+    (".mcp.json", '{"mcpServers": {"cloud-run": {"command": "cloud-run-mcp", "args": []}}}', True),
+    # Docker's MCP catalog image carries only `latest`, so no tag states a version
+    (".mcp.json", '{"mcpServers": {"cloud-run": {"command": "docker", '
+                  '"args": ["run", "-i", "--rm", "mcp/cloud-run-mcp:latest"]}}}', False),
+    # PyPI has no cloud-run-mcp
+    ("requirements.txt", "cloud-run-mcp==1.0.0\n", False),
+])
+def test_cloud_run_mcp_references(tmp_path: Path, name: str, content: str, fires: bool) -> None:
+    assert (_CLOUDRUN in _ids(tmp_path, name, content)) is fires
+
+
+# --- 2026-10-28 (#1109-#1118): AWS API MCP Server's OAuth audience, mcp-ffmpeg's exec
+# strings, and three MCP Python SDK CVEs on the 59951 rule ---
+
+_AWSAPI_115413 = "AAK-MCP-AWSAPIMCP-CVE-2026-115413-001"
+_AWSAPI_16584 = "AAK-MCP-AWSAPIMCP-CVE-2026-16584-001"
+_FFMPEG = "AAK-MCP-FFMPEG-CVE-2026-117568-001"
+
+
+def test_the_2026_10_28_pins_are_the_ranges_the_artifacts_show() -> None:
+    """AWS API MCP Server: OAuth arrives in 1.3.0 (awslabs/mcp#1902), and the audience
+    check (#4865, b97eefc7c) is in the 1.6.0 release commit and not at 1.5.6.
+    mcp-ffmpeg: 1.0.0 to 1.0.2 are an Express upload service with no MCP tools, 1.0.3
+    to 1.0.5 build `ffmpeg -i "${absVideoPath}"` strings for `child_process.exec`, and
+    nothing newer exists, so the pin is presence-only from 1.0.3, on npm only."""
+    assert _rows(_AWSAPI_115413) == [(("awslabs.aws-api-mcp-server",), (1, 6, 0), (1, 3, 0), True, None)]
+    assert _rows(_FFMPEG) == [(("mcp-ffmpeg",), None, (1, 0, 3), False, "js")]
+    assert RULES[_AWSAPI_115413].cve_references == ["CVE-2026-115413"]
+    assert RULES[_FFMPEG].cve_references == ["CVE-2026-117568"]
+
+
+def test_the_sdk_sessions_rule_carries_the_three_cves_its_releases_also_fix() -> None:
+    """GHSA-w4fh-qvv9-3v23, GHSA-5h93-6whr-6q8j and GHSA-rwrf-2pqf-9j8j give `mcp` from
+    1.10.0, 1.8.0 and 1.10.0 below 1.30.0, and from 2.0.0 below 2.2.0: inside the
+    rule's range, fixed by the same releases, and MEDIUM like it."""
+    assert RULES[_SDK_SESSIONS].cve_references == [
+        "CVE-2026-59951", "CVE-2026-116684", "CVE-2026-116685", "CVE-2026-116686"]
+    assert _rows(_SDK_SESSIONS) == [(("mcp",), (1, 30, 0), (1, 8, 0), True, "py")]
+    assert RULES[_SDK_SESSIONS].severity.value == "medium"
+    for cve in ("CVE-2026-116684", "CVE-2026-116685", "CVE-2026-116686"):
+        assert cve in RULES[_SDK_SESSIONS].description
+
+
+@pytest.mark.parametrize(("fixture", "fires"), [
+    ("cve-2026-115413-aws-api-mcp-server", _AWSAPI_115413),
+    ("cve-2026-117568-mcp-ffmpeg", _FFMPEG),
+])
+def test_2026_10_28_fixtures_positive_and_negative(fixture: str, fires: str) -> None:
+    """The last affected release fires on its launch line and nothing else from the
+    table does; the fixed release, the Express-era release and PyPI's namesake stay
+    quiet."""
+    root = _CVE_FIXTURES / fixture
+    vulnerable = scan(root / "vulnerable")[0]
+    assert {f.rule_id for f in vulnerable} == {fires}
+    assert {(f.file_path, f.line_number) for f in vulnerable} == {(".mcp.json", 5)}
+    for negative in sorted(p for p in root.iterdir() if p.name.startswith("negative")):
+        assert not scan(negative)[0], negative.name
+
+
+@pytest.mark.parametrize(("spec", "new", "old"), [
+    ("1.2.1", False, True),      # no OAuth mode yet; the 16584 row's own range
+    ("1.3.0", True, True),       # OAuth arrives (#1902)
+    ("1.3.47", True, False),     # the 16584 fix; the audience is still unchecked
+    ("1.5.6", True, False),      # the last release before the fix
+    (">=1.4,<2", True, False),   # a range that admits an affected version
+    ("1.6.0", False, False),     # AUTH_AUDIENCE and AUTH_CLIENT_ID (#4865)
+])
+def test_aws_api_115413_versions(tmp_path: Path, spec: str, new: bool, old: bool) -> None:
+    pinned = spec if spec[0] in "<>=!~" else f"=={spec}"
+    found = _ids(tmp_path, "requirements.txt", f"awslabs.aws-api-mcp-server{pinned}\n")
+    assert (_AWSAPI_115413 in found, _AWSAPI_16584 in found) == (new, old)
+
+
+@pytest.mark.parametrize(("name", "content", "fires"), [
+    (".mcp.json", '{"mcpServers": {"s": {"command": "uvx", "args": ["awslabs.aws-api-mcp-server@1.5.6"]}}}',
+     True),
+    # the README's own launch installs latest, 1.6.0, which is fixed
+    (".mcp.json", '{"mcpServers": {"s": {"command": "uvx", "args": ["awslabs.aws-api-mcp-server@latest"]}}}',
+     False),
+    ("requirements.txt", "awslabs.aws-api-mcp-server\n", False),
+    ("pyproject.toml", '[project]\nname = "x"\nversion = "0"\n'
+                       'dependencies = ["awslabs.aws-api-mcp-server==1.5.0"]\n', True),
+    ("uv.lock", '[[package]]\nname = "awslabs-aws-api-mcp-server"\nversion = "1.5.6"\n', True),
+])
+def test_aws_api_115413_reads_a_stated_version(tmp_path: Path, name: str, content: str, fires: bool) -> None:
+    assert (_AWSAPI_115413 in _ids(tmp_path, name, content)) is fires
+
+
+@pytest.mark.parametrize(("name", "content", "fires"), [
+    ("package.json", '{"dependencies": {"mcp-ffmpeg": "1.0.5"}}', True),    # the newest release
+    ("package.json", '{"dependencies": {"mcp-ffmpeg": "^1.0.0"}}', True),   # admits 1.0.3 to 1.0.5
+    ("package.json", '{"dependencies": {"mcp-ffmpeg": "1.0.2"}}', False),   # the Express service
+    ("package-lock.json", '{"lockfileVersion": 3, "packages": {"": {"name": "x"}, '
+                          '"node_modules/mcp-ffmpeg": {"version": "1.0.4"}}}', True),
+    # an unversioned launch installs 1.0.5
+    (".mcp.json", '{"mcpServers": {"s": {"command": "npx", "args": ["-y", "mcp-ffmpeg"]}}}', True),
+    # a global install run by its bare name
+    (".mcp.json", '{"mcpServers": {"s": {"command": "mcp-ffmpeg", "args": []}}}', True),
+    # PyPI's mcp-ffmpeg is priyanshum143/MCP-FFMPEG, another project
+    (".mcp.json", '{"mcpServers": {"s": {"command": "uvx", "args": ["mcp-ffmpeg"]}}}', False),
+    ("requirements.txt", "mcp-ffmpeg==0.1.6\n", False),
+])
+def test_mcp_ffmpeg_references(tmp_path: Path, name: str, content: str, fires: bool) -> None:
+    assert (_FFMPEG in _ids(tmp_path, name, content)) is fires
+
+
+@pytest.mark.parametrize(("version", "fires"), [
+    ("1.7.1", False),
+    ("1.8.0", True),     # CVE-2026-59951 and CVE-2026-116685
+    ("1.9.4", True),
+    ("1.10.0", True),    # CVE-2026-116684 and CVE-2026-116686 too
+    ("1.29.1", True),
+    ("1.30.0", False),
+    ("2.0.0", True),
+    ("2.1.1", True),
+    ("2.2.0", False),
+])
+def test_mcp_sdk_rule_range_holds_every_cve_it_names(tmp_path: Path, version: str, fires: bool) -> None:
+    assert (_SDK_SESSIONS in _ids(tmp_path, "requirements.txt", f"mcp=={version}\n")) is fires
